@@ -74,7 +74,7 @@ export function DashboardPage() {
         setPrograms(items);
         if (items[0]) setSelectedId(items[0].id);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load programs"));
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load campaigns"));
   }, [user]);
 
   useEffect(() => {
@@ -184,7 +184,7 @@ export function DashboardPage() {
       setProgramName("");
       setDestinationUrl("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not create program");
+      setError(err instanceof Error ? err.message : "Could not create campaign");
     } finally {
       setBusy(false);
     }
@@ -205,7 +205,7 @@ export function DashboardPage() {
       const { tracking: t } = await api.tracking(selectedId);
       setTracking(t);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Could not update program");
+      setError(err instanceof Error ? err.message : "Could not update campaign");
     } finally {
       setBusy(false);
     }
@@ -272,7 +272,7 @@ export function DashboardPage() {
         <div>
           <h1 className="text-3xl font-semibold">Dashboard</h1>
           <p className="mt-2 text-[var(--velo-muted)]">
-            Programs, affiliates, clicklog, and conversions.
+            Campaigns, traffic, and conversions.
           </p>
         </div>
 
@@ -334,10 +334,10 @@ export function DashboardPage() {
         ) : (
         <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
           <section className="card p-5">
-            <h2 className="font-semibold">Programs</h2>
+            <h2 className="font-semibold">Campaigns</h2>
             <form className="mt-4 space-y-3" onSubmit={createProgram}>
               <Field
-                label="New program name"
+                label="New campaign name"
                 placeholder="Acme SaaS affiliates"
                 value={programName}
                 onChange={(e) => setProgramName(e.target.value)}
@@ -352,7 +352,7 @@ export function DashboardPage() {
                 required
               />
               <button className="btn btn-primary w-full" disabled={busy} type="submit">
-                Create program
+                Create campaign
               </button>
             </form>
             <div className="mt-5 space-y-2">
@@ -480,7 +480,7 @@ function OverviewPanel({
         {convertSecretOnce && (
           <div className="mt-4 rounded-md border border-[var(--velo-ink)] bg-white p-4">
             <p className="text-sm font-semibold">
-              Program secret (shown once — server-side only)
+              Campaign secret (shown once — server-side only)
             </p>
             <p className="mono mt-2 break-all text-sm">{convertSecretOnce}</p>
           </div>

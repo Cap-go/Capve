@@ -7,6 +7,9 @@ compatibility_flags = ["nodejs_compat"]
 directory = "./dist"
 not_found_handling = "single-page-application"
 binding = "ASSETS"
+# Tracking and API routes must hit the Worker even for browser navigations,
+# otherwise SPA fallback serves index.html for /r, /c, /lp and /click.
+run_worker_first = ["/api/*", "/r/*", "/c/*", "/lp/*", "/click", "/click/*"]
 
 [[d1_databases]]
 binding = "DB"

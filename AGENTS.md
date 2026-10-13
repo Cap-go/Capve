@@ -2,13 +2,13 @@
 
 Read **[REQUIREMENTS.md](./REQUIREMENTS.md)** first. It defines what Capve is, what “done” means, and what is out of scope.
 
-Capve = **open-source, self-hosted** affiliate tracker for indie/SaaS. **Not** Capgo Affonso. **Not** a SaaS — no pricing, no email/password login.
+Capve = **open-source Binom alternative**: campaign and affiliate tracking on Cloudflare (Worker + D1). Self-hostable; capve.app is the demo install. **Not** Capgo Affonso. No pricing or billing.
 
 ## Repo map
 
 | Path | Purpose |
 | --- | --- |
-| `worker/` | Hono API, redirect, convert, Access auth |
+| `worker/` | Hono API, redirect, LP click, postback, convert, session auth |
 | `worker/lib/access.ts` | Session auth (`requireUser`, team roles) |
 | `src/` | React UI (homepage `/`, dashboard `/app`) |
 | `src/lib/constants.ts` | Deploy button + GitHub URLs |

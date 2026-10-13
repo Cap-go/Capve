@@ -173,7 +173,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
           <div>
             <h2 className="font-semibold">Campaign report</h2>
             <p className="mt-1 text-sm text-[var(--velo-muted)]">
-              Binom-style metrics across all campaigns.
+              Metrics across all campaigns.
             </p>
           </div>
           <a className="btn btn-secondary text-sm" href={exportCampaignsUrl}>
@@ -461,11 +461,13 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
         <div className="flex h-24 items-end gap-1 border-b border-[var(--velo-border)] pb-2">
           {points.map((point) => (
             <div className="flex min-w-0 flex-1 flex-col items-center gap-1" key={`rev-${point.date}`}>
-              <div
-                className="w-full max-w-4 rounded-t bg-[var(--velo-ink)]"
-                style={{ height: `${(point.revenue_cents / maxRevenue) * 100}%` }}
-                title={formatMoney(point.revenue_cents)}
-              />
+              <div className="flex h-16 w-full items-end justify-center">
+                <div
+                  className="w-full max-w-4 rounded-t bg-[var(--velo-ink)]"
+                  style={{ height: `${(point.revenue_cents / maxRevenue) * 100}%` }}
+                  title={formatMoney(point.revenue_cents)}
+                />
+              </div>
               <span className="truncate text-[10px] text-[var(--velo-muted)]">
                 {point.date.slice(5)}
               </span>
