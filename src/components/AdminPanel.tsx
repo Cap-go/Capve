@@ -21,7 +21,7 @@ export function AdminPanel() {
   return (
     <div className="space-y-8">
       <div>
-        <h2 className="text-2xl font-bold">Platform admin</h2>
+        <h2 className="text-2xl font-semibold">Platform admin</h2>
         <p className="mt-2 text-[var(--velo-muted)]">Cross-tenant stats and user accounts.</p>
       </div>
 
@@ -39,7 +39,7 @@ export function AdminPanel() {
           ].map((item) => (
             <article key={item.label} className="card p-5">
               <p className="text-sm text-[var(--velo-muted)]">{item.label}</p>
-              <p className="mt-2 text-3xl font-bold">{item.value}</p>
+              <p className="mt-2 text-3xl font-semibold">{item.value}</p>
             </article>
           ))}
         </div>

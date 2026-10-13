@@ -270,7 +270,7 @@ export function DashboardPage() {
     >
       <div className="mx-auto max-w-6xl space-y-8 px-6 py-8">
         <div>
-          <h1 className="text-3xl font-bold">Dashboard</h1>
+          <h1 className="text-3xl font-semibold">Dashboard</h1>
           <p className="mt-2 text-[var(--velo-muted)]">
             Programs, affiliates, clicklog, and conversions.
           </p>
@@ -359,7 +359,7 @@ export function DashboardPage() {
               {programs.map((program) => (
                 <button
                   key={program.id}
-                  className={`w-full rounded-xl border px-3 py-2 text-left ${
+                  className={`w-full rounded-md border px-3 py-2 text-left ${
                     selectedId === program.id
                       ? "border-[var(--velo-accent)] bg-[var(--velo-accent-soft)]"
                       : "border-[var(--velo-border)]"
@@ -478,11 +478,11 @@ function OverviewPanel({
         </div>
 
         {convertSecretOnce && (
-          <div className="mt-4 rounded-xl border border-amber-300 bg-amber-50 p-4">
-            <p className="text-sm font-semibold text-amber-900">
+          <div className="mt-4 rounded-md border border-[var(--velo-ink)] bg-white p-4">
+            <p className="text-sm font-semibold">
               Program secret (shown once — server-side only)
             </p>
-            <p className="mono mt-2 break-all text-sm text-amber-950">{convertSecretOnce}</p>
+            <p className="mono mt-2 break-all text-sm">{convertSecretOnce}</p>
           </div>
         )}
 
@@ -548,7 +548,7 @@ function OverviewPanel({
           </button>
         </form>
         {lastLink && (
-          <p className="mono mt-4 break-all rounded-xl bg-[var(--velo-accent-soft)] p-3 text-sm">
+          <p className="mono mt-4 break-all rounded-md bg-[var(--velo-accent-soft)] p-3 text-sm">
             {lastLink}
           </p>
         )}

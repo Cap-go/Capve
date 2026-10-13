@@ -122,7 +122,7 @@ function TeamPanel({ role }: { role: TeamRole }) {
           <label className="block text-sm">
             <span className="mb-1 block font-medium">Role</span>
             <select
-              className="w-full rounded-xl border border-[var(--velo-border)] bg-transparent px-3 py-2"
+              className="w-full rounded-md border border-[var(--velo-border)] bg-transparent px-3 py-2"
               value={memberRole}
               onChange={(e) => setMemberRole(e.target.value as "admin" | "viewer")}
             >
@@ -216,7 +216,7 @@ function TriggersPanel() {
         <label className="block text-sm">
           <span className="mb-1 block font-medium">Event</span>
           <select
-            className="w-full rounded-xl border border-[var(--velo-border)] bg-transparent px-3 py-2"
+            className="w-full rounded-md border border-[var(--velo-border)] bg-transparent px-3 py-2"
             value={event}
             onChange={(e) => setEvent(e.target.value as "conversion" | "click")}
           >
@@ -276,7 +276,7 @@ export function NotesPanel({
       {canWrite && (
         <form className="mt-3 flex gap-2" onSubmit={addNote}>
           <input
-            className="flex-1 rounded-xl border border-[var(--velo-border)] bg-transparent px-3 py-2"
+            className="flex-1 rounded-md border border-[var(--velo-border)] bg-transparent px-3 py-2"
             placeholder="Add a note…"
             value={body}
             onChange={(e) => setBody(e.target.value)}
@@ -289,7 +289,7 @@ export function NotesPanel({
       <ul className="mt-4 space-y-2">
         {notes.length === 0 && <li className="text-sm text-[var(--velo-muted)]">No notes yet.</li>}
         {notes.map((note) => (
-          <li className="rounded-xl border border-[var(--velo-border)] p-3 text-sm" key={note.id}>
+          <li className="rounded-md border border-[var(--velo-border)] p-3 text-sm" key={note.id}>
             <p>{note.body}</p>
             <p className="mt-1 text-xs text-[var(--velo-muted)]">
               {new Date(note.updated_at).toLocaleString()}

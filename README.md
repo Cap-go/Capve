@@ -13,7 +13,7 @@ Capve lets you run affiliate programs on infrastructure you control: unique trac
 - **Frontend**: React + Vite + Tailwind (homepage + dashboard)
 - **Backend**: Cloudflare Worker (Hono)
 - **Database**: Cloudflare D1
-- **Auth**: Cloudflare Access (optional) for `/app` and program APIs
+- **Auth**: email/password sessions for `/app` and dashboard APIs
 - **Deploy**: One Worker + static assets (`wrangler.toml`)
 
 ## Routes
@@ -21,11 +21,11 @@ Capve lets you run affiliate programs on infrastructure you control: unique trac
 | Path | Access |
 | --- | --- |
 | `/` | Public — project homepage + install instructions |
-| `/app` | Open after deploy; optional Cloudflare Access hardening |
+| `/app` | Sign in required (`/register` to create an account) |
 | `/r/:code` | Public — affiliate redirect |
 | `/api/v1/convert` | Public — conversion API (`X-Program-Secret`) |
 | `/api/v1/snippet` | Public — browser attribution snippet |
-| `/api/programs/*` | Instance owner after deploy; optional Cloudflare Access |
+| `/api/programs/*` | Signed-in users (session cookie) |
 
 Each program stores a **destination URL**. Tracking links redirect there and append `velo_ref=<code>` for merchant-site attribution.
 
@@ -35,20 +35,9 @@ Each program stores a **destination URL**. Tracking links redirect there and app
 2. Set `APP_URL` to your hostname in Worker vars / `wrangler.toml`.
 3. Open `/app` — create a program (save the **convert secret** shown once), add affiliates.
 
-**Production hardening:** Run `bun run setup-access` to create path-based Cloudflare Access on `/app*`, `/api/programs*`, and `/api/auth*` (not the whole Worker), then set Worker vars `TEAM_DOMAIN` and `POLICY_AUD` so the dashboard enforces Access JWTs:
+**Auth:** The dashboard uses email/password sessions (`/register`, `/login`). Set `AUTH_SECRET` and the `EMAIL` send binding in `wrangler.toml` for password-reset emails.
 
-```bash
-export CLOUDFLARE_API_TOKEN=...   # needs Access: Apps and Policies Write + Workers write
-export CLOUDFLARE_ACCOUNT_ID=...
-export APP_HOST=your-domain.com
-# optional: export ACCESS_ALLOWED_EMAILS=you@example.com
-# optional: export ACCESS_ALLOWED_DOMAINS=example.com
-bun run setup-access
-```
-
-The **Setup Cloudflare Access** GitHub Action (`.github/workflows/setup-access.yml`) runs the same script after each production deploy on this repo. You can also dispatch it manually from the Actions tab.
-
-**Important:** Do not enable Access on the entire Worker — `/r/*`, `/api/v1/convert`, `/api/v1/snippet`, and `/api/health` must stay public.
+**Important:** Do not put Cloudflare Access in front of this Worker. It intercepts `/api/auth/*` and breaks login. If an old Access app exists, run `bun run remove-access`. Also, `/r/*`, `/api/v1/convert`, `/api/v1/snippet`, and `/api/health` must stay public.
 
 ## Local development
 
@@ -58,7 +47,7 @@ bun run db:migrate:local
 bun run dev
 ```
 
-Open http://localhost:5173 — dashboard works immediately without Access configuration.
+Open http://localhost:5173 — register at `/register`, then open `/app`.
 
 ## Tests
 
@@ -68,7 +57,7 @@ bun run typecheck
 bun run build
 ```
 
-Integration tests cover program → affiliate → click → convert → stats, redirect security, CORS, and optional Access behavior.
+Integration tests cover program → affiliate → click → convert → stats, redirect security, CORS, and session auth.
 
 ## capve.app (demo install)
 
@@ -92,7 +81,7 @@ bun run deploy
 
 ## Merchant flow
 
-1. Open `/app` (works immediately after deploy; sign in via Cloudflare Access when configured)
+1. Register at `/register`, then open `/app`
 2. Create a program with a destination URL
 3. Add an affiliate and copy the `https://your-domain/r/{code}` link
 4. Share the link — clicks are tracked and a first-party cookie is set

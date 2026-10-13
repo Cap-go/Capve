@@ -301,7 +301,7 @@ function FilterSelect({
     <label className="block text-sm">
       <span className="mb-1 block font-medium">{label}</span>
       <select
-        className="w-full rounded-xl border border-[var(--velo-border)] bg-transparent px-3 py-2"
+        className="w-full rounded-md border border-[var(--velo-border)] bg-transparent px-3 py-2"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
@@ -337,7 +337,7 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
                   title={`${point.clicks} clicks`}
                 />
                 <div
-                  className="w-2 rounded-t bg-emerald-500"
+                  className="w-2 rounded-t bg-[var(--velo-muted)] opacity-40"
                   style={{ height: `${(point.leads / maxClicks) * 100}%` }}
                   title={`${point.leads} leads`}
                 />
@@ -355,7 +355,7 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
           {points.map((point) => (
             <div className="flex min-w-0 flex-1 flex-col items-center gap-1" key={`rev-${point.date}`}>
               <div
-                className="w-full max-w-4 rounded-t bg-amber-500"
+                className="w-full max-w-4 rounded-t bg-[var(--velo-ink)]"
                 style={{ height: `${(point.revenue_cents / maxRevenue) * 100}%` }}
                 title={formatMoney(point.revenue_cents)}
               />
