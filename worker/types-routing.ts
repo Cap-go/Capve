@@ -40,6 +40,14 @@ export type RoutingContext = {
   click_id: string;
   velo_ref: string;
   campaign_key: string | null;
+  campaign_id?: string | null;
+  offer_id?: string | null;
+  lander_id?: string | null;
+  country?: string | null;
+  external_id?: string | null;
+  /** Public LP → offer click URL (`/lp/{click_id}`). */
+  lp_click_url?: string | null;
+  subs?: Partial<Record<string, string | null>>;
 };
 
 export type ResolvedDestination = {

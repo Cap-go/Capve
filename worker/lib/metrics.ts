@@ -59,6 +59,32 @@ export function costForTraffic(
   }
 }
 
+/**
+ * Conversion statuses that do NOT count as leads/revenue in reports.
+ * Every other status (lead, sale, approved, pending, …) counts as an approved conversion.
+ */
+export const REJECTED_STATUSES = [
+  "rejected",
+  "declined",
+  "reversed",
+  "refunded",
+  "chargeback",
+  "canceled",
+  "cancelled",
+  "trash",
+  "fraud",
+] as const;
+
+export function isApprovedStatus(status: string | null | undefined): boolean {
+  return !(REJECTED_STATUSES as readonly string[]).includes((status ?? "lead").trim().toLowerCase());
+}
+
+/** SQL predicate matching approved conversions (status not in REJECTED_STATUSES). */
+export function approvedStatusSql(alias = "cv"): string {
+  const list = REJECTED_STATUSES.map((s) => `'${s}'`).join(", ");
+  return `LOWER(${alias}.status) NOT IN (${list})`;
+}
+
 export type ReportFilters = {
   from?: number;
   to?: number;

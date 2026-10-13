@@ -5,12 +5,31 @@ import {
   formatPercent,
   type CampaignReportRow,
   type Group,
+  type GroupedReportRow,
   type TrafficSource,
   type TrendPoint,
 } from "../lib/api";
 import { ErrorBox } from "./ui";
 
 type DatePreset = "7d" | "30d" | "all";
+
+const GROUP_BY_OPTIONS = [
+  { value: "date", label: "Date" },
+  { value: "country", label: "Country" },
+  { value: "region", label: "Region" },
+  { value: "city", label: "City" },
+  { value: "device_type", label: "Device type" },
+  { value: "os", label: "OS" },
+  { value: "browser", label: "Browser" },
+  { value: "isp", label: "ISP" },
+  { value: "referrer_domain", label: "Referrer" },
+  { value: "offer", label: "Offer" },
+  { value: "lander", label: "Lander" },
+  { value: "path", label: "Path" },
+  { value: "affiliate", label: "Affiliate" },
+  { value: "traffic_source", label: "Traffic source" },
+  ...Array.from({ length: 10 }, (_, i) => ({ value: `sub${i + 1}`, label: `Sub ${i + 1}` })),
+];
 
 function presetRange(preset: DatePreset): { from?: number; to?: number } {
   if (preset === "all") return {};
@@ -42,6 +61,8 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
   const [selectedId, setSelectedId] = useState("");
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [trends, setTrends] = useState<TrendPoint[]>([]);
+  const [groupBy, setGroupBy] = useState("country");
+  const [groupedRows, setGroupedRows] = useState<GroupedReportRow[]>([]);
 
   const filters = useMemo(() => {
     const range = presetRange(preset);
@@ -99,6 +120,25 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
       cancelled = true;
     };
   }, [selectedId, filters.from, filters.to]);
+
+  useEffect(() => {
+    if (!selectedId) {
+      setGroupedRows([]);
+      return;
+    }
+    let cancelled = false;
+    api
+      .groupedReport(groupBy, { campaign_id: selectedId, from: filters.from, to: filters.to })
+      .then(({ rows }) => {
+        if (!cancelled) setGroupedRows(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setGroupedRows([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, groupBy, filters.from, filters.to]);
 
   const exportCampaignsUrl = `/api/reports/campaigns.csv${queryString(filters)}`;
 
@@ -282,6 +322,23 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
           <TrendChart points={trends} />
         </div>
       )}
+
+      {selectedId && (
+        <div className="card p-5">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div className="w-56">
+              <FilterSelect label="Group by" value={groupBy} onChange={setGroupBy} options={GROUP_BY_OPTIONS} />
+            </div>
+            <a
+              className="btn btn-secondary text-sm"
+              href={`/api/reports/grouped.csv${queryString({ by: groupBy, campaign_id: selectedId, from: filters.from, to: filters.to })}`}
+            >
+              Export CSV
+            </a>
+          </div>
+          <GroupedTable rows={groupedRows} />
+        </div>
+      )}
     </div>
   );
 }
@@ -312,6 +369,56 @@ function FilterSelect({
         ))}
       </select>
     </label>
+  );
+}
+
+function GroupedTable({ rows }: { rows: GroupedReportRow[] }) {
+  return (
+    <div className="mt-4 overflow-x-auto">
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Group</th>
+            <th>Clicks</th>
+            <th>Unique</th>
+            <th>Bots</th>
+            <th>LP Clicks</th>
+            <th>Conv.</th>
+            <th>CR</th>
+            <th>EPC</th>
+            <th>Revenue</th>
+            <th>Cost</th>
+            <th>Profit</th>
+            <th>ROI</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.length === 0 && (
+            <tr>
+              <td colSpan={12} className="text-[var(--velo-muted)]">
+                No data for this period.
+              </td>
+            </tr>
+          )}
+          {rows.map((row) => (
+            <tr key={row.key ?? "__none"}>
+              <td className="font-medium">{row.label}</td>
+              <td>{row.metrics.clicks}</td>
+              <td>{row.unique_clicks}</td>
+              <td>{row.bot_clicks}</td>
+              <td>{row.metrics.lp_clicks}</td>
+              <td>{row.metrics.leads}</td>
+              <td>{formatPercent(row.metrics.cr)}</td>
+              <td>{formatMoney(row.metrics.epc_cents)}</td>
+              <td>{formatMoney(row.metrics.revenue_cents)}</td>
+              <td>{formatMoney(row.metrics.cost_cents)}</td>
+              <td>{formatMoney(row.metrics.profit_cents)}</td>
+              <td>{formatPercent(row.metrics.roi)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }
 
