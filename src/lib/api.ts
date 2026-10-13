@@ -284,6 +284,14 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+export type ApiToken = {
+  id: string;
+  name: string;
+  prefix: string;
+  last_used_at: number | null;
+  created_at: number;
+};
+
 export const api = {
   me: () => request<{ user: User | null }>("/api/auth/me"),
   register: (body: { email: string; password: string; name?: string }) =>
@@ -453,6 +461,14 @@ export const api = {
     }),
   removeMember: (memberId: string) =>
     request<{ ok: boolean }>(`/api/ops/team/${memberId}`, { method: "DELETE" }),
+  apiTokens: () => request<{ tokens: ApiToken[] }>("/api/tokens"),
+  createApiToken: (name: string) =>
+    request<{ token: string; api_token: ApiToken }>("/api/tokens", {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    }),
+  deleteApiToken: (tokenId: string) =>
+    request<{ ok: boolean }>(`/api/tokens/${tokenId}`, { method: "DELETE" }),
   invites: () => request<{ invites: PendingInvite[] }>("/api/ops/invites"),
   acceptInvite: (inviteId: string) =>
     request<{ ok: boolean }>(`/api/ops/invites/${inviteId}/accept`, { method: "POST" }),

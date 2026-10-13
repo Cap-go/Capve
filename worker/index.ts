@@ -10,6 +10,9 @@ import { ops } from "./routes/ops";
 import { reports } from "./routes/reports";
 import { campaign, lp, redirect } from "./routes/redirect";
 import { routing } from "./routes/routing";
+import { tokens } from "./routes/tokens";
+import { readBearerToken, requireUser } from "./lib/access";
+import { handleMcpRequest } from "./mcp/server";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -30,10 +33,39 @@ app.route("/api/campaigns", routing);
 app.route("/api/v1/convert", convert);
 app.route("/api/ops", ops);
 app.route("/api/reports", reports);
+app.route("/api/tokens", tokens);
 app.route("/r", redirect);
 app.route("/c", campaign);
 app.route("/lp", lp);
 app.route("/click", postback);
+
+// MCP server: every tool replays an /api request with the caller's bearer token.
+app.all("/mcp", async (c) => {
+  const authorization = c.req.header("authorization");
+  if (!readBearerToken(authorization) || !(await requireUser(c))) {
+    return c.json({ error: "Missing or invalid API token. Create one in Capve → API & MCP." }, 401, {
+      "WWW-Authenticate": 'Bearer realm="capve"',
+    });
+  }
+  const origin = new URL(c.req.url).origin;
+  return handleMcpRequest(c.req.raw, ({ method, path, query, body }) => {
+    const url = new URL(path, origin);
+    for (const [key, value] of Object.entries(query ?? {})) {
+      if (value !== undefined && value !== "") url.searchParams.set(key, String(value));
+    }
+    return Promise.resolve(
+      app.fetch(
+        new Request(url, {
+          method,
+          headers: { authorization: authorization!, "content-type": "application/json" },
+          body: body === undefined ? undefined : JSON.stringify(body),
+        }),
+        c.env,
+        c.executionCtx,
+      ),
+    );
+  });
+});
 
 import { ATTRIBUTION_SNIPPET } from "./lib/urls";
 

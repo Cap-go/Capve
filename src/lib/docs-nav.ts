@@ -11,6 +11,11 @@ export const DOC_PAGES: DocPage[] = [
     description: "How Capve tracks clicks and records conversions",
   },
   {
+    slug: "mcp",
+    title: "MCP server",
+    description: "Run Capve from Claude, Cursor or any AI assistant",
+  },
+  {
     slug: "postback",
     title: "Postback URL",
     description: "Binom-style S2S postback from affiliate networks",

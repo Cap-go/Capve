@@ -1,6 +1,8 @@
 import { Link } from "react-router-dom";
+import { CodeBlock } from "../components/CodeBlock";
 import { Shell } from "../components/ui";
-import { GITHUB_REPO_URL, PRODUCTION_APP_URL } from "../lib/constants";
+import { GITHUB_REPO_URL, PRODUCTION_APP_URL, appBaseUrl } from "../lib/constants";
+import { MCP_EXAMPLE_PROMPTS, claudeCodeCommand } from "../lib/mcp";
 
 const features = [
   {
@@ -12,8 +14,8 @@ const features = [
     body: "Send traffic through paths, rotations, landers, and offers.",
   },
   {
-    title: "API",
-    body: "Every action in the dashboard has a documented HTTP endpoint.",
+    title: "AI and API",
+    body: "Built-in MCP server and HTTP API. Anything you do in the dashboard, an agent can do too.",
   },
 ];
 
@@ -42,7 +44,8 @@ export function LandingPage() {
             </h1>
             <p className="mt-5 max-w-xl text-lg text-[var(--velo-muted)]">
               Capve records clicks and conversions, attributes them to affiliates and campaigns, and
-              shows what each one earns. Open source, runs on Cloudflare.
+              shows what each one earns. Open source, runs on Cloudflare, and works with your AI
+              assistant over MCP.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link className="btn btn-primary" to="/register">
@@ -78,6 +81,43 @@ export function LandingPage() {
               <p className="mt-2 text-[var(--velo-muted)]">{feature.body}</p>
             </article>
           ))}
+        </div>
+      </section>
+
+      <section className="mx-auto max-w-6xl px-6">
+        <div className="grid gap-10 border-t border-[var(--velo-border)] py-12 lg:grid-cols-2">
+          <div>
+            <p className="text-sm font-medium text-[var(--velo-muted)]">MCP server</p>
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+              Run your campaigns from Claude, Cursor or VS Code.
+            </h2>
+            <p className="mt-4 text-[var(--velo-muted)]">
+              Capve ships an MCP server. Connect your assistant with one token and ask it to build
+              campaigns, rotate landers, read reports and pause what loses money. Same permissions as
+              your account.
+            </p>
+            <ul className="mt-6 space-y-2 text-sm">
+              {MCP_EXAMPLE_PROMPTS.slice(0, 3).map((prompt) => (
+                <li key={prompt} className="border-l-2 border-[var(--velo-ink)] pl-3">
+                  {prompt}
+                </li>
+              ))}
+            </ul>
+            <div className="mt-6 flex flex-wrap gap-3">
+              <Link className="btn btn-primary" to="/register">
+                Get a token
+              </Link>
+              <Link className="btn btn-secondary" to="/docs/mcp">
+                MCP docs
+              </Link>
+            </div>
+          </div>
+          <div className="self-start">
+            <CodeBlock>{claudeCodeCommand(appBaseUrl())}</CodeBlock>
+            <p className="mt-3 text-sm text-[var(--velo-muted)]">
+              40 tools: campaigns, paths, offers, landers, traffic sources, reports, triggers, team.
+            </p>
+          </div>
         </div>
       </section>
 

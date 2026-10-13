@@ -8,6 +8,8 @@ Open-source, self-hosted affiliate tracking for indie and SaaS founders. Deploy 
 
 Capve lets you run affiliate programs on infrastructure you control: unique tracking links, click-through cookies, and server-side conversion attribution.
 
+Capve is also an **MCP server**: connect Claude Code, Cursor, VS Code or any MCP client and manage campaigns, paths, offers, reports and team by chat. See [MCP](#mcp).
+
 ## Stack
 
 - **Frontend**: React + Vite + Tailwind (homepage + dashboard)
@@ -25,9 +27,31 @@ Capve lets you run affiliate programs on infrastructure you control: unique trac
 | `/r/:code` | Public — affiliate redirect |
 | `/api/v1/convert` | Public — conversion API (`X-Program-Secret`) |
 | `/api/v1/snippet` | Public — browser attribution snippet |
-| `/api/programs/*` | Signed-in users (session cookie) |
+| `/api/programs/*` | Signed-in users (session cookie or API token) |
+| `/mcp` | MCP server (`Authorization: Bearer capve_…`) |
 
 Each program stores a **destination URL**. Tracking links redirect there and append `velo_ref=<code>` for merchant-site attribution.
+
+## MCP
+
+1. Sign in, open **AI / MCP** in the dashboard and create a token (`capve_…`, shown once).
+2. Add the server to your client:
+
+```bash
+claude mcp add --transport http capve \
+  https://capve.app/mcp \
+  --header "Authorization: Bearer capve_YOUR_TOKEN"
+```
+
+Cursor / VS Code / Windsurf (`mcp.json`):
+
+```json
+{ "mcpServers": { "capve": { "url": "https://capve.app/mcp", "headers": { "Authorization": "Bearer capve_YOUR_TOKEN" } } } }
+```
+
+40 tools cover campaigns, affiliates, paths and rotation, traffic sources, networks, offers, landers, groups, reports, triggers, notes and team. Each tool replays the matching `/api` route with the token, so validation and team roles are identical to the dashboard. Full docs: `/docs/mcp`. Code: `worker/mcp/`.
+
+Tokens act as the user who created them, can be revoked from the dashboard, and cannot create more tokens. Only a SHA-256 hash is stored.
 
 ## Quick install
 
