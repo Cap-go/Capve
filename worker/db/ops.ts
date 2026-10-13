@@ -1,4 +1,4 @@
-import type { EntityNote, TeamMember, Trigger } from "../types-ops";
+import type { EntityNote, PendingInvite, TeamMember, Trigger } from "../types-ops";
 import { id } from "../lib/utils";
 
 export async function findTeamMembership(
@@ -6,9 +6,56 @@ export async function findTeamMembership(
   email: string,
 ): Promise<{ owner_user_id: string; role: "admin" | "viewer" } | null> {
   return db
-    .prepare("SELECT owner_user_id, role FROM team_members WHERE email = ? LIMIT 1")
+    .prepare(
+      `SELECT owner_user_id, role FROM team_members
+       WHERE email = ? AND accepted_at IS NOT NULL
+       ORDER BY accepted_at ASC, id ASC LIMIT 1`,
+    )
     .bind(email.toLowerCase())
     .first<{ owner_user_id: string; role: "admin" | "viewer" }>();
+}
+
+export async function listPendingInvites(
+  db: D1Database,
+  email: string,
+): Promise<PendingInvite[]> {
+  const { results } = await db
+    .prepare(
+      `SELECT tm.id, tm.owner_user_id, u.email AS owner_email, tm.role, tm.created_at
+       FROM team_members tm
+       LEFT JOIN users u ON u.id = tm.owner_user_id
+       WHERE tm.email = ? AND tm.accepted_at IS NULL
+       ORDER BY tm.created_at ASC`,
+    )
+    .bind(email.toLowerCase())
+    .all<PendingInvite>();
+  return results ?? [];
+}
+
+export async function acceptInvite(
+  db: D1Database,
+  inviteId: string,
+  email: string,
+): Promise<boolean> {
+  const result = await db
+    .prepare(
+      "UPDATE team_members SET accepted_at = ? WHERE id = ? AND email = ? AND accepted_at IS NULL",
+    )
+    .bind(Date.now(), inviteId, email.toLowerCase())
+    .run();
+  return (result.meta.changes ?? 0) > 0;
+}
+
+export async function declineInvite(
+  db: D1Database,
+  inviteId: string,
+  email: string,
+): Promise<boolean> {
+  const result = await db
+    .prepare("DELETE FROM team_members WHERE id = ? AND email = ? AND accepted_at IS NULL")
+    .bind(inviteId, email.toLowerCase())
+    .run();
+  return (result.meta.changes ?? 0) > 0;
 }
 
 export async function listTeamMembers(
@@ -17,7 +64,7 @@ export async function listTeamMembers(
 ): Promise<TeamMember[]> {
   const { results } = await db
     .prepare(
-      "SELECT id, owner_user_id, email, role, created_at FROM team_members WHERE owner_user_id = ? ORDER BY created_at ASC",
+      "SELECT id, owner_user_id, email, role, created_at, accepted_at FROM team_members WHERE owner_user_id = ? ORDER BY created_at ASC",
     )
     .bind(ownerUserId)
     .all<TeamMember>();
@@ -36,6 +83,7 @@ export async function addTeamMember(
     email: email.toLowerCase(),
     role,
     created_at: Date.now(),
+    accepted_at: null,
   };
   await db
     .prepare(

@@ -35,7 +35,9 @@ Each program stores a **destination URL**. Tracking links redirect there and app
 2. Set `APP_URL` to your hostname in Worker vars / `wrangler.toml`.
 3. Open `/app` — create a program (save the **convert secret** shown once), add affiliates.
 
-**Auth:** The dashboard uses email/password sessions (`/register`, `/login`). Set `AUTH_SECRET` and the `EMAIL` send binding in `wrangler.toml` for password-reset emails.
+**Auth:** The dashboard uses email/password sessions (`/register`, `/login`). In production, set `AUTH_SECRET` (random, at least 32 characters) as a Worker secret — never in `wrangler.toml`: `bunx wrangler secret put AUTH_SECRET --env production`. The Worker refuses to sign sessions without it. Configure the `EMAIL` send binding in `wrangler.toml` for password-reset emails.
+
+**Platform admin:** Accounts whose email is listed in `PLATFORM_ADMIN_EMAILS` become platform admins at registration, so register those accounts immediately after deploying.
 
 **Important:** Do not put Cloudflare Access in front of this Worker. It intercepts `/api/auth/*` and breaks login. If an old Access app exists, run `bun run remove-access`. Also, `/r/*`, `/api/v1/convert`, `/api/v1/snippet`, and `/api/health` must stay public.
 

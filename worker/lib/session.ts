@@ -4,8 +4,16 @@ import type { Env } from "../types";
 export const SESSION_COOKIE = "capve_session";
 const SESSION_MAX_AGE = 60 * 60 * 24 * 30;
 
+const MIN_SECRET_LENGTH = 32;
+
 function authSecret(env: Env): Uint8Array {
-  return new TextEncoder().encode(env.AUTH_SECRET);
+  const secret = env.AUTH_SECRET;
+  if (!secret || secret.length < MIN_SECRET_LENGTH) {
+    throw new Error(
+      "AUTH_SECRET is not configured — run: bunx wrangler secret put AUTH_SECRET --env production",
+    );
+  }
+  return new TextEncoder().encode(secret);
 }
 
 export type SessionClaims = {
@@ -23,8 +31,9 @@ export async function signSession(env: Env, claims: SessionClaims): Promise<stri
 }
 
 export async function verifySession(env: Env, token: string): Promise<SessionClaims | null> {
+  const key = authSecret(env);
   try {
-    const { payload } = await jwtVerify(token, authSecret(env));
+    const { payload } = await jwtVerify(token, key);
     const sub = payload.sub;
     const email = payload.email;
     if (typeof sub !== "string" || typeof email !== "string") return null;

@@ -199,6 +199,49 @@ export function campaignKeyFromName(name: string): string {
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_|_$/g, "")
     .slice(0, 32);
-  const suffix = crypto.getRandomValues(new Uint8Array(2))[0].toString(16).padStart(2, "0");
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789";
+  const suffix = [...crypto.getRandomValues(new Uint8Array(8))]
+    .map((b) => alphabet[b % alphabet.length])
+    .join("");
   return `${base || "campaign"}_${suffix}`;
+}
+
+function isCampaignKeyConflict(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes("UNIQUE") && message.includes("campaign_key");
+}
+
+/** Runs `insert` with a fresh globally-unique campaign key, retrying on collisions. */
+export async function withUniqueCampaignKey<T>(
+  name: string,
+  insert: (campaignKey: string) => Promise<T>,
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await insert(campaignKeyFromName(name));
+    } catch (err) {
+      if (attempt >= 4 || !isCampaignKeyConflict(err)) throw err;
+    }
+  }
+}
+
+const OWNED_ENTITY_TABLES = {
+  group: "groups",
+  traffic_source: "traffic_sources",
+  network: "affiliate_networks",
+  lander: "landers",
+  offer: "offers",
+} as const;
+
+export async function entityBelongsTo(
+  db: D1Database,
+  kind: keyof typeof OWNED_ENTITY_TABLES,
+  entityId: string,
+  userId: string,
+): Promise<boolean> {
+  const row = await db
+    .prepare(`SELECT 1 AS ok FROM ${OWNED_ENTITY_TABLES[kind]} WHERE id = ? AND user_id = ?`)
+    .bind(entityId, userId)
+    .first<{ ok: number }>();
+  return Boolean(row);
 }

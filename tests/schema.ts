@@ -40,6 +40,9 @@ CREATE TABLE IF NOT EXISTS programs (
 
 CREATE INDEX IF NOT EXISTS idx_programs_user ON programs(user_id);
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_programs_campaign_key_global
+  ON programs(campaign_key) WHERE campaign_key IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS groups (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -163,6 +166,7 @@ CREATE TABLE IF NOT EXISTS team_members (
   email TEXT NOT NULL,
   role TEXT NOT NULL,
   created_at INTEGER NOT NULL,
+  accepted_at INTEGER,
   UNIQUE(owner_user_id, email)
 );
 

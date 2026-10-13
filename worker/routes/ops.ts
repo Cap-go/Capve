@@ -1,16 +1,20 @@
 import { Hono } from "hono";
 import { bulkUpdatePrograms, cloneProgram } from "../db/clone";
 import {
+  acceptInvite,
   addTeamMember,
   createNote,
   createTrigger,
+  declineInvite,
   deleteNote,
   deleteTrigger,
   listNotes,
+  listPendingInvites,
   listTeamMembers,
   listTriggers,
   removeTeamMember,
 } from "../db/ops";
+import { entityBelongsTo } from "../db/entities";
 import { getProgram } from "../db/queries";
 import type { Env } from "../types";
 import { canWrite, requireUser, requireWrite } from "../lib/access";
@@ -42,6 +46,29 @@ ops.post("/team", async (c) => {
 
   const member = await addTeamMember(c.env.DB, session.account_id, email, body.role);
   return c.json({ member }, 201);
+});
+
+ops.get("/invites", async (c) => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const invites = await listPendingInvites(c.env.DB, session.email);
+  return c.json({ invites });
+});
+
+ops.post("/invites/:id/accept", async (c) => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const ok = await acceptInvite(c.env.DB, c.req.param("id"), session.email);
+  if (!ok) return c.json({ error: "Not found" }, 404);
+  return c.json({ ok: true });
+});
+
+ops.post("/invites/:id/decline", async (c) => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const ok = await declineInvite(c.env.DB, c.req.param("id"), session.email);
+  if (!ok) return c.json({ error: "Not found" }, 404);
+  return c.json({ ok: true });
 });
 
 ops.delete("/team/:id", async (c) => {
@@ -172,6 +199,18 @@ ops.post("/programs/bulk", async (c) => {
   }>();
   const programIds = body.program_ids ?? [];
   if (programIds.length === 0) return c.json({ error: "program_ids required" }, 400);
+  if (
+    body.traffic_source_id &&
+    !(await entityBelongsTo(c.env.DB, "traffic_source", body.traffic_source_id, session.account_id))
+  ) {
+    return c.json({ error: "Invalid traffic_source_id" }, 400);
+  }
+  if (
+    body.group_id &&
+    !(await entityBelongsTo(c.env.DB, "group", body.group_id, session.account_id))
+  ) {
+    return c.json({ error: "Invalid group_id" }, 400);
+  }
 
   const updates: {
     status?: string;

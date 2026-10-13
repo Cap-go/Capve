@@ -1,6 +1,6 @@
 import { getProgram, listPrograms, updateProgram } from "../db/queries";
 import { createPath, getOrCreateRotation, getRotationConfig } from "../db/routing";
-import { campaignKeyFromName } from "./entities";
+import { withUniqueCampaignKey } from "./entities";
 import type { Program } from "../types";
 import { apiKey, convertSecret, id, slugify } from "../lib/utils";
 
@@ -34,7 +34,7 @@ export async function cloneProgram(
 
   const cloneName = name?.trim() || `${source.name} (copy)`;
   const secret = convertSecret();
-  const program: Program & { convert_secret: string } = {
+  const base: Omit<Program, "campaign_key"> & { convert_secret: string } = {
     id: id("prg"),
     user_id: accountUserId,
     name: cloneName,
@@ -43,7 +43,6 @@ export async function cloneProgram(
     destination_url: source.destination_url,
     convert_secret: secret,
     s2s_postback_url: source.s2s_postback_url,
-    campaign_key: `${campaignKeyFromName(cloneName)}_${Date.now().toString(36).slice(-4)}`,
     group_id: source.group_id,
     traffic_source_id: source.traffic_source_id,
     tags: source.tags,
@@ -51,6 +50,47 @@ export async function cloneProgram(
     created_at: Date.now(),
   };
 
+  const program = await withUniqueCampaignKey(cloneName, async (campaign_key) => {
+    const candidate = { ...base, campaign_key };
+    await insertClonedProgram(db, candidate);
+    return candidate;
+  });
+
+  const config = await getRotationConfig(db, source.id);
+  if (config.paths.length > 0) {
+    const pathIdMap = new Map<string, string>();
+    for (const path of config.paths) {
+      const created = await createPath(db, program.id, {
+        name: path.name,
+        flow_type: path.flow_type,
+        weight: path.weight,
+        sort_order: path.sort_order,
+        direct_url: path.direct_url,
+        lander_id: path.lander_id,
+        offer_id: path.offer_id,
+        enabled: path.enabled,
+      });
+      pathIdMap.set(path.id, created.id);
+    }
+    const fixedPathId = config.rotation.fixed_path_id
+      ? (pathIdMap.get(config.rotation.fixed_path_id) ?? null)
+      : null;
+    await db
+      .prepare("UPDATE rotations SET mode = ?, fixed_path_id = ? WHERE program_id = ?")
+      .bind(config.rotation.mode, fixedPathId, program.id)
+      .run();
+  } else {
+    await getOrCreateRotation(db, program.id);
+  }
+
+  const { convert_secret: _secret, ...publicProgram } = program;
+  return publicProgram;
+}
+
+async function insertClonedProgram(
+  db: D1Database,
+  program: Program & { convert_secret: string },
+): Promise<void> {
   await db
     .prepare(
       `INSERT INTO programs (
@@ -75,31 +115,6 @@ export async function cloneProgram(
       program.created_at,
     )
     .run();
-
-  const config = await getRotationConfig(db, source.id);
-  if (config.paths.length > 0) {
-    for (const path of config.paths) {
-      await createPath(db, program.id, {
-        name: path.name,
-        flow_type: path.flow_type,
-        weight: path.weight,
-        sort_order: path.sort_order,
-        direct_url: path.direct_url,
-        lander_id: path.lander_id,
-        offer_id: path.offer_id,
-        enabled: path.enabled,
-      });
-    }
-    await db
-      .prepare("UPDATE rotations SET mode = ?, fixed_path_id = ? WHERE program_id = ?")
-      .bind(config.rotation.mode, config.rotation.fixed_path_id, program.id)
-      .run();
-  } else {
-    await getOrCreateRotation(db, program.id);
-  }
-
-  const { convert_secret: _secret, ...publicProgram } = program;
-  return publicProgram;
 }
 
 export async function listOwnedPrograms(db: D1Database, accountUserId: string) {

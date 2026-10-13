@@ -1,5 +1,12 @@
 import { FormEvent, useEffect, useState } from "react";
-import { api, type EntityNote, type TeamMember, type TeamRole, type Trigger } from "../lib/api";
+import {
+  api,
+  type EntityNote,
+  type PendingInvite,
+  type TeamMember,
+  type TeamRole,
+  type Trigger,
+} from "../lib/api";
 import { ErrorBox, Field } from "./ui";
 
 export function OpsPanel({ role }: { role: TeamRole }) {
@@ -23,7 +30,89 @@ export function OpsPanel({ role }: { role: TeamRole }) {
           Triggers
         </button>
       </nav>
-      {tab === "team" ? <TeamPanel role={role} /> : <TriggersPanel />}
+      {tab === "team" ? (
+        <>
+          <PendingInvitesPanel />
+          <TeamPanel role={role} />
+        </>
+      ) : (
+        <TriggersPanel />
+      )}
+    </div>
+  );
+}
+
+function PendingInvitesPanel() {
+  const [invites, setInvites] = useState<PendingInvite[]>([]);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api.invites().then(({ invites: items }) => setInvites(items)).catch(() => {});
+  }, []);
+
+  async function respond(inviteId: string, accept: boolean) {
+    setBusy(true);
+    setError("");
+    try {
+      if (accept) {
+        await api.acceptInvite(inviteId);
+        window.location.reload();
+        return;
+      }
+      await api.declineInvite(inviteId);
+      setInvites((prev) => prev.filter((i) => i.id !== inviteId));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update invite");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (invites.length === 0) return null;
+
+  return (
+    <div className="card p-5">
+      <h2 className="font-semibold">Pending invites</h2>
+      <p className="mt-1 text-sm text-[var(--velo-muted)]">
+        Accepting switches your dashboard to the inviting account.
+      </p>
+      <ErrorBox message={error} />
+      <table className="table mt-4">
+        <thead>
+          <tr>
+            <th>From</th>
+            <th>Role</th>
+            <th />
+          </tr>
+        </thead>
+        <tbody>
+          {invites.map((invite) => (
+            <tr key={invite.id}>
+              <td className="mono">{invite.owner_email ?? invite.owner_user_id}</td>
+              <td>{invite.role}</td>
+              <td className="flex gap-2">
+                <button
+                  className="btn btn-primary text-xs"
+                  disabled={busy}
+                  onClick={() => respond(invite.id, true)}
+                  type="button"
+                >
+                  Accept
+                </button>
+                <button
+                  className="btn btn-secondary text-xs"
+                  disabled={busy}
+                  onClick={() => respond(invite.id, false)}
+                  type="button"
+                >
+                  Decline
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -79,13 +168,14 @@ function TeamPanel({ role }: { role: TeamRole }) {
           <tr>
             <th>Email</th>
             <th>Role</th>
+            <th>Status</th>
             {role === "owner" && <th />}
           </tr>
         </thead>
         <tbody>
           {members.length === 0 && (
             <tr>
-              <td colSpan={role === "owner" ? 3 : 2} className="text-[var(--velo-muted)]">
+              <td colSpan={role === "owner" ? 4 : 3} className="text-[var(--velo-muted)]">
                 No team members yet.
               </td>
             </tr>
@@ -94,6 +184,7 @@ function TeamPanel({ role }: { role: TeamRole }) {
             <tr key={member.id}>
               <td className="mono">{member.email}</td>
               <td>{member.role}</td>
+              <td>{member.accepted_at ? "active" : "pending"}</td>
               {role === "owner" && (
                 <td>
                   <button

@@ -32,6 +32,15 @@ export type TeamMember = {
   email: string;
   role: "admin" | "viewer";
   created_at: number;
+  accepted_at: number | null;
+};
+
+export type PendingInvite = {
+  id: string;
+  owner_user_id: string;
+  owner_email: string | null;
+  role: "admin" | "viewer";
+  created_at: number;
 };
 
 export type EntityNote = {
@@ -426,6 +435,11 @@ export const api = {
     }),
   removeMember: (memberId: string) =>
     request<{ ok: boolean }>(`/api/ops/team/${memberId}`, { method: "DELETE" }),
+  invites: () => request<{ invites: PendingInvite[] }>("/api/ops/invites"),
+  acceptInvite: (inviteId: string) =>
+    request<{ ok: boolean }>(`/api/ops/invites/${inviteId}/accept`, { method: "POST" }),
+  declineInvite: (inviteId: string) =>
+    request<{ ok: boolean }>(`/api/ops/invites/${inviteId}/decline`, { method: "POST" }),
   notes: (entityType: EntityNote["entity_type"], entityId: string) =>
     request<{ notes: EntityNote[] }>(
       `/api/ops/notes?entity_type=${encodeURIComponent(entityType)}&entity_id=${encodeURIComponent(entityId)}`,
