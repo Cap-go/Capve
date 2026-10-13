@@ -8,7 +8,7 @@ import { postback } from "./routes/postback";
 import { programs } from "./routes/programs";
 import { ops } from "./routes/ops";
 import { reports } from "./routes/reports";
-import { campaign, redirect } from "./routes/redirect";
+import { campaign, lp, redirect } from "./routes/redirect";
 import { routing } from "./routes/routing";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -32,6 +32,7 @@ app.route("/api/ops", ops);
 app.route("/api/reports", reports);
 app.route("/r", redirect);
 app.route("/c", campaign);
+app.route("/lp", lp);
 app.route("/click", postback);
 
 import { ATTRIBUTION_SNIPPET } from "./lib/urls";

@@ -6,6 +6,7 @@ export function buildPostbackUrl(appUrl: string): string {
 
 export type PostbackMacros = {
   click_id: string;
+  external_id?: string;
   payout: string;
   status: string;
   status2?: string;
@@ -20,6 +21,7 @@ export function applyPostbackMacros(template: string, macros: PostbackMacros): s
     click_id: macros.click_id,
     clickid: macros.click_id,
     cnv_id: macros.click_id,
+    external_id: macros.external_id ?? "",
     payout: macros.payout,
     status: macros.status,
     cnv_status: macros.status,
