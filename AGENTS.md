@@ -2,13 +2,13 @@
 
 Read **[REQUIREMENTS.md](./REQUIREMENTS.md)** first. It defines what Capve is, what “done” means, and what is out of scope.
 
-Capve = **open-source, self-hosted** affiliate tracker for indie/SaaS. **Not** Capgo Affonso. **Not** a SaaS — no pricing, no email/password login.
+Capve = **open-source Binom alternative**: campaign and affiliate tracking on Cloudflare (Worker + D1). Self-hostable; capve.app is the demo install. **Not** Capgo Affonso. No pricing or billing.
 
 ## Repo map
 
 | Path | Purpose |
 | --- | --- |
-| `worker/` | Hono API, redirect, convert, Access auth |
+| `worker/` | Hono API, redirect, LP click, postback, convert, session auth |
 | `worker/lib/access.ts` | Session auth (`requireUser`, team roles) |
 | `src/` | React UI (homepage `/`, dashboard `/app`) |
 | `src/lib/constants.ts` | Deploy button + GitHub URLs |
@@ -36,16 +36,17 @@ bun run typecheck
 bun run build
 ```
 
-Local dev uses email/password sessions (`/login`, `/register`). `AUTH_SECRET` is in `wrangler.toml`; auth emails use the Cloudflare `EMAIL` send binding (`noreply@capve.app`).
+Local dev uses email/password sessions (`/login`, `/register`). The local-dev `AUTH_SECRET` is in `wrangler.toml` `[vars]`; production must set it as a secret (`bunx wrangler secret put AUTH_SECRET --env production`, at least 32 chars) — never commit it. Auth emails use the Cloudflare `EMAIL` send binding (`noreply@capve.app`).
 
 ## Finish deploy (for a later agent)
 
 1. **Secrets:** `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` from Cap-go **org** secrets (already set).
 2. **D1:** `velo-db` — id `eb916c67-6e45-4798-a6d9-c0e47f99cb8d` on account `9ee3d7479a3c359681e3fab2c8cb22c0` (see `wrangler.toml`).
-3. Merge PR to `main` (only when CI green and review approved).
-4. Deploy workflow: migrations → `wrangler deploy --env production --var APP_URL:https://capve.app`
-5. Enable Cloudflare Email Service on `capve.app` and verify `noreply@capve.app` as a sender (see `send_email` binding in `wrangler.toml`).
-6. Smoke test at **https://capve.app**:
+3. **Worker secret:** `bunx wrangler secret put AUTH_SECRET --env production` (random, ≥32 chars). Not in `wrangler.toml`.
+4. Merge PR to `main` (only when CI green and review approved).
+5. Deploy workflow: migrations → `wrangler deploy --env production --var APP_URL:https://capve.app`
+6. Enable Cloudflare Email Service on `capve.app` and verify `noreply@capve.app` as a sender (see `send_email` binding in `wrangler.toml`).
+7. Smoke test at **https://capve.app**:
    - `/` loads homepage with Deploy button
    - `/r/:code` → merchant URL with `velo_ref=`
    - POST convert with `X-Program-Secret` + `affiliate_code` → stats update

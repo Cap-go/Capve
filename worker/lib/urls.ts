@@ -8,6 +8,16 @@ export function parseHttpUrl(raw: string): URL | null {
   }
 }
 
+/**
+ * Validates an optional URL setting (postback/webhook). Returns the trimmed string,
+ * null when empty, or false when it is not an http(s) URL.
+ */
+export function optionalHttpUrl(raw: string | null | undefined): string | null | false {
+  const value = raw?.trim();
+  if (!value) return null;
+  return parseHttpUrl(value) ? value : false;
+}
+
 export function hostsMatch(a: URL, b: URL): boolean {
   return a.hostname.toLowerCase() === b.hostname.toLowerCase();
 }

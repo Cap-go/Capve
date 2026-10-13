@@ -8,7 +8,7 @@ export default defineWorkersConfig({
         miniflare: {
           bindings: {
             APP_URL: "http://localhost:5173",
-            AUTH_SECRET: "test-auth-secret",
+            AUTH_SECRET: "test-auth-secret-at-least-32-characters-long",
             PLATFORM_ADMIN_EMAILS: "martindonadieu@gmail.com",
           },
         },

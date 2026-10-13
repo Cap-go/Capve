@@ -103,11 +103,27 @@ export async function selectPath(
   return weightedPick(paths);
 }
 
+/** Binom-style URL macros: values are URL-encoded; unknown macros are left untouched. */
 export function substituteMacros(url: string, ctx: RoutingContext): string {
-  return url
-    .replace(/\{click_id\}/g, ctx.click_id)
-    .replace(/\{velo_ref\}/g, ctx.velo_ref)
-    .replace(/\{campaign_key\}/g, ctx.campaign_key ?? "");
+  const values: Record<string, string> = {
+    click_id: ctx.click_id,
+    clickid: ctx.click_id,
+    velo_ref: ctx.velo_ref,
+    campaign_key: ctx.campaign_key ?? "",
+    campaign_id: ctx.campaign_id ?? "",
+    offer_id: ctx.offer_id ?? "",
+    lander_id: ctx.lander_id ?? "",
+    country: ctx.country ?? "",
+    external_id: ctx.external_id ?? "",
+    lp_click_url: ctx.lp_click_url ?? "",
+  };
+  for (let i = 1; i <= 10; i++) {
+    values[`sub${i}`] = ctx.subs?.[`sub${i}`] ?? "";
+  }
+  return url.replace(/\{([a-z0-9_]+)\}/gi, (match, name: string) => {
+    const value = values[name.toLowerCase()];
+    return value === undefined ? match : encodeURIComponent(value);
+  });
 }
 
 export function resolvePathDestination(
@@ -142,7 +158,7 @@ export function resolvePathDestination(
     return { error: "Path destination not configured" };
   }
 
-  const substituted = substituteMacros(raw, ctx);
+  const substituted = substituteMacros(raw, { ...ctx, lander_id: landerId, offer_id: offerId });
   const parsed = parseHttpUrl(substituted);
   if (!parsed) {
     return { error: "Invalid path destination URL" };

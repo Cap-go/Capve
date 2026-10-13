@@ -40,6 +40,9 @@ CREATE TABLE IF NOT EXISTS programs (
 
 CREATE INDEX IF NOT EXISTS idx_programs_user ON programs(user_id);
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_programs_campaign_key_global
+  ON programs(campaign_key) WHERE campaign_key IS NOT NULL;
+
 CREATE TABLE IF NOT EXISTS groups (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id),
@@ -104,10 +107,36 @@ CREATE TABLE IF NOT EXISTS clicks (
   path_id TEXT,
   lander_id TEXT,
   offer_id TEXT,
+  country TEXT,
+  region TEXT,
+  city TEXT,
+  device_type TEXT,
+  os TEXT,
+  browser TEXT,
+  isp TEXT,
+  referrer_domain TEXT,
+  sub1 TEXT,
+  sub2 TEXT,
+  sub3 TEXT,
+  sub4 TEXT,
+  sub5 TEXT,
+  sub6 TEXT,
+  sub7 TEXT,
+  sub8 TEXT,
+  sub9 TEXT,
+  sub10 TEXT,
+  external_id TEXT,
+  cost_cents INTEGER,
+  visitor_hash TEXT,
+  is_unique INTEGER NOT NULL DEFAULT 1,
+  is_bot INTEGER NOT NULL DEFAULT 0,
+  lp_clicked_at INTEGER,
   created_at INTEGER NOT NULL
 );
 
 CREATE INDEX IF NOT EXISTS idx_clicks_affiliate ON clicks(affiliate_id);
+CREATE INDEX IF NOT EXISTS idx_clicks_program_created ON clicks(program_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_clicks_program_visitor ON clicks(program_id, visitor_hash, created_at);
 
 CREATE TABLE IF NOT EXISTS rotations (
   id TEXT PRIMARY KEY,
@@ -151,11 +180,13 @@ CREATE TABLE IF NOT EXISTS conversions (
   status2 TEXT,
   currency TEXT NOT NULL DEFAULT 'USD',
   created_at INTEGER NOT NULL,
+  updated_at INTEGER,
   UNIQUE(program_id, order_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_conversions_affiliate ON conversions(affiliate_id);
 CREATE INDEX IF NOT EXISTS idx_conversions_program ON conversions(program_id);
+CREATE INDEX IF NOT EXISTS idx_conversions_click ON conversions(click_id);
 
 CREATE TABLE IF NOT EXISTS team_members (
   id TEXT PRIMARY KEY,
@@ -163,6 +194,7 @@ CREATE TABLE IF NOT EXISTS team_members (
   email TEXT NOT NULL,
   role TEXT NOT NULL,
   created_at INTEGER NOT NULL,
+  accepted_at INTEGER,
   UNIQUE(owner_user_id, email)
 );
 

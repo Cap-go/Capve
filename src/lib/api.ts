@@ -32,6 +32,15 @@ export type TeamMember = {
   email: string;
   role: "admin" | "viewer";
   created_at: number;
+  accepted_at: number | null;
+};
+
+export type PendingInvite = {
+  id: string;
+  owner_user_id: string;
+  owner_email: string | null;
+  role: "admin" | "viewer";
+  created_at: number;
 };
 
 export type EntityNote = {
@@ -214,6 +223,14 @@ export type TrendPoint = {
   leads: number;
   revenue_cents: number;
   cost_cents: number;
+};
+
+export type GroupedReportRow = {
+  key: string | null;
+  label: string;
+  unique_clicks: number;
+  bot_clicks: number;
+  metrics: CampaignMetrics;
 };
 
 export type ReportFilters = {
@@ -418,6 +435,16 @@ export const api = {
       `/api/reports/campaigns/${programId}/trends${qs ? `?${qs}` : ""}`,
     );
   },
+  groupedReport: (
+    by: string,
+    filters: ReportFilters & { campaign_id?: string } = {},
+  ) => {
+    const params = new URLSearchParams({ by });
+    for (const [key, value] of Object.entries(filters)) {
+      if (value != null && value !== "") params.set(key, String(value));
+    }
+    return request<{ by: string; rows: GroupedReportRow[] }>(`/api/reports/grouped?${params}`);
+  },
   team: () => request<{ members: TeamMember[]; role: TeamRole }>("/api/ops/team"),
   inviteMember: (email: string, role: "admin" | "viewer") =>
     request<{ member: TeamMember }>("/api/ops/team", {
@@ -426,6 +453,11 @@ export const api = {
     }),
   removeMember: (memberId: string) =>
     request<{ ok: boolean }>(`/api/ops/team/${memberId}`, { method: "DELETE" }),
+  invites: () => request<{ invites: PendingInvite[] }>("/api/ops/invites"),
+  acceptInvite: (inviteId: string) =>
+    request<{ ok: boolean }>(`/api/ops/invites/${inviteId}/accept`, { method: "POST" }),
+  declineInvite: (inviteId: string) =>
+    request<{ ok: boolean }>(`/api/ops/invites/${inviteId}/decline`, { method: "POST" }),
   notes: (entityType: EntityNote["entity_type"], entityId: string) =>
     request<{ notes: EntityNote[] }>(
       `/api/ops/notes?entity_type=${encodeURIComponent(entityType)}&entity_id=${encodeURIComponent(entityId)}`,

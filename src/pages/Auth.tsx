@@ -38,13 +38,13 @@ export function LoginPage() {
       }
     >
       <div className="mx-auto max-w-md px-6 py-16">
-        <h1 className="text-3xl font-bold">Sign in</h1>
+        <h1 className="text-3xl font-semibold">Sign in</h1>
         <p className="mt-2 text-[var(--velo-muted)]">Access your Capve dashboard.</p>
         <form className="card mt-8 space-y-4 p-6" onSubmit={onSubmit}>
           <Field label="Email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           <Field label="Password" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           <div className="text-right text-sm">
-            <Link className="text-[var(--velo-accent)] underline" to="/forgot-password">
+            <Link className="underline" to="/forgot-password">
               Forgot password?
             </Link>
           </div>
@@ -93,7 +93,7 @@ export function RegisterPage() {
       }
     >
       <div className="mx-auto max-w-md px-6 py-16">
-        <h1 className="text-3xl font-bold">Create account</h1>
+        <h1 className="text-3xl font-semibold">Create account</h1>
         <p className="mt-2 text-[var(--velo-muted)]">Start tracking campaigns in minutes.</p>
         <form className="card mt-8 space-y-4 p-6" onSubmit={onSubmit}>
           <Field label="Name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
@@ -133,12 +133,12 @@ export function ForgotPasswordPage() {
   return (
     <Shell cta={<Link className="btn btn-ghost" to="/login">Back to sign in</Link>}>
       <div className="mx-auto max-w-md px-6 py-16">
-        <h1 className="text-3xl font-bold">Reset password</h1>
+        <h1 className="text-3xl font-semibold">Reset password</h1>
         <p className="mt-2 text-[var(--velo-muted)]">We will email you a reset link.</p>
         <form className="card mt-8 space-y-4 p-6" onSubmit={onSubmit}>
           <Field label="Email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           <ErrorBox message={error} />
-          {message ? <p className="text-sm text-green-700">{message}</p> : null}
+          {message ? <p className="text-sm">{message}</p> : null}
           <button className="btn btn-primary w-full" type="submit" disabled={busy}>
             {busy ? "Sending…" : "Send reset link"}
           </button>
@@ -184,7 +184,7 @@ export function ResetPasswordPage() {
   return (
     <Shell cta={<Link className="btn btn-ghost" to="/login">Sign in</Link>}>
       <div className="mx-auto max-w-md px-6 py-16">
-        <h1 className="text-3xl font-bold">Choose a new password</h1>
+        <h1 className="text-3xl font-semibold">Choose a new password</h1>
         <form className="card mt-8 space-y-4 p-6" onSubmit={onSubmit}>
           <Field label="New password" type="password" autoComplete="new-password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
           <ErrorBox message={error} />

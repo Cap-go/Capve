@@ -14,6 +14,15 @@ export type TeamMember = {
   email: string;
   role: "admin" | "viewer";
   created_at: number;
+  accepted_at: number | null;
+};
+
+export type PendingInvite = {
+  id: string;
+  owner_user_id: string;
+  owner_email: string | null;
+  role: "admin" | "viewer";
+  created_at: number;
 };
 
 export type EntityNote = {

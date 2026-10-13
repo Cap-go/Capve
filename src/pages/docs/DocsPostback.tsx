@@ -45,7 +45,10 @@ export function DocsPostback() {
               <code>payout</code>
             </td>
             <td>No</td>
-            <td>Revenue amount in dollars (e.g. <code>49.99</code>)</td>
+            <td>
+              Revenue amount in dollars (e.g. <code>49.99</code>). Defaults to the clicked offer
+              payout.
+            </td>
           </tr>
           <tr>
             <td>
@@ -59,7 +62,11 @@ export function DocsPostback() {
               <code>order_id</code>
             </td>
             <td>No</td>
-            <td>Unique transaction ID for deduplication</td>
+            <td>
+              Transaction ID (also <code>tx_id</code>). Distinct IDs create separate conversions.
+              Without it, repeated postbacks for the same click update status and payout (e.g.{" "}
+              <code>lead</code> → <code>sale</code>); identical repeats are ignored.
+            </td>
           </tr>
         </tbody>
       </table>
@@ -75,6 +82,19 @@ export function DocsPostback() {
       <CodeBlock>
         {`https://your-source.com/postback?click={click_id}&payout={payout}&status={status}`}
       </CodeBlock>
+      <p>
+        A traffic source can also have its own postback URL. It fires on every new or updated
+        non-rejected conversion (sampled by the source&apos;s postback %), with{" "}
+        <code>{"{external_id}"}</code> = the source&apos;s click ID captured from{" "}
+        <code>clickid</code> / <code>external_id</code> on the tracking link, plus{" "}
+        <code>{"{clickid}"}</code>, <code>{"{payout}"}</code> and <code>{"{status}"}</code>.
+      </p>
+      <p>
+        Reports count conversions whose status is not <code>rejected</code>,{" "}
+        <code>declined</code>, <code>reversed</code>, <code>refunded</code>,{" "}
+        <code>chargeback</code>, <code>canceled</code>, <code>trash</code> or <code>fraud</code>,
+        attributed to the click&apos;s time.
+      </p>
 
       <h2>Network-specific template</h2>
       <p>Example for networks that pass external click tokens:</p>

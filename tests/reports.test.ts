@@ -73,10 +73,22 @@ describe("phase 4 reporting", () => {
     });
     const { lander } = await json<{ lander: { id: string } }>(landerRes);
 
+    const offerRes = await SELF.fetch("http://localhost/api/entities/offers", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name: "Offer", url: "https://offer.example.com/go?c={clickid}" }),
+    });
+    const { offer } = await json<{ offer: { id: string } }>(offerRes);
+
     await SELF.fetch(`http://localhost/api/programs/${program.id}/paths`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ name: "Lander path", flow_type: "lander", lander_id: lander.id }),
+      body: JSON.stringify({
+        name: "Lander path",
+        flow_type: "lander_offer",
+        lander_id: lander.id,
+        offer_id: offer.id,
+      }),
     });
 
     const affiliateRes = await SELF.fetch(`http://localhost/api/programs/${program.id}/affiliates`, {
@@ -86,8 +98,11 @@ describe("phase 4 reporting", () => {
     });
     const { affiliate } = await json<{ affiliate: { code: string } }>(affiliateRes);
 
+    const firstClick = await SELF.fetch(`http://localhost/r/${affiliate.code}`, { redirect: "manual" });
     await SELF.fetch(`http://localhost/r/${affiliate.code}`, { redirect: "manual" });
-    await SELF.fetch(`http://localhost/r/${affiliate.code}`, { redirect: "manual" });
+    const clickId = new URL(firstClick.headers.get("Location")!).searchParams.get("click_id")!;
+    const lpRes = await SELF.fetch(`http://localhost/lp/${clickId}`, { redirect: "manual" });
+    expect(lpRes.status).toBe(302);
 
     const convertOk = await SELF.fetch("http://localhost/api/v1/convert", {
       method: "POST",
@@ -124,7 +139,7 @@ describe("phase 4 reporting", () => {
     const row = campaigns.find((c) => c.id === program.id);
     expect(row).toBeTruthy();
     expect(row!.metrics.clicks).toBe(2);
-    expect(row!.metrics.lp_clicks).toBe(2);
+    expect(row!.metrics.lp_clicks).toBe(1);
     expect(row!.metrics.leads).toBe(1);
     expect(row!.metrics.revenue_cents).toBe(10000);
     expect(row!.metrics.cost_cents).toBe(100);

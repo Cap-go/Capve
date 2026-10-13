@@ -11,9 +11,15 @@ import {
   updateProgram,
 } from "../db/queries";
 import type { Env } from "../types";
-import { campaignKeyFromName } from "../db/entities";
+import { entityBelongsTo, withUniqueCampaignKey } from "../db/entities";
 import { apiKey, convertSecret, id, slugify } from "../lib/utils";
-import { buildCampaignUrl, buildPostbackUrl, buildTrackingUrl, parseHttpUrl } from "../lib/urls";
+import {
+  buildCampaignUrl,
+  buildPostbackUrl,
+  buildTrackingUrl,
+  optionalHttpUrl,
+  parseHttpUrl,
+} from "../lib/urls";
 import { requireUser, requireWrite } from "../lib/access";
 
 const programs = new Hono<{ Bindings: Env }>();
@@ -43,8 +49,16 @@ programs.post("/", async (c) => {
     return c.json({ error: "Valid destination URL (http/https) required" }, 400);
   }
 
+  const trafficSourceId = body.traffic_source_id?.trim() || null;
+  if (
+    trafficSourceId &&
+    !(await entityBelongsTo(c.env.DB, "traffic_source", trafficSourceId, session.account_id))
+  ) {
+    return c.json({ error: "Invalid traffic_source_id" }, 400);
+  }
+
   const secret = convertSecret();
-  const program = {
+  const base = {
     id: id("prg"),
     user_id: session.account_id,
     name,
@@ -53,14 +67,17 @@ programs.post("/", async (c) => {
     destination_url: destination.toString(),
     convert_secret: secret,
     s2s_postback_url: null,
-    campaign_key: campaignKeyFromName(name),
     group_id: null,
-    traffic_source_id: body.traffic_source_id?.trim() || null,
+    traffic_source_id: trafficSourceId,
     tags: null,
     status: "active",
     created_at: Date.now(),
   };
-  await createProgram(c.env.DB, program);
+  const program = await withUniqueCampaignKey(name, async (campaign_key) => {
+    const candidate = { ...base, campaign_key };
+    await createProgram(c.env.DB, candidate);
+    return candidate;
+  });
   const { convert_secret: _secret, ...publicProgram } = program;
   return c.json({ program: publicProgram, convert_secret: secret }, 201);
 });
@@ -95,8 +112,11 @@ programs.patch("/:id", async (c) => {
   }
 
   if (body.s2s_postback_url !== undefined) {
-    const raw = body.s2s_postback_url?.trim();
-    updates.s2s_postback_url = raw ? raw : null;
+    const postback = optionalHttpUrl(body.s2s_postback_url);
+    if (postback === false) {
+      return c.json({ error: "s2s_postback_url must be an http/https URL" }, 400);
+    }
+    updates.s2s_postback_url = postback;
   }
 
   const program = await updateProgram(c.env.DB, c.req.param("id"), session.account_id, updates);

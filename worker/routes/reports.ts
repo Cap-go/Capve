@@ -1,8 +1,11 @@
-import { Hono } from "hono";
+import { Hono, type Context } from "hono";
 import {
   exportClickLogCsv,
   exportConversionsCsv,
   getCampaignTrends,
+  getGroupedReport,
+  GROUP_DIMENSIONS,
+  isGroupDimension,
   listCampaignReports,
 } from "../db/reports";
 import type { Env } from "../types";
@@ -85,6 +88,80 @@ reports.get("/campaigns.csv", async (c) => {
     headers: {
       "Content-Type": "text/csv; charset=utf-8",
       "Content-Disposition": 'attachment; filename="campaigns.csv"',
+    },
+  });
+});
+
+async function groupedReport(c: Context<{ Bindings: Env }>) {
+  const session = await requireUser(c);
+  if (!session) return { error: c.json({ error: "Unauthorized" }, 401) };
+
+  const by = c.req.query("by")?.trim();
+  if (!isGroupDimension(by)) {
+    return {
+      error: c.json({ error: `by must be one of: ${GROUP_DIMENSIONS.join(", ")}` }, 400),
+    };
+  }
+
+  const filters = parseReportFilters({
+    from: c.req.query("from"),
+    to: c.req.query("to"),
+    group_id: c.req.query("group_id"),
+    traffic_source_id: c.req.query("traffic_source_id"),
+    status: c.req.query("status"),
+  });
+  const campaignId = c.req.query("campaign_id")?.trim() || undefined;
+  const rows = await getGroupedReport(c.env.DB, session.account_id, by, {
+    ...filters,
+    campaign_id: campaignId,
+  });
+  return { by, rows };
+}
+
+/** Binom-style report grouped by one dimension (country, os, offer, sub1, date, …). */
+reports.get("/grouped", async (c) => {
+  const result = await groupedReport(c);
+  if ("error" in result) return result.error;
+  return c.json({ by: result.by, rows: result.rows });
+});
+
+reports.get("/grouped.csv", async (c) => {
+  const result = await groupedReport(c);
+  if ("error" in result) return result.error;
+  const csv = toCsv(
+    [
+      result.by,
+      "Clicks",
+      "Unique",
+      "Bots",
+      "LP Clicks",
+      "Conversions",
+      "CR %",
+      "Revenue",
+      "Cost",
+      "Profit",
+      "ROI %",
+      "EPC",
+    ],
+    result.rows.map((row) => [
+      row.label,
+      row.metrics.clicks,
+      row.unique_clicks,
+      row.bot_clicks,
+      row.metrics.lp_clicks,
+      row.metrics.leads,
+      row.metrics.cr,
+      (row.metrics.revenue_cents / 100).toFixed(2),
+      (row.metrics.cost_cents / 100).toFixed(2),
+      (row.metrics.profit_cents / 100).toFixed(2),
+      row.metrics.roi,
+      (row.metrics.epc_cents / 100).toFixed(2),
+    ]),
+  );
+  return new Response(csv, {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="report-${result.by}.csv"`,
     },
   });
 });

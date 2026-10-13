@@ -1,113 +1,90 @@
 # Capve requirements
 
-Capve is an **open-source, self-hosted affiliate tracker** for indie and SaaS founders. Deploy it on your own Cloudflare account. It is **not** Capgo’s existing Affonso program and does not replace it.
+Capve is an **open-source alternative to Binom**: a campaign and affiliate tracker that runs on Cloudflare Workers + D1. Anyone can deploy it on their own Cloudflare account; `capve.app` is this repo's demo install. It is **not** Capgo's Affonso program and does not replace it.
 
 ## Product
 
-A self-hosted Capve instance lets a merchant:
+A Capve instance lets a user:
 
-1. Open `/app` (protected by **Cloudflare Access** in production)
-2. Create a **program** with a **destination URL** (where affiliates send traffic)
-3. Add **affiliates** and get unique tracking links
-4. See **dashboard stats**: affiliates, clicks, conversions, revenue, conversion rate
-
-An affiliate shares a short link. A click records the visit and sends the visitor to the merchant site with attribution attached.
-
-There is **no SaaS signup**, **no email/password login**, and **no pricing**.
+1. Register / sign in with email and password (`/register`, `/login`)
+2. Create **campaigns** with a destination URL, traffic source, and group
+3. Route traffic through **paths** (direct URL, offer, lander → offer) with weighted, sticky, pinned, or top-to-bottom rotation
+4. Manage **traffic sources, affiliate networks, offers, landers, groups**
+5. Share tracking links (`/r/:code` per affiliate, `/c/:key` per campaign)
+6. Receive conversions via **S2S postback** (`/click?cnv_id=…`) or the JSON convert API
+7. See **reports**: clicks, unique clicks, bots, LP clicks, conversions, revenue, cost, profit, ROI, EPC, CR — per campaign, per day, and grouped by any click dimension
 
 ## Done means (checklist)
 
-### Working app
-
 | Requirement | Implementation |
 | --- | --- |
-| Dashboard auth | Cloudflare Access JWT (`Cf-Access-Jwt-Assertion`); `TEAM_DOMAIN` + `POLICY_AUD` on Worker |
-| Program + destination URL | `POST /api/programs` (required `destination_url`), `PATCH /api/programs/:id` |
-| Affiliates + unique links | `POST /api/programs/:id/affiliates` → `{APP_URL}/r/:code` |
-| Redirect | `/r/:code` → program destination; optional `?url=` **same host only**; append `velo_ref=<code>` on Location |
-| Conversions | `POST /api/v1/convert` with `X-Program-Secret` + `affiliate_code`; idempotent by `(program_id, order_id)` |
-| CORS | `POST` + `OPTIONS` on `/api/v1/convert`, `Access-Control-Allow-Origin: *` |
-| Merchant snippet | `GET /api/v1/snippet` — browser-only: stores `velo_ref` in `localStorage` (conversions are server-side) |
-| Dashboard stats | `/app` + `GET /api/programs/:id/stats` |
+| Auth | Email/password sessions (`worker/lib/session.ts`, `worker/lib/access.ts`); `AUTH_SECRET` is a Worker secret in production |
+| Teams | Owner invites by email; invite applies only after the invitee accepts |
+| Click redirect | `/r/:code`, `/c/:key` → path target; appends `click_id` + `velo_ref`; paused campaigns 404 |
+| Click context | country/region/city/ISP from `request.cf`, device/OS/browser from UA, `sub1`–`sub10`, external `clickid`, per-click `cost`, unique + bot flags |
+| URL macros | `{clickid}`/`{click_id}`, `{campaign_id}`, `{offer_id}`, `{lander_id}`, `{country}`, `{external_id}`, `{sub1}`–`{sub10}`, `{lp_click_url}` |
+| LP click | `/lp/:clickId` marks the LP click and redirects to the click's offer |
+| Postback | `GET /click?cnv_id=&payout=&cnv_status=&tx_id=`; repeat for same click updates status/payout; no payout → offer payout |
+| Outgoing postbacks | Campaign S2S URL and traffic-source postback (`postback_percent`) fire on conversion |
+| Convert API | `POST /api/v1/convert` with `X-Program-Secret`; CORS enabled; idempotent by `(program_id, order_id)` |
+| Reports | `/api/reports/*` incl. `/grouped?by=` (country, device, OS, browser, ISP, offer, lander, path, traffic source, sub1–sub10, date…); rejected statuses excluded from revenue |
+| Redirect safety | Only configured destinations/offers/landers; `?url=` same host only; postback/webhook URLs must be http(s) |
 
-### Site structure
+### Routes
 
-- **`/`** — project homepage (what Capve is + how to install; Deploy to Cloudflare button)
-- **`/app`** — merchant dashboard (Cloudflare Access in production)
+**Public** (no session): `/`, `/docs/*`, `/login`, `/register`, `/r/:code`, `/c/:key`, `/lp/:clickId`, `/click`, `POST /api/v1/convert` + OPTIONS, `GET /api/v1/snippet`, `GET /api/health`, `/api/auth/*`.
 
-**Public routes** (must stay unauthenticated): `/`, `/r/:code`, `POST /api/v1/convert` + OPTIONS, `GET /api/v1/snippet`, `GET /api/health`.
+**Session required**: `/app`, `/api/programs*`, `/api/campaigns*`, `/api/entities*`, `/api/reports*`, `/api/ops*`, `/api/admin*`.
 
-**Protected** (Access + Worker JWT validation): `/app`, `/api/programs*`, `/api/campaigns*`, `/api/entities*`, `/api/reports*`, `/api/ops*`, `GET /api/auth/me`.
+Tracking and API paths are listed in `assets.run_worker_first` in `wrangler.toml` so browser navigations reach the Worker instead of the SPA fallback.
+
+**Do not put Cloudflare Access in front of the Worker.** It intercepts `/api/auth/*` and breaks login. `bun run remove-access` (and the deploy workflow) deletes any leftover Access app.
 
 ### Install
 
-- **One-click:** [Deploy to Cloudflare](https://deploy.workers.cloudflare.com/?url=https://github.com/Cap-go/Capve) provisions Worker + D1 on the visitor’s account.
-- **This repo’s CI** deploys to `capve.app` (Digital Shift demo/homepage install) using the existing D1 id in `wrangler.toml`.
-- After deploy, run `bun run setup-access` (or the **Setup Cloudflare Access** GitHub Action) to apply path-based Zero Trust Access on `/app*`, `/api/programs*`, `/api/campaigns*`, `/api/entities*`, `/api/reports*`, `/api/ops*`, and `/api/auth*` — not the whole Worker. The script writes `TEAM_DOMAIN` and `POLICY_AUD` to the Worker so JWT verification is enforced.
+- **One-click:** [Deploy to Cloudflare](https://deploy.workers.cloudflare.com/?url=https://github.com/Cap-go/Capve) provisions Worker + D1.
+- Set the session secret: `bunx wrangler secret put AUTH_SECRET` (32+ chars).
+- Optional: `PLATFORM_ADMIN_EMAILS` var; register that account right after deploy.
+- Optional: Cloudflare Email Service `send_email` binding for password-reset emails.
 
 ### Tests (`bun run test`)
 
-Must pass in CI:
-
-1. **Full path**: create program → affiliate → click → convert (`affiliate_code`, no cookie) → stats (localhost bypasses Access)
-2. **Redirect rejection**: off-host `?url=` and `javascript:` schemes return 400
-3. **`velo_ref`**: 302 `Location` includes `velo_ref=<code>`
-4. **CORS**: OPTIONS preflight on `/api/v1/convert`
-5. **Access optional**: without `TEAM_DOMAIN` + `POLICY_AUD`, dashboard APIs use the instance owner (`operator@instance` on production); with vars set (via `setup-access`), APIs require a valid Access JWT
+Must pass in CI: tracking flow, redirect security, CORS, session auth, security (invites, ownership, URL validation, campaign keys), Binom parity (status upsert, payout fallback, click context, grouped reports, LP click, traffic-source postback).
 
 ### CI / deploy
 
-- **CI** (`.github/workflows/ci.yml`): on PRs and `main` — typecheck, test, build
-- **Deploy** (`.github/workflows/deploy.yml`): runs only after **CI succeeds** on a push to `main` (`workflow_run`) — build, D1 migrations, `wrangler deploy`
+- **CI** (`.github/workflows/ci.yml`): typecheck, test, build on PRs and `main`
+- **Deploy** (`.github/workflows/deploy.yml`): after CI succeeds on `main` — build, D1 migrations, remove leftover Access app, `wrangler deploy --env production`
 
 **Cloudflare target (capve.app demo install)**
 
 | Resource | Value |
 | --- | --- |
 | Worker name | `velo` |
-| D1 database | `velo-db` (already created) |
-| D1 database ID | `eb916c67-6e45-4798-a6d9-c0e47f99cb8d` |
+| D1 database | `velo-db` — `eb916c67-6e45-4798-a6d9-c0e47f99cb8d` |
 | Account | Digital shift — `9ee3d7479a3c359681e3fab2c8cb22c0` |
 | Production URL | `https://capve.app` |
+| Worker secret | `AUTH_SECRET` (set with `wrangler secret put`, never in git) |
 
-**GitHub secrets**
-
-| Secret | Where | Status |
-| --- | --- | --- |
-| `CLOUDFLARE_API_TOKEN` | Cap-go **org** secrets | Already set |
-| `CLOUDFLARE_ACCOUNT_ID` | Cap-go **org** secrets | Already set |
-
-Set on the Worker (not required for landing/tracking until you want `/app`):
-
-| Var | Purpose |
-| --- | --- |
-| `TEAM_DOMAIN` | `https://<team>.cloudflareaccess.com` |
-| `POLICY_AUD` | Access application audience tag |
-
-`JWT_SECRET` is no longer used. Until `setup-access` sets Access vars, `/app` works via the instance owner bypass; after vars are applied, Cloudflare Access login is required.
-
-Attach **`capve.app`** to worker **`velo`**. Optional: redirect **`www.capve.app`** → apex.
+GitHub org secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are already set at Cap-go org level.
 
 ## Out of scope
 
 Do **not** build these unless explicitly requested:
 
 - Stripe / billing / pricing tiers
-- Email/password or social login
+- Social login
 - Affiliate payouts
-- Plan-limit enforcement
 - Replacing or integrating with **Affonso**
 - Host splits (e.g. separate console subdomain)
 
 ## Non-goals / security
 
-- **No open redirects** — redirects bound to program destination; `?url=` same-host only
-- **No cross-site cookie attribution** — merchant conversions use `velo_ref` query + `affiliate_code`, not Capve cookies
-- **Path-based Access only** — wrapping the whole Worker breaks `/r/*` and convert
-- **No dummy D1 IDs** in this repo’s production config
+- **No open redirects**
+- **No secrets in git** — Worker secrets / GitHub org secrets only
+- **No dummy D1 IDs** in production config
 - **No pinned action SHAs** — GitHub Actions use version tags
-- **No secrets in git** — use Worker vars / GitHub org secrets
-- **No workers.dev or capgo.app product URLs** for marketing — `capve.app` is this project’s homepage/demo
+- **No workers.dev or capgo.app product URLs** — `capve.app` is the homepage/demo
 
 ## Reference
 

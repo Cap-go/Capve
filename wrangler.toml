@@ -7,6 +7,9 @@ compatibility_flags = ["nodejs_compat"]
 directory = "./dist"
 not_found_handling = "single-page-application"
 binding = "ASSETS"
+# Tracking and API routes must hit the Worker even for browser navigations,
+# otherwise SPA fallback serves index.html for /r, /c, /lp and /click.
+run_worker_first = ["/api/*", "/r/*", "/c/*", "/lp/*", "/click", "/click/*"]
 
 [[d1_databases]]
 binding = "DB"
@@ -26,7 +29,8 @@ PLATFORM_ADMIN_EMAILS = "martindonadieu@gmail.com"
 [env.production]
 # Keep worker name "velo" (wrangler defaults to velo-production otherwise).
 name = "velo"
-vars = { APP_URL = "https://capve.app", AUTH_SECRET = "capve-prod-auth-7f3k9m2x8p1q6w4n0r5t2y8h3j6v9b2c5", EMAIL_FROM = "noreply@capve.app", PLATFORM_ADMIN_EMAILS = "martindonadieu@gmail.com" }
+# AUTH_SECRET is a secret: bunx wrangler secret put AUTH_SECRET --env production
+vars = { APP_URL = "https://capve.app", EMAIL_FROM = "noreply@capve.app", PLATFORM_ADMIN_EMAILS = "martindonadieu@gmail.com" }
 
 [[env.production.send_email]]
 name = "EMAIL"

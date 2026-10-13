@@ -12,13 +12,13 @@ export function Shell({
   return (
     <div className="min-h-screen">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-6 py-5">
-        <Link to="/" className="flex items-center gap-2.5 text-xl font-bold tracking-tight">
+        <Link to="/" className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
           <img
-            src="/capve-logo.png"
+            src="/logo.svg"
             alt=""
-            className="h-9 w-9 rounded-lg object-cover"
-            width={36}
-            height={36}
+            className="h-7 w-7"
+            width={28}
+            height={28}
             aria-hidden
           />
           {BRAND_NAME}
@@ -46,7 +46,7 @@ export function ErrorBox({ message }: { message: string }) {
   if (!message) return null;
   return (
     <div
-      className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+      className="rounded-md border border-red-300 bg-white px-4 py-3 text-sm text-red-700"
       role="alert"
     >
       {message}

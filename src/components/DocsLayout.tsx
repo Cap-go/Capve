@@ -5,15 +5,15 @@ import { DOC_PAGES, docHref } from "../lib/docs-nav";
 export function DocsLayout() {
   return (
     <div className="min-h-screen">
-      <header className="border-b border-[var(--velo-border)] bg-white/80 backdrop-blur">
+      <header className="border-b border-[var(--velo-border)] bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-          <Link to="/" className="flex items-center gap-2.5 text-lg font-bold tracking-tight">
+          <Link to="/" className="flex items-center gap-2.5 text-lg font-semibold tracking-tight">
             <img
-              src="/capve-logo.png"
+              src="/logo.svg"
               alt=""
-              className="h-8 w-8 rounded-lg object-cover"
-              width={32}
-              height={32}
+              className="h-7 w-7"
+              width={28}
+              height={28}
               aria-hidden
             />
             {BRAND_NAME}
@@ -43,9 +43,9 @@ export function DocsLayout() {
               to={docHref(page.slug)}
               end={page.slug === ""}
               className={({ isActive }) =>
-                `block rounded-lg px-3 py-2 text-sm ${
+                `block rounded-md px-3 py-2 text-sm ${
                   isActive
-                    ? "bg-[var(--velo-accent-soft)] font-medium text-[var(--velo-accent)]"
+                    ? "bg-[var(--velo-accent-soft)] font-medium text-[var(--velo-ink)]"
                     : "text-[var(--velo-muted)] hover:bg-white hover:text-[var(--velo-ink)]"
                 }`
               }

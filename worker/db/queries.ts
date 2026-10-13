@@ -9,6 +9,7 @@ import type {
 } from "../types";
 import { campaignKeyFromName } from "./entities";
 import { affiliateCode, conversionRate, id, isUniqueConstraintError } from "../lib/utils";
+import { approvedStatusSql } from "../lib/metrics";
 
 const PROGRAM_COLUMNS =
   "id, user_id, name, slug, api_key, destination_url, s2s_postback_url, campaign_key, group_id, traffic_source_id, tags, status, created_at";
@@ -257,6 +258,34 @@ export async function getClickById(db: D1Database, clickId: string): Promise<Cli
     .first<Click>();
 }
 
+const CLICK_CONTEXT_COLUMNS = [
+  "country",
+  "region",
+  "city",
+  "device_type",
+  "os",
+  "browser",
+  "isp",
+  "referrer_domain",
+  "sub1",
+  "sub2",
+  "sub3",
+  "sub4",
+  "sub5",
+  "sub6",
+  "sub7",
+  "sub8",
+  "sub9",
+  "sub10",
+  "external_id",
+  "cost_cents",
+  "visitor_hash",
+] as const;
+
+export type ClickContextColumns = Partial<
+  Record<(typeof CLICK_CONTEXT_COLUMNS)[number], string | number | null>
+>;
+
 export async function recordClick(
   db: D1Database,
   click: {
@@ -268,15 +297,19 @@ export async function recordClick(
     path_id?: string | null;
     lander_id?: string | null;
     offer_id?: string | null;
+    is_unique?: boolean;
+    is_bot?: boolean;
     created_at: number;
-  },
+  } & ClickContextColumns,
 ) {
+  const contextValues = CLICK_CONTEXT_COLUMNS.map((column) => click[column] ?? null);
   await db
     .prepare(
       `INSERT INTO clicks (
         id, program_id, affiliate_id, ip, user_agent,
-        path_id, lander_id, offer_id, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        path_id, lander_id, offer_id, ${CLICK_CONTEXT_COLUMNS.join(", ")},
+        is_unique, is_bot, created_at
+      ) VALUES (${Array.from({ length: 11 + CLICK_CONTEXT_COLUMNS.length }, () => "?").join(", ")})`,
     )
     .bind(
       click.id,
@@ -287,9 +320,66 @@ export async function recordClick(
       click.path_id ?? null,
       click.lander_id ?? null,
       click.offer_id ?? null,
+      ...contextValues,
+      click.is_unique === false ? 0 : 1,
+      click.is_bot ? 1 : 0,
       click.created_at,
     )
     .run();
+}
+
+/** Unique = no click from the same ip+UA hash on this campaign within the window. */
+export async function isUniqueVisitor(
+  db: D1Database,
+  programId: string,
+  visitorHash: string,
+  since: number,
+): Promise<boolean> {
+  const row = await db
+    .prepare(
+      "SELECT 1 AS hit FROM clicks WHERE program_id = ? AND visitor_hash = ? AND created_at >= ? LIMIT 1",
+    )
+    .bind(programId, visitorHash, since)
+    .first<{ hit: number }>();
+  return !row;
+}
+
+export type TrackedClick = {
+  id: string;
+  program_id: string;
+  affiliate_id: string;
+  path_id: string | null;
+  lander_id: string | null;
+  offer_id: string | null;
+  external_id: string | null;
+  country: string | null;
+  lp_clicked_at: number | null;
+  created_at: number;
+} & Record<`sub${1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 10}`, string | null>;
+
+export async function getTrackedClick(db: D1Database, clickId: string) {
+  return db
+    .prepare(
+      `SELECT id, program_id, affiliate_id, path_id, lander_id, offer_id, external_id, country,
+        sub1, sub2, sub3, sub4, sub5, sub6, sub7, sub8, sub9, sub10, lp_clicked_at, created_at
+       FROM clicks WHERE id = ?`,
+    )
+    .bind(clickId)
+    .first<TrackedClick>();
+}
+
+export async function markLpClick(db: D1Database, clickId: string, at: number) {
+  await db
+    .prepare("UPDATE clicks SET lp_clicked_at = ? WHERE id = ? AND lp_clicked_at IS NULL")
+    .bind(at, clickId)
+    .run();
+}
+
+export async function getOfferForUser(db: D1Database, offerId: string, userId: string) {
+  return db
+    .prepare("SELECT id, url, payout_cents FROM offers WHERE id = ? AND user_id = ?")
+    .bind(offerId, userId)
+    .first<{ id: string; url: string; payout_cents: number }>();
 }
 
 export type ConversionInput = {
@@ -305,10 +395,38 @@ export type ConversionInput = {
   created_at: number;
 };
 
+export type ConversionRecordStatus = "created" | "updated" | "duplicate";
+
+export type StoredConversion = {
+  id: string;
+  click_id: string | null;
+  order_id: string;
+  amount_cents: number;
+  status: string;
+  status2: string | null;
+  currency: string;
+};
+
+/**
+ * Insert a conversion. On (program_id, order_id) conflict:
+ * - without `update`, or for a different click → "duplicate" (idempotent)
+ * - with `update` → status/payout are updated when they changed (Binom status upsert);
+ *   identical repeats stay "duplicate". Fields left undefined keep the stored value.
+ */
 export async function recordConversion(
   db: D1Database,
   conversion: ConversionInput,
-): Promise<"created" | "duplicate"> {
+  update?: { status?: string; status2?: string | null; amount_cents?: number },
+): Promise<{ status: ConversionRecordStatus; conversion: StoredConversion; previous_status?: string }> {
+  const inserted: StoredConversion = {
+    id: conversion.id,
+    click_id: conversion.click_id ?? null,
+    order_id: conversion.order_id,
+    amount_cents: conversion.amount_cents,
+    status: conversion.status ?? "lead",
+    status2: conversion.status2 ?? null,
+    currency: conversion.currency ?? "USD",
+  };
   try {
     await db
       .prepare(
@@ -321,22 +439,53 @@ export async function recordConversion(
         conversion.id,
         conversion.program_id,
         conversion.affiliate_id,
-        conversion.click_id ?? null,
-        conversion.order_id,
-        conversion.amount_cents,
-        conversion.status ?? "lead",
-        conversion.status2 ?? null,
-        conversion.currency ?? "USD",
+        inserted.click_id,
+        inserted.order_id,
+        inserted.amount_cents,
+        inserted.status,
+        inserted.status2,
+        inserted.currency,
         conversion.created_at,
       )
       .run();
-    return "created";
+    return { status: "created", conversion: inserted };
   } catch (error) {
-    if (isUniqueConstraintError(error)) {
-      return "duplicate";
-    }
-    throw error;
+    if (!isUniqueConstraintError(error)) throw error;
   }
+
+  const existing = await db
+    .prepare(
+      `SELECT id, click_id, order_id, amount_cents, status, status2, currency
+       FROM conversions WHERE program_id = ? AND order_id = ?`,
+    )
+    .bind(conversion.program_id, conversion.order_id)
+    .first<StoredConversion>();
+  if (!existing) return { status: "duplicate", conversion: inserted };
+  if (!update || existing.click_id !== (conversion.click_id ?? null)) {
+    return { status: "duplicate", conversion: existing };
+  }
+
+  const next: StoredConversion = {
+    ...existing,
+    status: update.status ?? existing.status,
+    status2: update.status2 === undefined ? existing.status2 : update.status2,
+    amount_cents: update.amount_cents ?? existing.amount_cents,
+  };
+  if (
+    next.status === existing.status &&
+    next.status2 === existing.status2 &&
+    next.amount_cents === existing.amount_cents
+  ) {
+    return { status: "duplicate", conversion: existing };
+  }
+
+  await db
+    .prepare(
+      "UPDATE conversions SET status = ?, status2 = ?, amount_cents = ?, updated_at = ? WHERE id = ?",
+    )
+    .bind(next.status, next.status2, next.amount_cents, Date.now(), existing.id)
+    .run();
+  return { status: "updated", conversion: next, previous_status: existing.status };
 }
 
 export async function listClickLog(
@@ -408,30 +557,39 @@ export async function listConversionLog(
 
 export async function getProgramStats(db: D1Database, program: Program): Promise<ProgramStats> {
   const affiliates = await listAffiliates(db, program.id);
-  const stats: AffiliateStats[] = [];
-
-  for (const affiliate of affiliates) {
-    const clicks = await db
-      .prepare("SELECT COUNT(*) as count FROM clicks WHERE affiliate_id = ?")
-      .bind(affiliate.id)
-      .first<{ count: number }>();
-    const conversions = await db
+  const [clickRows, conversionRows] = await Promise.all([
+    db
       .prepare(
-        "SELECT COUNT(*) as count, COALESCE(SUM(amount_cents), 0) as revenue FROM conversions WHERE affiliate_id = ?",
+        "SELECT affiliate_id, COUNT(*) AS count FROM clicks WHERE program_id = ? GROUP BY affiliate_id",
       )
-      .bind(affiliate.id)
-      .first<{ count: number; revenue: number }>();
+      .bind(program.id)
+      .all<{ affiliate_id: string; count: number }>(),
+    db
+      .prepare(
+        `SELECT cv.affiliate_id, COUNT(*) AS count, COALESCE(SUM(cv.amount_cents), 0) AS revenue
+         FROM conversions cv
+         WHERE cv.program_id = ? AND ${approvedStatusSql("cv")}
+         GROUP BY cv.affiliate_id`,
+      )
+      .bind(program.id)
+      .all<{ affiliate_id: string; count: number; revenue: number }>(),
+  ]);
 
-    const clickCount = clicks?.count ?? 0;
+  const clicksBy = new Map((clickRows.results ?? []).map((r) => [r.affiliate_id, r.count]));
+  const conversionsBy = new Map((conversionRows.results ?? []).map((r) => [r.affiliate_id, r]));
+
+  const stats: AffiliateStats[] = affiliates.map((affiliate) => {
+    const clickCount = clicksBy.get(affiliate.id) ?? 0;
+    const conversions = conversionsBy.get(affiliate.id);
     const conversionCount = conversions?.count ?? 0;
-    stats.push({
+    return {
       ...affiliate,
       clicks: clickCount,
       conversions: conversionCount,
       revenue_cents: conversions?.revenue ?? 0,
       conversion_rate: conversionRate(conversionCount, clickCount),
-    });
-  }
+    };
+  });
 
   const totals = stats.reduce(
     (acc, row) => ({

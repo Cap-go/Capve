@@ -2,12 +2,12 @@
 
 :root {
   color-scheme: light;
-  --velo-bg: #faf9f7;
-  --velo-ink: #111827;
-  --velo-muted: #6b7280;
-  --velo-accent: #0f766e;
-  --velo-accent-soft: #ccfbf1;
-  --velo-border: #e5e7eb;
+  --velo-bg: #fafafa;
+  --velo-ink: #111111;
+  --velo-muted: #666666;
+  --velo-accent: #111111;
+  --velo-accent-soft: #f0f0f0;
+  --velo-border: #e5e5e5;
 }
 
 * {
@@ -41,8 +41,7 @@ textarea {
 .card {
   background: white;
   border: 1px solid var(--velo-border);
-  border-radius: 16px;
-  box-shadow: 0 1px 2px rgb(0 0 0 / 4%);
+  border-radius: 8px;
 }
 
 .btn {
@@ -50,22 +49,27 @@ textarea {
   align-items: center;
   justify-content: center;
   gap: 0.5rem;
-  border-radius: 999px;
-  padding: 0.65rem 1.1rem;
-  font-weight: 600;
+  border-radius: 6px;
+  padding: 0.55rem 1rem;
+  font-weight: 500;
   border: 1px solid transparent;
   cursor: pointer;
   text-decoration: none;
-  transition: transform 0.15s ease, background 0.15s ease;
+  transition: background 0.15s ease, border-color 0.15s ease;
 }
 
-.btn:hover {
-  transform: translateY(-1px);
+.btn:disabled {
+  opacity: 0.5;
+  cursor: default;
 }
 
 .btn-primary {
-  background: var(--velo-accent);
+  background: var(--velo-ink);
   color: white;
+}
+
+.btn-primary:hover {
+  background: #333333;
 }
 
 .btn-secondary {
@@ -73,22 +77,30 @@ textarea {
   border-color: var(--velo-border);
 }
 
+.btn-secondary:hover {
+  border-color: #cccccc;
+}
+
 .btn-ghost {
   background: transparent;
   color: var(--velo-muted);
 }
 
+.btn-ghost:hover {
+  color: var(--velo-ink);
+}
+
 .input {
   width: 100%;
   border: 1px solid var(--velo-border);
-  border-radius: 12px;
-  padding: 0.75rem 0.9rem;
+  border-radius: 6px;
+  padding: 0.6rem 0.75rem;
   background: white;
 }
 
 .input:focus {
-  outline: 2px solid var(--velo-accent-soft);
-  border-color: var(--velo-accent);
+  outline: none;
+  border-color: var(--velo-ink);
 }
 
 .stat-grid {
@@ -107,8 +119,8 @@ textarea {
 }
 
 .stat-value {
-  font-size: 1.6rem;
-  font-weight: 700;
+  font-size: 1.5rem;
+  font-weight: 600;
   margin-top: 0.25rem;
 }
 
@@ -127,7 +139,7 @@ textarea {
 
 .table th {
   color: var(--velo-muted);
-  font-weight: 600;
+  font-weight: 500;
 }
 
 .mono {
@@ -176,6 +188,14 @@ textarea {
 }
 
 .docs-prose a {
-  color: var(--velo-accent);
+  color: var(--velo-ink);
   text-decoration: underline;
+}
+
+.docs-prose ol {
+  list-style: decimal;
+}
+
+.docs-prose ul {
+  list-style: disc;
 }

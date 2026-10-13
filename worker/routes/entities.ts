@@ -6,6 +6,7 @@ import {
   createOffer,
   createTrafficSource,
   deleteGroup,
+  entityBelongsTo,
   listAffiliateNetworks,
   listGroups,
   listLanders,
@@ -14,7 +15,7 @@ import {
 } from "../db/entities";
 import type { Env } from "../types";
 import { requireUser, requireWrite } from "../lib/access";
-import { parseHttpUrl } from "../lib/urls";
+import { optionalHttpUrl, parseHttpUrl } from "../lib/urls";
 
 const entities = new Hono<{ Bindings: Env }>();
 
@@ -60,12 +61,16 @@ entities.post("/traffic-sources", async (c) => {
   }>();
   const name = body.name?.trim();
   if (!name) return c.json({ error: "Name required" }, 400);
+  const postback = optionalHttpUrl(body.s2s_postback_url);
+  if (postback === false) {
+    return c.json({ error: "s2s_postback_url must be an http/https URL" }, 400);
+  }
   const source = await createTrafficSource(c.env.DB, session.account_id, {
     name,
     cost_type: body.cost_type,
     default_cost_cents: body.default_cost_cents,
     postback_percent: body.postback_percent,
-    s2s_postback_url: body.s2s_postback_url,
+    s2s_postback_url: postback,
   });
   return c.json({ traffic_source: source }, 201);
 });
@@ -82,9 +87,13 @@ entities.post("/networks", async (c) => {
   const body = await c.req.json<{ name?: string; postback_url_template?: string | null }>();
   const name = body.name?.trim();
   if (!name) return c.json({ error: "Name required" }, 400);
+  const template = optionalHttpUrl(body.postback_url_template);
+  if (template === false) {
+    return c.json({ error: "postback_url_template must be an http/https URL" }, 400);
+  }
   const network = await createAffiliateNetwork(c.env.DB, session.account_id, {
     name,
-    postback_url_template: body.postback_url_template,
+    postback_url_template: template,
   });
   return c.json({ network }, 201);
 });
@@ -126,6 +135,12 @@ entities.post("/offers", async (c) => {
   const url = body.url?.trim();
   if (!name || !url) return c.json({ error: "Name and URL required" }, 400);
   if (!parseHttpUrl(url)) return c.json({ error: "Valid http/https URL required" }, 400);
+  if (
+    body.network_id &&
+    !(await entityBelongsTo(c.env.DB, "network", body.network_id, session.account_id))
+  ) {
+    return c.json({ error: "Invalid network_id" }, 400);
+  }
   const offer = await createOffer(c.env.DB, session.account_id, {
     name,
     url,

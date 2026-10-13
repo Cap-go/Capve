@@ -4,16 +4,16 @@ import { GITHUB_REPO_URL, PRODUCTION_APP_URL } from "../lib/constants";
 
 const features = [
   {
-    title: "Campaign reporting",
-    body: "Binom-style metrics — clicks, cost, profit, ROI — with CSV export and daily trends.",
+    title: "Reports",
+    body: "Clicks, conversions, cost, revenue, and ROI per campaign. Daily trends and CSV export.",
   },
   {
-    title: "Smart routing",
-    body: "Paths, rotations, landers, and offers. Route traffic like a pro tracker without the legacy UI.",
+    title: "Routing",
+    body: "Send traffic through paths, rotations, landers, and offers.",
   },
   {
-    title: "AI-ready",
-    body: "Documented APIs and MCP-friendly workflows so agents can manage campaigns for you.",
+    title: "API",
+    body: "Every action in the dashboard has a documented HTTP endpoint.",
   },
 ];
 
@@ -29,96 +29,70 @@ export function LandingPage() {
             Sign in
           </Link>
           <Link className="btn btn-primary" to="/register">
-            Get started
+            Sign up
           </Link>
         </>
       }
     >
-      <section className="mx-auto max-w-6xl px-6 pb-16 pt-8">
-        <div className="grid items-center gap-12 lg:grid-cols-[1.1fr_0.9fr]">
+      <section className="mx-auto max-w-6xl px-6 pb-16 pt-12">
+        <div className="grid gap-12 lg:grid-cols-[1.1fr_0.9fr]">
           <div>
-            <p className="mb-4 inline-flex rounded-full bg-[var(--velo-accent-soft)] px-3 py-1 text-sm font-semibold text-[var(--velo-accent)]">
-              Modern performance marketing
-            </p>
-            <h1 className="max-w-2xl text-5xl font-bold leading-tight tracking-tight">
-              Affiliate & campaign tracking built for speed.
+            <h1 className="max-w-2xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
+              Affiliate and campaign tracking.
             </h1>
             <p className="mt-5 max-w-xl text-lg text-[var(--velo-muted)]">
-              Capve tracks clicks, conversions, and campaign ROI with Binom-class reporting — hosted,
-              simple pricing, and AI-ready workflows.
+              Capve records clicks and conversions, attributes them to affiliates and campaigns, and
+              shows what each one earns. Open source, runs on Cloudflare.
             </p>
-            <div className="mt-8 flex flex-wrap items-center gap-4">
+            <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link className="btn btn-primary" to="/register">
-                Start free
+                Create account
               </Link>
-              <Link className="btn btn-secondary" to="/login">
-                Sign in
+              <Link className="btn btn-secondary" to="/docs">
+                Read the docs
               </Link>
             </div>
           </div>
 
-          <div className="card p-6">
-            <p className="text-sm font-semibold text-[var(--velo-muted)]">Live flow</p>
-            <ol className="mt-4 space-y-4 text-sm leading-relaxed">
+          <div className="card self-start p-6">
+            <p className="text-sm font-medium text-[var(--velo-muted)]">How it works</p>
+            <ol className="mt-4 list-decimal space-y-3 pl-5 text-sm leading-relaxed">
+              <li>Create an account.</li>
               <li>
-                <strong>1.</strong> Create your Capve account.
+                Add a campaign and traffic sources in <span className="mono">/app</span>.
               </li>
               <li>
-                <strong>2.</strong> Add a campaign and traffic sources in{" "}
-                <span className="mono rounded bg-[var(--velo-accent-soft)] px-2 py-1">/app</span>
+                Affiliates share <span className="mono">your-domain/r/code</span>.
               </li>
-              <li>
-                <strong>3.</strong> Affiliate shares{" "}
-                <span className="mono rounded bg-[var(--velo-accent-soft)] px-2 py-1">
-                  your-domain/r/code
-                </span>
-              </li>
-              <li>
-                <strong>4.</strong> Click records visit → checkout posts conversion → stats update.
-              </li>
+              <li>A click records the visit. Your checkout posts the conversion. Stats update.</li>
             </ol>
           </div>
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-6 py-12">
-        <div className="grid gap-5 md:grid-cols-3">
+      <section className="mx-auto max-w-6xl px-6">
+        <div className="grid gap-8 border-t border-[var(--velo-border)] py-12 md:grid-cols-3">
           {features.map((feature) => (
-            <article key={feature.title} className="card p-6">
-              <h2 className="text-lg font-semibold">{feature.title}</h2>
-              <p className="mt-3 text-[var(--velo-muted)]">{feature.body}</p>
+            <article key={feature.title}>
+              <h2 className="font-semibold">{feature.title}</h2>
+              <p className="mt-2 text-[var(--velo-muted)]">{feature.body}</p>
             </article>
           ))}
         </div>
       </section>
 
-      <section className="mx-auto max-w-6xl px-6 py-12">
-        <div className="card p-8 text-center">
-          <h2 className="text-3xl font-bold">Ready to track smarter?</h2>
-          <p className="mx-auto mt-3 max-w-xl text-[var(--velo-muted)]">
-            Create a free account, add your first campaign, and start measuring performance in minutes.
-          </p>
-          <div className="mt-6 flex flex-wrap justify-center gap-4">
-            <Link className="btn btn-primary" to="/register">
-              Create free account
-            </Link>
-            <Link className="btn btn-secondary" to="/docs">
-              Read the docs
-            </Link>
-          </div>
+      <footer className="mx-auto max-w-6xl px-6 text-sm text-[var(--velo-muted)]">
+        <div className="border-t border-[var(--velo-border)] py-8">
+          Capve at{" "}
+          <a className="underline" href={PRODUCTION_APP_URL}>
+            capve.app
+          </a>
+          . Source on{" "}
+          <a className="underline" href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">
+            GitHub
+          </a>
+          .
         </div>
-      </section>
-
-      <footer className="mx-auto max-w-6xl px-6 py-10 text-sm text-[var(--velo-muted)]">
-        Capve — performance marketing at{" "}
-        <a className="underline" href={PRODUCTION_APP_URL}>
-          capve.app
-        </a>
-        . Source on{" "}
-        <a className="underline" href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">
-          GitHub
-        </a>
-        .
       </footer>
     </Shell>
   );

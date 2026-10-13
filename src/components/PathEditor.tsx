@@ -200,7 +200,7 @@ export function PathEditor({ programId }: { programId: string }) {
         <label className="block text-sm">
           <span className="mb-1 block font-medium">Flow type</span>
           <select
-            className="w-full rounded-xl border border-[var(--velo-border)] bg-transparent px-3 py-2"
+            className="w-full rounded-md border border-[var(--velo-border)] bg-transparent px-3 py-2"
             value={flowType}
             onChange={(e) => setFlowType(e.target.value as FlowType)}
           >
@@ -225,7 +225,7 @@ export function PathEditor({ programId }: { programId: string }) {
           <label className="block text-sm">
             <span className="mb-1 block font-medium">Lander</span>
             <select
-              className="w-full rounded-xl border border-[var(--velo-border)] bg-transparent px-3 py-2"
+              className="w-full rounded-md border border-[var(--velo-border)] bg-transparent px-3 py-2"
               value={landerId}
               onChange={(e) => setLanderId(e.target.value)}
               required
@@ -243,7 +243,7 @@ export function PathEditor({ programId }: { programId: string }) {
           <label className="block text-sm">
             <span className="mb-1 block font-medium">Offer</span>
             <select
-              className="w-full rounded-xl border border-[var(--velo-border)] bg-transparent px-3 py-2"
+              className="w-full rounded-md border border-[var(--velo-border)] bg-transparent px-3 py-2"
               value={offerId}
               onChange={(e) => setOfferId(e.target.value)}
               required
