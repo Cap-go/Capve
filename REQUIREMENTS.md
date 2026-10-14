@@ -12,7 +12,8 @@ A Capve instance lets a user:
 4. Manage **traffic sources, affiliate networks, offers, landers, groups**
 5. Share tracking links (`/r/:code` per affiliate, `/c/:key` per campaign)
 6. Receive conversions via **S2S postback** (`/click?cnv_id=…`) or the JSON convert API
-7. See **reports**: clicks, unique clicks, bots, LP clicks, conversions, revenue, cost, profit, ROI, EPC, CR — per campaign, per day, and grouped by any click dimension
+7. Do all of the above from an AI assistant through the **MCP server** (`/mcp`, personal API token)
+8. See **reports**: clicks, unique clicks, bots, LP clicks, conversions, revenue, cost, profit, ROI, EPC, CR — per campaign, per day, and grouped by any click dimension
 
 ## Done means (checklist)
 
@@ -28,13 +29,16 @@ A Capve instance lets a user:
 | Outgoing postbacks | Campaign S2S URL and traffic-source postback (`postback_percent`) fire on conversion |
 | Convert API | `POST /api/v1/convert` with `X-Program-Secret`; CORS enabled; idempotent by `(program_id, order_id)` |
 | Reports | `/api/reports/*` incl. `/grouped?by=` (country, device, OS, browser, ISP, offer, lander, path, traffic source, sub1–sub10, date…); rejected statuses excluded from revenue |
+| MCP | `POST /mcp` (Streamable HTTP, stateless JSON-RPC) in `worker/mcp/`; each tool replays an `/api` route with the bearer token; tokens in `api_tokens` (hash only), managed at `/api/tokens` with a session cookie only |
 | Redirect safety | Only configured destinations/offers/landers; `?url=` same host only; postback/webhook URLs must be http(s) |
 
 ### Routes
 
 **Public** (no session): `/`, `/docs/*`, `/login`, `/register`, `/r/:code`, `/c/:key`, `/lp/:clickId`, `/click`, `POST /api/v1/convert` + OPTIONS, `GET /api/v1/snippet`, `GET /api/health`, `/api/auth/*`.
 
-**Session required**: `/app`, `/api/programs*`, `/api/campaigns*`, `/api/entities*`, `/api/reports*`, `/api/ops*`, `/api/admin*`.
+**Session or API token** (`Authorization: Bearer capve_…`): `/app`, `/api/programs*`, `/api/campaigns*`, `/api/entities*`, `/api/reports*`, `/api/ops*`, `/api/admin*`, `/mcp`.
+
+**Session cookie only**: `/api/tokens*` (a token cannot mint tokens).
 
 Tracking and API paths are listed in `assets.run_worker_first` in `wrangler.toml` so browser navigations reach the Worker instead of the SPA fallback.
 

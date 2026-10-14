@@ -6,6 +6,7 @@ import { ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage } from "
 import { LandingPage } from "./pages/Landing";
 import { DocsBrowserAttribution } from "./pages/docs/DocsBrowserAttribution";
 import { DocsConvertApi } from "./pages/docs/DocsConvertApi";
+import { DocsMcp } from "./pages/docs/DocsMcp";
 import { DocsOverview } from "./pages/docs/DocsOverview";
 import { DocsPostback } from "./pages/docs/DocsPostback";
 import { DocsServerConversions } from "./pages/docs/DocsServerConversions";
@@ -24,6 +25,7 @@ export function App() {
           <Route path="/app" element={<DashboardPage />} />
           <Route path="/docs" element={<DocsLayout />}>
             <Route index element={<DocsOverview />} />
+            <Route path="mcp" element={<DocsMcp />} />
             <Route path="postback" element={<DocsPostback />} />
             <Route path="tracking-links" element={<DocsTrackingLinks />} />
             <Route path="browser-attribution" element={<DocsBrowserAttribution />} />

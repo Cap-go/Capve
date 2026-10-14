@@ -9,7 +9,8 @@ Capve = **open-source Binom alternative**: campaign and affiliate tracking on Cl
 | Path | Purpose |
 | --- | --- |
 | `worker/` | Hono API, redirect, LP click, postback, convert, session auth |
-| `worker/lib/access.ts` | Session auth (`requireUser`, team roles) |
+| `worker/lib/access.ts` | Session + API-token auth (`requireUser`, team roles) |
+| `worker/mcp/` | MCP server (`/mcp`); `tools.ts` maps each tool to an `/api` route |
 | `src/` | React UI (homepage `/`, dashboard `/app`) |
 | `src/lib/constants.ts` | Deploy button + GitHub URLs |
 | `migrations/` | D1 schema |
@@ -58,7 +59,8 @@ Local dev uses email/password sessions (`/login`, `/register`). The local-dev `A
 - Do not add Stripe, pricing, payouts, social login, or Affonso integration unless asked
 - Keep redirect allowlist logic — never redirect to arbitrary hosts
 - Conversions: `affiliate_code` + `X-Program-Secret` (server-only); CORS on convert
-- Dashboard APIs require a valid session cookie (`worker/lib/access.ts`)
+- Dashboard APIs require a valid session cookie or API token (`worker/lib/access.ts`)
+- New dashboard API features should get a matching MCP tool in `worker/mcp/tools.ts` (and the list in `src/pages/docs/DocsMcp.tsx`)
 - Public routes must stay public: `/`, `/r/*`, `/api/v1/convert`, `/api/v1/snippet`
 - Run `bun run test` and keep CI green
 - Use version tags for GitHub Actions, not SHA pins

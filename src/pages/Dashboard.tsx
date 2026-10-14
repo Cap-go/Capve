@@ -4,6 +4,7 @@ import { AdminPanel } from "../components/AdminPanel";
 import { CampaignReportPanel } from "../components/CampaignReport";
 import { EntityPanel } from "../components/EntityPanel";
 import { PathEditor } from "../components/PathEditor";
+import { McpPanel } from "../components/McpPanel";
 import { OpsPanel, NotesPanel } from "../components/OpsPanel";
 import { CodeBlock } from "../components/CodeBlock";
 import { ErrorBox, Field, Shell } from "../components/ui";
@@ -31,6 +32,7 @@ type EntityView =
   | "landers"
   | "groups"
   | "settings"
+  | "mcp"
   | "admin";
 
 const ENTITY_NAV: { key: EntityView; label: string }[] = [
@@ -42,6 +44,7 @@ const ENTITY_NAV: { key: EntityView; label: string }[] = [
   { key: "landers", label: "Landers" },
   { key: "groups", label: "Groups" },
   { key: "settings", label: "Settings" },
+  { key: "mcp", label: "AI / MCP" },
 ];
 
 export function DashboardPage() {
@@ -328,6 +331,8 @@ export function DashboardPage() {
             <CampaignReportPanel canWrite={user.role !== "viewer"} />
           ) : entity === "settings" ? (
             <OpsPanel role={user.role ?? "owner"} />
+          ) : entity === "mcp" ? (
+            <McpPanel />
           ) : (
             <EntityPanel kind={entity} />
           )
