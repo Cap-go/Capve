@@ -19,10 +19,12 @@ function authSecret(env: Env): Uint8Array {
 export type SessionClaims = {
   sub: string;
   email: string;
+  /** users.session_version at sign-in; a bump revokes the session. */
+  sv: number;
 };
 
 export async function signSession(env: Env, claims: SessionClaims): Promise<string> {
-  return new SignJWT({ email: claims.email })
+  return new SignJWT({ email: claims.email, sv: claims.sv })
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(claims.sub)
     .setIssuedAt()
@@ -37,7 +39,10 @@ export async function verifySession(env: Env, token: string): Promise<SessionCla
     const sub = payload.sub;
     const email = payload.email;
     if (typeof sub !== "string" || typeof email !== "string") return null;
-    return { sub, email: email.toLowerCase() };
+    // Sessions issued before session_version existed carry no `sv`: treat as version 0.
+    const sv = payload.sv === undefined ? 0 : payload.sv;
+    if (typeof sv !== "number" || !Number.isInteger(sv)) return null;
+    return { sub, email: email.toLowerCase(), sv };
   } catch {
     return null;
   }

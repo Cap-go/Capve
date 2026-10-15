@@ -14,7 +14,8 @@ import { approvedStatusSql } from "../lib/metrics";
 const PROGRAM_COLUMNS =
   "id, user_id, name, slug, api_key, destination_url, campaign_key, group_id, traffic_source_id, tags, status, created_at";
 
-const USER_COLUMNS = "id, email, name, email_verified, is_platform_admin, created_at";
+const USER_COLUMNS =
+  "id, email, name, email_verified, is_platform_admin, session_version, created_at";
 
 export async function getUserByEmail(db: D1Database, email: string) {
   return db
@@ -26,6 +27,7 @@ export async function getUserByEmail(db: D1Database, email: string) {
       name: string | null;
       email_verified: number;
       is_platform_admin: number;
+      session_version: number;
       created_at: number;
     }>();
 }
@@ -40,6 +42,7 @@ export async function getUserById(db: D1Database, userId: string) {
       name: string | null;
       email_verified: number;
       is_platform_admin: number;
+      session_version: number;
       created_at: number;
     }>();
 }
@@ -58,30 +61,37 @@ export async function createUser(
     email: string;
     password_hash: string;
     name?: string | null;
-    is_platform_admin?: boolean;
     created_at: number;
   },
 ) {
+  // New accounts start unverified; invites and platform admin need a verified email.
   await db
     .prepare(
-      "INSERT INTO users (id, email, password_hash, name, email_verified, is_platform_admin, created_at) VALUES (?, ?, ?, ?, 1, ?, ?)",
+      "INSERT INTO users (id, email, password_hash, name, email_verified, is_platform_admin, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)",
     )
-    .bind(
-      user.id,
-      user.email.toLowerCase(),
-      user.password_hash,
-      user.name ?? null,
-      user.is_platform_admin ? 1 : 0,
-      user.created_at,
-    )
+    .bind(user.id, user.email.toLowerCase(), user.password_hash, user.name ?? null, user.created_at)
     .run();
 }
 
+/** Sets the password and bumps session_version so every existing session is revoked. */
 export async function updateUserPassword(db: D1Database, userId: string, passwordHash: string) {
   await db
-    .prepare("UPDATE users SET password_hash = ? WHERE id = ?")
+    .prepare(
+      "UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?",
+    )
     .bind(passwordHash, userId)
     .run();
+}
+
+export async function bumpSessionVersion(db: D1Database, userId: string) {
+  await db
+    .prepare("UPDATE users SET session_version = session_version + 1 WHERE id = ?")
+    .bind(userId)
+    .run();
+}
+
+export async function markEmailVerified(db: D1Database, userId: string) {
+  await db.prepare("UPDATE users SET email_verified = 1 WHERE id = ?").bind(userId).run();
 }
 
 export async function listPrograms(db: D1Database, userId: string): Promise<Program[]> {

@@ -7,7 +7,7 @@ import {
   type ConversionInput,
   type ConversionRecordStatus,
 } from "../db/queries";
-import { isApprovedStatus } from "./metrics";
+import { isPostbackApprovedStatus } from "./metrics";
 import { getTriggersForEvent } from "../db/ops";
 import { postbacksForConversion } from "../db/postbacks";
 import { fireS2SPostback } from "./postback";
@@ -44,12 +44,14 @@ function sampled(key: string, percent: number): boolean {
 
 /**
  * Fires every outgoing postback matching the conversion event: the campaign's
- * (all statuses), and its traffic source's and the clicked offer's network's
- * (approved statuses only; traffic source ones sampled by postback_percent).
+ * (every new or updated conversion, all statuses), and its traffic source's and the
+ * clicked offer's network's (only when the conversion becomes approved, so once per
+ * conversion; traffic source ones sampled by postback_percent).
  */
 async function fireConversionPostbacks(
   db: D1Database,
   program: { id: string; user_id: string; traffic_source_id?: string | null },
+  becameApproved: boolean,
   macros: {
     click_id: string | null;
     payout: number;
@@ -80,7 +82,6 @@ async function fireConversionPostbacks(
   );
   if (postbacks.length === 0) return;
 
-  const approved = isApprovedStatus(macros.status);
   let sourcePercent = 100;
   if (program.traffic_source_id && postbacks.some((pb) => pb.traffic_source_id)) {
     const source = await db
@@ -106,7 +107,7 @@ async function fireConversionPostbacks(
     postbacks
       .filter((pb) => {
         if (pb.program_id) return true;
-        if (!approved) return false;
+        if (!becameApproved) return false;
         return pb.traffic_source_id ? sourceSampled : true;
       })
       .map((pb) => fireS2SPostback(pb.url, values)),
@@ -165,7 +166,12 @@ export async function createConversion(
   const payout = stored.amount_cents / 100;
 
   if (recorded.status !== "duplicate" && !params.disable_s2s) {
-    await fireConversionPostbacks(db, program, {
+    // Source/network postbacks fire on the not-approved → approved transition only,
+    // never again on later payout or status updates of an approved conversion.
+    const becameApproved =
+      isPostbackApprovedStatus(stored.status) &&
+      (recorded.status === "created" || !isPostbackApprovedStatus(recorded.previous_status));
+    await fireConversionPostbacks(db, program, becameApproved, {
       click_id: stored.click_id,
       payout,
       status: stored.status,

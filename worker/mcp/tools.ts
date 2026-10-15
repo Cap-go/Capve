@@ -516,6 +516,36 @@ export const TOOLS: McpTool[] = [
     annotations: destroy,
     call: (a) => ({ method: "DELETE", path: `/api/postbacks/${id(a, "postback_id")}` }),
   },
+  {
+    name: "get_postback_key",
+    title: "Get incoming postback key",
+    description:
+      "Get the account's incoming postback key, whether it is required, and the incoming postback URL with &key= to give to networks. " +
+      "Without a valid key, payouts are capped to the offer payout; when required, keyless postbacks are rejected (403).",
+    inputSchema: schema({}),
+    annotations: read,
+    call: () => ({ method: "GET", path: "/api/ops/postback-key" }),
+  },
+  {
+    name: "set_postback_key_required",
+    title: "Require postback key",
+    description:
+      "Turn incoming postback key enforcement on or off. Turn it on only after every network postback URL includes &key=.",
+    inputSchema: schema({ required: bool("Reject incoming postbacks without a valid key.") }, [
+      "required",
+    ]),
+    annotations: write,
+    call: (a) => ({ method: "PUT", path: "/api/ops/postback-key", body: pick(a, ["required"]) }),
+  },
+  {
+    name: "rotate_postback_key",
+    title: "Rotate postback key",
+    description:
+      "Generate a new incoming postback key. The old key stops working immediately; update every network postback URL.",
+    inputSchema: schema({}),
+    annotations: { readOnlyHint: false, destructiveHint: true },
+    call: () => ({ method: "POST", path: "/api/ops/postback-key/rotate" }),
+  },
 
   // Reports
   {

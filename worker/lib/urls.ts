@@ -69,8 +69,9 @@ export function buildCampaignUrl(appUrl: string, campaignKey: string): string {
   return `${appUrl.replace(/\/$/, "")}/c/${campaignKey}`;
 }
 
-export function buildPostbackUrl(appUrl: string): string {
-  return `${appUrl.replace(/\/$/, "")}/click?cnv_id={click_id}&payout={payout}&cnv_status={status}`;
+export function buildPostbackUrl(appUrl: string, postbackKey?: string): string {
+  const url = `${appUrl.replace(/\/$/, "")}/click?cnv_id={click_id}&payout={payout}&cnv_status={status}`;
+  return postbackKey ? `${url}&key=${encodeURIComponent(postbackKey)}` : url;
 }
 
 /** Browser-safe: persists velo_ref and click_id from the landing URL into localStorage. */

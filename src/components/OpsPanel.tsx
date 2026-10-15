@@ -38,6 +38,38 @@ export function OpsPanel({ role }: { role: TeamRole }) {
       ) : (
         <TriggersPanel />
       )}
+      <SessionsPanel />
+    </div>
+  );
+}
+
+function SessionsPanel() {
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function logoutEverywhere() {
+    if (!window.confirm("Sign out of Capve on every device, including this one?")) return;
+    setBusy(true);
+    setError("");
+    try {
+      await api.logoutAll();
+      window.location.href = "/login";
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not sign out");
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card p-5">
+      <h2 className="font-semibold">Sessions</h2>
+      <p className="mt-1 text-sm text-[var(--velo-muted)]">
+        Revoke every signed-in browser. API tokens are managed under AI / MCP.
+      </p>
+      <ErrorBox message={error} />
+      <button className="btn btn-secondary mt-3" disabled={busy} onClick={logoutEverywhere} type="button">
+        Sign out everywhere
+      </button>
     </div>
   );
 }

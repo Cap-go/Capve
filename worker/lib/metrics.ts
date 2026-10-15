@@ -79,6 +79,15 @@ export function isApprovedStatus(status: string | null | undefined): boolean {
   return !(REJECTED_STATUSES as readonly string[]).includes((status ?? "lead").trim().toLowerCase());
 }
 
+/** Statuses that are not rejected but not approved yet either (no source/network postback). */
+export const PENDING_STATUSES = ["pending", "hold"] as const;
+
+/** Approved for outgoing traffic-source / network postbacks: not rejected and not pending/hold. */
+export function isPostbackApprovedStatus(status: string | null | undefined): boolean {
+  const value = (status ?? "lead").trim().toLowerCase();
+  return isApprovedStatus(value) && !(PENDING_STATUSES as readonly string[]).includes(value);
+}
+
 /** SQL predicate matching approved conversions (status not in REJECTED_STATUSES). */
 export function approvedStatusSql(alias = "cv"): string {
   const list = REJECTED_STATUSES.map((s) => `'${s}'`).join(", ");
@@ -106,8 +115,11 @@ export function parseReportFilters(query: Record<string, string | undefined>): R
 }
 
 export function csvEscape(value: string | number | null | undefined): string {
-  const text = value == null ? "" : String(value);
-  if (/[",\n]/.test(text)) {
+  let text = value == null ? "" : String(value);
+  // Neutralise spreadsheet formulas (CSV injection): =, +, -, @, tab, CR.
+  // Plain numbers (e.g. negative profit "-12.50") are left alone.
+  if (/^[=+\-@\t\r]/.test(text) && !/^-?\d+(\.\d+)?$/.test(text)) text = `'${text}`;
+  if (/[",\r\n]/.test(text)) {
     return `"${text.replace(/"/g, '""')}"`;
   }
   return text;

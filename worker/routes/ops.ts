@@ -18,7 +18,13 @@ import { entityBelongsTo } from "../db/entities";
 import { getProgram } from "../db/queries";
 import type { Env } from "../types";
 import { canWrite, requireUser, requireWrite } from "../lib/access";
-import { parseHttpUrl } from "../lib/urls";
+import { buildPostbackUrl, parseHttpUrl } from "../lib/urls";
+import {
+  ensurePostbackKey,
+  rotatePostbackKey,
+  setPostbackKeyRequired,
+  type PostbackKeySettings,
+} from "../db/postback-key";
 
 const ops = new Hono<{ Bindings: Env }>();
 
@@ -51,6 +57,8 @@ ops.post("/team", async (c) => {
 ops.get("/invites", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
+  // Invites match by email: only a verified owner of that address may see them.
+  if (!session.email_verified) return c.json({ invites: [], verification_required: true });
   const invites = await listPendingInvites(c.env.DB, session.email);
   return c.json({ invites });
 });
@@ -58,6 +66,7 @@ ops.get("/invites", async (c) => {
 ops.post("/invites/:id/accept", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
+  if (!session.email_verified) return c.json({ error: "Verify your email first" }, 403);
   const ok = await acceptInvite(c.env.DB, c.req.param("id"), session.email);
   if (!ok) return c.json({ error: "Not found" }, 404);
   return c.json({ ok: true });
@@ -66,9 +75,38 @@ ops.post("/invites/:id/accept", async (c) => {
 ops.post("/invites/:id/decline", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
+  if (!session.email_verified) return c.json({ error: "Verify your email first" }, 403);
   const ok = await declineInvite(c.env.DB, c.req.param("id"), session.email);
   if (!ok) return c.json({ error: "Not found" }, 404);
   return c.json({ ok: true });
+});
+
+// Incoming postback key (`/click?...&key=`). Owners and admins only: the key records conversions.
+function postbackKeyResponse(appUrl: string, settings: PostbackKeySettings) {
+  return { postback_key: { ...settings, postback_url: buildPostbackUrl(appUrl, settings.key) } };
+}
+
+ops.get("/postback-key", async (c) => {
+  const session = await requireWrite(c);
+  if (session instanceof Response) return session;
+  const settings = await ensurePostbackKey(c.env.DB, session.account_id);
+  return c.json(postbackKeyResponse(c.env.APP_URL, settings));
+});
+
+ops.put("/postback-key", async (c) => {
+  const session = await requireWrite(c);
+  if (session instanceof Response) return session;
+  const body = await c.req.json<{ required?: unknown }>().catch(() => null);
+  if (typeof body?.required !== "boolean") return c.json({ error: "required must be a boolean" }, 400);
+  const settings = await setPostbackKeyRequired(c.env.DB, session.account_id, body.required);
+  return c.json(postbackKeyResponse(c.env.APP_URL, settings));
+});
+
+ops.post("/postback-key/rotate", async (c) => {
+  const session = await requireWrite(c);
+  if (session instanceof Response) return session;
+  const settings = await rotatePostbackKey(c.env.DB, session.account_id);
+  return c.json(postbackKeyResponse(c.env.APP_URL, settings));
 });
 
 ops.delete("/team/:id", async (c) => {
