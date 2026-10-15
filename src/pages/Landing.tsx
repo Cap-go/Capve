@@ -1,7 +1,13 @@
 import { Link } from "react-router-dom";
 import { CodeBlock } from "../components/CodeBlock";
 import { Shell } from "../components/ui";
-import { GITHUB_REPO_URL, PRODUCTION_APP_URL, appBaseUrl } from "../lib/constants";
+import {
+  DEPLOY_BUTTON_IMAGE,
+  DEPLOY_BUTTON_URL,
+  GITHUB_REPO_URL,
+  PRODUCTION_APP_URL,
+  appBaseUrl,
+} from "../lib/constants";
 import { MCP_EXAMPLE_PROMPTS, claudeCodeCommand } from "../lib/mcp";
 
 const features = [
@@ -37,8 +43,8 @@ export function LandingPage() {
       }
     >
       <section className="mx-auto max-w-6xl px-6 pb-16 pt-12">
-        <div className="grid gap-12 lg:grid-cols-[1.1fr_0.9fr]">
-          <div>
+        <div className="grid grid-cols-1 gap-12 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="min-w-0">
             <h1 className="max-w-2xl text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
               Affiliate and campaign tracking.
             </h1>
@@ -54,6 +60,12 @@ export function LandingPage() {
               <Link className="btn btn-secondary" to="/docs">
                 Read the docs
               </Link>
+            </div>
+            <div className="mt-6">
+              <p className="text-sm text-[var(--velo-muted)]">Or run your own copy on Cloudflare:</p>
+              <a className="mt-2 inline-block" href={DEPLOY_BUTTON_URL} target="_blank" rel="noreferrer">
+                <img src={DEPLOY_BUTTON_IMAGE} alt="Deploy to Cloudflare" height={32} />
+              </a>
             </div>
           </div>
 
@@ -85,8 +97,8 @@ export function LandingPage() {
       </section>
 
       <section className="mx-auto max-w-6xl px-6">
-        <div className="grid gap-10 border-t border-[var(--velo-border)] py-12 lg:grid-cols-2">
-          <div>
+        <div className="grid grid-cols-1 gap-10 border-t border-[var(--velo-border)] py-12 lg:grid-cols-2">
+          <div className="min-w-0">
             <p className="text-sm font-medium text-[var(--velo-muted)]">MCP server</p>
             <h2 className="mt-2 text-2xl font-semibold tracking-tight">
               Run your campaigns from Claude, Cursor or VS Code.
@@ -112,10 +124,10 @@ export function LandingPage() {
               </Link>
             </div>
           </div>
-          <div className="self-start">
+          <div className="min-w-0 self-start">
             <CodeBlock>{claudeCodeCommand(appBaseUrl())}</CodeBlock>
             <p className="mt-3 text-sm text-[var(--velo-muted)]">
-              66 tools: campaigns, paths, routing rules, anti-fraud, offers, landers, postbacks, traffic sources, cost updates, reports, triggers, team.
+              75 tools: campaigns, paths, routing rules, anti-fraud, offers, landers, postbacks, traffic sources, cost updates, reports, triggers, team.
             </p>
           </div>
         </div>

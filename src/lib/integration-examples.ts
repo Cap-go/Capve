@@ -38,7 +38,7 @@ export async function onCheckoutCompleted(session) {
     \`${base}/click?cnv_id=\${encodeURIComponent(clickId)}&payout=\${amount}&cnv_status=sale&order_id=\${orderId}\`
   );
 
-  // Option B: POST /api/v1/convert with program secret (server env only)
+  // Option B: POST /api/v1/convert with campaign secret (server env only)
   // await fetch("${base}/api/v1/convert", { ... body: { order_id, amount, click_id: clickId } });
 }`;
 }

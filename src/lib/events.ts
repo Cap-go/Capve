@@ -17,6 +17,19 @@ export function sortEvents(events: string[]): string[] {
   return [...events].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b));
 }
 
+const SINGULAR: Record<string, string> = {
+  ftd: "FTD",
+  registration: "Registration",
+  deposit: "Deposit",
+  lead: "Lead",
+  sale: "Sale",
+};
+
+/** Label for one conversion's event (singular), e.g. in the conversion log. */
+export function eventName(event: string): string {
+  return SINGULAR[event] ?? event.charAt(0).toUpperCase() + event.slice(1);
+}
+
 /** Column/stat label for a conversion event name. */
 export function eventLabel(event: string): string {
   return LABELS[event] ?? event.charAt(0).toUpperCase() + event.slice(1);

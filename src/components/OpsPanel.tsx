@@ -7,7 +7,7 @@ import {
   type TeamRole,
   type Trigger,
 } from "../lib/api";
-import { ErrorBox, Field } from "./ui";
+import { ErrorBox, Field, confirmDelete } from "./ui";
 
 export function OpsPanel({ role }: { role: TeamRole }) {
   const [tab, setTab] = useState<"team" | "triggers">("team");
@@ -176,8 +176,10 @@ function TeamPanel({ role }: { role: TeamRole }) {
     }
   }
 
-  async function remove(memberId: string) {
+  async function remove(memberId: string, memberEmail: string) {
+    if (!confirmDelete(`team member ${memberEmail}`, "They lose access to this account.")) return;
     setBusy(true);
+    setError("");
     try {
       await api.removeMember(memberId);
       setMembers((prev) => prev.filter((m) => m.id !== memberId));
@@ -222,7 +224,7 @@ function TeamPanel({ role }: { role: TeamRole }) {
                   <button
                     className="btn btn-secondary text-xs"
                     disabled={busy}
-                    onClick={() => remove(member.id)}
+                    onClick={() => remove(member.id, member.email)}
                     type="button"
                   >
                     Remove
@@ -292,9 +294,15 @@ function TriggersPanel() {
     }
   }
 
-  async function remove(triggerId: string) {
-    await api.deleteTrigger(triggerId);
-    setTriggers((prev) => prev.filter((t) => t.id !== triggerId));
+  async function remove(trigger: Trigger) {
+    if (!confirmDelete(`trigger "${trigger.name}"`)) return;
+    setError("");
+    try {
+      await api.deleteTrigger(trigger.id);
+      setTriggers((prev) => prev.filter((t) => t.id !== trigger.id));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not delete trigger");
+    }
   }
 
   return (
@@ -316,6 +324,13 @@ function TriggersPanel() {
           </tr>
         </thead>
         <tbody>
+          {triggers.length === 0 && (
+            <tr>
+              <td colSpan={4} className="text-[var(--velo-muted)]">
+                No triggers yet.
+              </td>
+            </tr>
+          )}
           {triggers.map((trigger) => (
             <tr key={trigger.id}>
               <td>{trigger.name}</td>
@@ -324,7 +339,7 @@ function TriggersPanel() {
               <td>
                 <button
                   className="btn btn-secondary text-xs"
-                  onClick={() => remove(trigger.id)}
+                  onClick={() => remove(trigger)}
                   type="button"
                 >
                   Delete
