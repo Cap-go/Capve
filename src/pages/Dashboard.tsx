@@ -14,6 +14,7 @@ import {
   api,
   formatMoney,
   formatPercent,
+  otherCurrencies,
   type ClickLogRow,
   type ConversionLogRow,
   type Program,
@@ -610,7 +611,14 @@ function OverviewPanel({
             </div>
             <div className="card stat">
               <div className="stat-label">Revenue</div>
-              <div className="stat-value">{formatMoney(visibleStats.totals.revenue_cents)}</div>
+              <div className="stat-value">
+                {formatMoney(visibleStats.totals.revenue_cents, visibleStats.currency)}
+              </div>
+              {otherCurrencies(visibleStats.totals.revenue_by_currency, visibleStats.currency) && (
+                <div className="text-xs text-[var(--velo-muted)]">
+                  {otherCurrencies(visibleStats.totals.revenue_by_currency, visibleStats.currency)}
+                </div>
+              )}
             </div>
             <div className="card stat">
               <div className="stat-label">CR</div>
@@ -620,6 +628,13 @@ function OverviewPanel({
               <div className="card stat" key={name}>
                 <div className="stat-label">{eventLabel(name)}</div>
                 <div className="stat-value">{visibleStats.totals.events[name]}</div>
+                <div className="text-xs text-[var(--velo-muted)]">
+                  CR {formatPercent(visibleStats.totals.event_metrics[name]?.cr ?? 0)} ·{" "}
+                  {formatMoney(
+                    visibleStats.totals.event_metrics[name]?.revenue_cents ?? 0,
+                    visibleStats.currency,
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -633,7 +648,7 @@ function OverviewPanel({
                     <th>Name</th>
                     <th>Code</th>
                     <th>Clicks</th>
-                    <th>Leads</th>
+                    <th>Conversions</th>
                     {eventNames.map((name) => (
                       <th key={name}>{eventLabel(name)}</th>
                     ))}
@@ -651,7 +666,7 @@ function OverviewPanel({
                       {eventNames.map((name) => (
                         <td key={name}>{affiliate.events[name] ?? 0}</td>
                       ))}
-                      <td>{formatMoney(affiliate.revenue_cents)}</td>
+                      <td>{formatMoney(affiliate.revenue_cents, visibleStats.currency)}</td>
                       <td>{formatPercent(affiliate.conversion_rate)}</td>
                     </tr>
                   ))}

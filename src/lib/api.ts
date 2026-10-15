@@ -231,7 +231,23 @@ export type CampaignMetrics = {
   cr: number;
   epc_cents: number;
   cpc_cents: number;
-  roi: number;
+  /** null when there is no cost. */
+  roi: number | null;
+};
+
+/** Per-event metrics: count, revenue, CR (count / clicks) and cost per event. */
+export type EventMetrics = {
+  count: number;
+  revenue_cents: number;
+  cr: number;
+  cpa_cents: number | null;
+};
+
+type CurrencyFields = {
+  event_metrics: Record<string, EventMetrics>;
+  /** Currency of `revenue_cents`. */
+  currency: string;
+  revenue_by_currency: Record<string, number>;
 };
 
 export type CampaignReportRow = Program & {
@@ -241,7 +257,7 @@ export type CampaignReportRow = Program & {
   default_cost_cents: number;
   metrics: CampaignMetrics;
   events: EventCounts;
-};
+} & CurrencyFields;
 
 export type TrendPoint = {
   date: string;
@@ -260,7 +276,7 @@ export type GroupedReportRow = {
   bot_clicks: number;
   metrics: CampaignMetrics;
   events: EventCounts;
-};
+} & CurrencyFields;
 
 export type ReportFilters = {
   from?: number;
@@ -284,6 +300,8 @@ export type AffiliateStats = Affiliate & {
   revenue_cents: number;
   conversion_rate: number;
   events: EventCounts;
+  event_metrics: Record<string, EventMetrics>;
+  revenue_by_currency: Record<string, number>;
 };
 
 export type ProgramStats = {
@@ -294,7 +312,10 @@ export type ProgramStats = {
     revenue_cents: number;
     conversion_rate: number;
     events: EventCounts;
+    event_metrics: Record<string, EventMetrics>;
+    revenue_by_currency: Record<string, number>;
   };
+  currency: string;
   affiliates: AffiliateStats[];
 };
 
@@ -583,13 +604,22 @@ export const api = {
     ),
 };
 
-export function formatMoney(cents: number): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "USD",
-  }).format(cents / 100);
+export function formatMoney(cents: number, currency = "USD"): string {
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(cents / 100);
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${currency}`;
+  }
 }
 
-export function formatPercent(value: number): string {
-  return `${value.toFixed(1)}%`;
+/** Other currencies than `currency`, e.g. "+ €12.00" (revenue is never summed across currencies). */
+export function otherCurrencies(byCurrency: Record<string, number>, currency: string): string {
+  return Object.entries(byCurrency)
+    .filter(([cur, cents]) => cur !== currency && cents !== 0)
+    .map(([cur, cents]) => `+ ${formatMoney(cents, cur)}`)
+    .join(" ");
+}
+
+export function formatPercent(value: number | null): string {
+  return value == null ? "—" : `${value.toFixed(1)}%`;
 }

@@ -127,6 +127,8 @@ CREATE TABLE IF NOT EXISTS clicks (
   sub10 TEXT,
   external_id TEXT,
   cost_cents INTEGER,
+  traffic_source_id TEXT,
+  cpa_cost_cents INTEGER,
   visitor_hash TEXT,
   is_unique INTEGER NOT NULL DEFAULT 1,
   is_bot INTEGER NOT NULL DEFAULT 0,

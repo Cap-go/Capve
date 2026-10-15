@@ -17,6 +17,11 @@ import type { Env } from "../types";
 import { requireUser, requireWrite } from "../lib/access";
 import { parseHttpUrl } from "../lib/urls";
 
+/** Optional money field: absent, or a finite number >= 0. */
+function isNonNegativeNumber(value: unknown): boolean {
+  return value === undefined || (typeof value === "number" && Number.isFinite(value) && value >= 0);
+}
+
 const entities = new Hono<{ Bindings: Env }>();
 
 entities.get("/groups", async (c) => {
@@ -60,6 +65,18 @@ entities.post("/traffic-sources", async (c) => {
   }>();
   const name = body.name?.trim();
   if (!name) return c.json({ error: "Name required" }, 400);
+  if (body.cost_type !== undefined && !["cpc", "cpm", "cpa"].includes(body.cost_type)) {
+    return c.json({ error: "cost_type must be cpc, cpm or cpa" }, 400);
+  }
+  if (!isNonNegativeNumber(body.default_cost_cents)) {
+    return c.json({ error: "default_cost_cents must be a non-negative number" }, 400);
+  }
+  if (
+    body.postback_percent !== undefined &&
+    (!Number.isInteger(body.postback_percent) || body.postback_percent < 0 || body.postback_percent > 100)
+  ) {
+    return c.json({ error: "postback_percent must be an integer from 0 to 100" }, 400);
+  }
   const source = await createTrafficSource(c.env.DB, session.account_id, {
     name,
     cost_type: body.cost_type,
@@ -122,6 +139,9 @@ entities.post("/offers", async (c) => {
   const url = body.url?.trim();
   if (!name || !url) return c.json({ error: "Name and URL required" }, 400);
   if (!parseHttpUrl(url)) return c.json({ error: "Valid http/https URL required" }, 400);
+  if (!isNonNegativeNumber(body.payout_cents)) {
+    return c.json({ error: "payout_cents must be a non-negative number" }, 400);
+  }
   if (
     body.network_id &&
     !(await entityBelongsTo(c.env.DB, "network", body.network_id, session.account_id))

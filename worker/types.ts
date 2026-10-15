@@ -1,3 +1,4 @@
+import type { EventMetrics } from "./lib/metrics";
 export type EmailBinding = {
   send: (message: {
     to: string;
@@ -90,11 +91,16 @@ export type Affiliate = {
 
 export type AffiliateStats = Affiliate & {
   clicks: number;
+  /** Distinct converted clicks + click-less conversions (events do not add up). */
   conversions: number;
+  /** Revenue in `currency` only. */
   revenue_cents: number;
+  /** Percent, capped at 100. */
   conversion_rate: number;
   /** Approved conversions per event (registration, ftd, ...). */
   events: Record<string, number>;
+  event_metrics: Record<string, EventMetrics>;
+  revenue_by_currency: Record<string, number>;
 };
 
 export type ProgramStats = {
@@ -105,6 +111,10 @@ export type ProgramStats = {
     revenue_cents: number;
     conversion_rate: number;
     events: Record<string, number>;
+    event_metrics: Record<string, EventMetrics>;
+    revenue_by_currency: Record<string, number>;
   };
+  /** Currency of every `revenue_cents` field (most used currency). */
+  currency: string;
   affiliates: AffiliateStats[];
 };
