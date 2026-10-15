@@ -279,6 +279,27 @@ describe("metrics correctness", () => {
     expect(stats.affiliates[0]).toMatchObject({ clicks: 4, bots: 2, conversion_rate: 50 });
   });
 
+  it("hides archived campaigns from reports unless status=archived", async () => {
+    const { program, affiliate } = await setup();
+    await click(affiliate.code);
+    expect((await api("DELETE", `/api/programs/${program.id}`)).status).toBe(200);
+
+    const ids = async (query: string) => {
+      const res = await api("GET", `/api/reports/campaigns${query}`);
+      expect(res.status).toBe(200);
+      return (await json<{ campaigns: Array<{ id: string }> }>(res)).campaigns.map((c) => c.id);
+    };
+    expect(await ids("")).not.toContain(program.id);
+    expect(await ids("?status=active")).not.toContain(program.id);
+    expect(await ids("?status=archived")).toContain(program.id);
+
+    const grouped = await api("GET", "/api/reports/grouped?by=campaign");
+    const { rows } = await json<{ rows: Row[] }>(grouped);
+    expect(rows.map((r) => r.key)).not.toContain(program.id);
+    // One archived campaign requested by id still reports.
+    expect((await campaignRow(program.id)).metrics.clicks).toBe(1);
+  });
+
   it("MCP: a date-only `to` covers the whole day", () => {
     // MCP passes calendar days through; the API resolves them in the account timezone.
     const report = TOOLS.find((t) => t.name === "report_campaigns")!;

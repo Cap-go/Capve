@@ -40,7 +40,12 @@ type ProgramRow = Program & {
   default_cost_cents: number | null;
 };
 
-function programWhere(userId: string, filters: ReportFilters, alias = "p") {
+/**
+ * Campaign filter. Without a `status` filter, archived (deleted) campaigns are hidden:
+ * "all" means active + paused; `status=archived` shows them. `includeArchived` is used
+ * when one campaign is requested by id.
+ */
+function programWhere(userId: string, filters: ReportFilters, alias = "p", includeArchived = false) {
   const clauses = [`${alias}.user_id = ?`];
   const binds: Array<string | number> = [userId];
 
@@ -55,6 +60,8 @@ function programWhere(userId: string, filters: ReportFilters, alias = "p") {
   if (filters.status) {
     clauses.push(`${alias}.status = ?`);
     binds.push(filters.status);
+  } else if (!includeArchived) {
+    clauses.push(`${alias}.status != 'archived'`);
   }
 
   return { sql: clauses.join(" AND "), binds };
@@ -267,7 +274,7 @@ export async function getGroupedReport(
     dimensionSql(d, options.tz_offset_minutes),
   );
   const dim = dims.length === 1 ? dims[0] : combinedDimensionSql(dims);
-  const where = programWhere(userId, options);
+  const where = programWhere(userId, options, "p", Boolean(options.campaign_id));
   const campaignSql = options.campaign_id ? " AND p.id = ?" : "";
   const campaignBinds = options.campaign_id ? [options.campaign_id] : [];
   const clickTime = clickTimeClause(options, "c");

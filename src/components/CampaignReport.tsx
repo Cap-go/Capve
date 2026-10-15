@@ -307,7 +307,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
             value={status}
             onChange={setStatus}
             options={[
-              { value: "", label: "All statuses" },
+              { value: "", label: "All (active + paused)" },
               { value: "active", label: "Active" },
               { value: "paused", label: "Paused" },
               { value: "archived", label: "Archived (deleted)" },

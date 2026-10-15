@@ -48,7 +48,7 @@ const reportFilters = {
   to: dateArg("End"),
   group_id: str("Only campaigns in this group."),
   traffic_source_id: str("Only campaigns from this traffic source."),
-  status: enumOf(["active", "paused", "archived"], "Only campaigns with this status."),
+  status: enumOf(["active", "paused", "archived"], "Only campaigns with this status. Omitted = active + paused (archived hidden)."),
 };
 
 function schema(properties: Record<string, unknown>, required: string[] = []): JsonSchema {
