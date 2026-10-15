@@ -50,3 +50,9 @@ export async function registerTestUser(email?: string, options: { verified?: boo
 export function settle(ms = 50): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+/** A real browser user agent: clicks without one are flagged as bots (excluded from CR/cost). */
+export const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+};

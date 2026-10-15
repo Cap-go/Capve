@@ -1,6 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
-import { registerTestUser } from "./helpers";
+import { BROWSER_HEADERS, registerTestUser } from "./helpers";
 import { initSql } from "./schema";
 
 let authHeaders: Record<string, string>;
@@ -98,8 +98,8 @@ describe("phase 4 reporting", () => {
     });
     const { affiliate } = await json<{ affiliate: { code: string } }>(affiliateRes);
 
-    const firstClick = await SELF.fetch(`http://localhost/r/${affiliate.code}`, { redirect: "manual" });
-    await SELF.fetch(`http://localhost/r/${affiliate.code}`, { redirect: "manual" });
+    const firstClick = await SELF.fetch(`http://localhost/r/${affiliate.code}`, { redirect: "manual", headers: BROWSER_HEADERS });
+    await SELF.fetch(`http://localhost/r/${affiliate.code}`, { redirect: "manual", headers: BROWSER_HEADERS });
     const clickId = new URL(firstClick.headers.get("Location")!).searchParams.get("click_id")!;
     const lpRes = await SELF.fetch(`http://localhost/lp/${clickId}`, { redirect: "manual" });
     expect(lpRes.status).toBe(302);
@@ -173,7 +173,7 @@ describe("phase 4 reporting", () => {
       body: JSON.stringify({ name: "Trend Partner" }),
     });
     const { affiliate } = await json<{ affiliate: { code: string } }>(affiliateRes);
-    await SELF.fetch(`http://localhost/r/${affiliate.code}`, { redirect: "manual" });
+    await SELF.fetch(`http://localhost/r/${affiliate.code}`, { redirect: "manual", headers: BROWSER_HEADERS });
 
     const trendsRes = await SELF.fetch(
       `http://localhost/api/reports/campaigns/${program.id}/trends`,

@@ -202,7 +202,7 @@ ops.post("/triggers", async (c) => {
 
   if (body.program_id) {
     const program = await getProgram(c.env.DB, body.program_id, session.account_id);
-    if (!program) return c.json({ error: "Program not found" }, 404);
+    if (!program) return c.json({ error: "Campaign not found" }, 404);
   }
 
   const trigger = await createTrigger(c.env.DB, session.account_id, {

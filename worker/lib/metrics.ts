@@ -1,5 +1,8 @@
 export type CampaignMetrics = {
+  /** All clicks, bots included. */
   clicks: number;
+  /** Bot / blocklisted / datacenter clicks; excluded from CR, EPC, CPC and LP CTR. */
+  bot_clicks: number;
   lp_clicks: number;
   /** Conversions: distinct converted clicks + click-less conversions (events do not add up). */
   leads: number;
@@ -16,25 +19,33 @@ export type CampaignMetrics = {
 
 export function computeMetrics(input: {
   clicks: number;
+  /** Bot clicks included in `clicks` (default 0). */
+  bot_clicks?: number;
+  /** LP clicks of non-bot clicks. */
   lp_clicks: number;
   leads: number;
   revenue_cents: number;
+  /** Cost of non-bot clicks. */
   cost_cents: number;
 }): CampaignMetrics {
   const { clicks, lp_clicks, leads, revenue_cents, cost_cents } = input;
+  const bot_clicks = Math.min(input.bot_clicks ?? 0, clicks);
+  // Rates use human (non-bot) clicks; bots are reported separately.
+  const human = clicks - bot_clicks;
   const profit_cents = revenue_cents - cost_cents;
 
   return {
     clicks,
+    bot_clicks,
     lp_clicks,
     leads,
     revenue_cents,
     cost_cents,
     profit_cents,
-    lp_ctr: clicks > 0 ? round2((lp_clicks / clicks) * 100) : 0,
-    cr: conversionRatePct(leads, clicks),
-    epc_cents: clicks > 0 ? Math.round(revenue_cents / clicks) : 0,
-    cpc_cents: clicks > 0 ? Math.round(cost_cents / clicks) : 0,
+    lp_ctr: human > 0 ? round2((lp_clicks / human) * 100) : 0,
+    cr: conversionRatePct(leads, human),
+    epc_cents: human > 0 ? Math.round(revenue_cents / human) : 0,
+    cpc_cents: human > 0 ? Math.round(cost_cents / human) : 0,
     roi: cost_cents > 0 ? round2((profit_cents / cost_cents) * 100) : null,
   };
 }

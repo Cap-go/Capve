@@ -2,7 +2,7 @@ import { env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
 import { parseRangeBoundary } from "../worker/lib/timezone";
 import { TOOLS } from "../worker/mcp/tools";
-import { registerTestUser } from "./helpers";
+import { BROWSER_HEADERS, registerTestUser } from "./helpers";
 import { initSql } from "./schema";
 
 const MERCHANT = "https://merchant.example.com/pricing";
@@ -51,7 +51,7 @@ async function setup(source?: { cost_type: string; default_cost_cents: number })
 }
 
 async function click(code: string): Promise<string> {
-  const res = await SELF.fetch(`http://localhost/r/${code}`, { redirect: "manual" });
+  const res = await SELF.fetch(`http://localhost/r/${code}`, { redirect: "manual", headers: BROWSER_HEADERS });
   expect(res.status).toBe(302);
   return new URL(res.headers.get("Location")!).searchParams.get("click_id")!;
 }
@@ -183,7 +183,7 @@ describe("metrics correctness", () => {
       weight: 1,
     });
     for (let i = 0; i < 15; i++) {
-      const res = await SELF.fetch(`http://localhost/r/${affiliate.code}`, { redirect: "manual" });
+      const res = await SELF.fetch(`http://localhost/r/${affiliate.code}`, { redirect: "manual", headers: BROWSER_HEADERS });
       expect(new URL(res.headers.get("Location")!).pathname).toBe("/on");
     }
 
@@ -246,6 +246,37 @@ describe("metrics correctness", () => {
       .bind(program.id)
       .first<{ n: number }>();
     expect(rotations?.n).toBe(1);
+  });
+
+  it("counts bot clicks separately: no cost, not in CR denominators", async () => {
+    const { program, affiliate } = await setup({ cost_type: "cpc", default_cost_cents: 10 });
+    const human = await click(affiliate.code);
+    await click(affiliate.code);
+    // No user agent and a crawler UA: both flagged is_bot.
+    for (const headers of [{}, { "User-Agent": "Googlebot/2.1" }] as Array<Record<string, string>>) {
+      const res = await SELF.fetch(`http://localhost/r/${affiliate.code}`, { redirect: "manual", headers });
+      expect(res.status).toBe(302);
+    }
+    await postback(`cnv_id=${human}&cnv_status=sale`);
+
+    const row = (await campaignRow(program.id)) as Row & {
+      metrics: Row["metrics"] & { bot_clicks: number; cpc_cents: number };
+    };
+    expect(row.metrics.clicks).toBe(4);
+    expect(row.metrics.bot_clicks).toBe(2);
+    expect(row.metrics.cost_cents).toBe(20);
+    expect(row.metrics.cpc_cents).toBe(10);
+    expect(row.metrics.leads).toBe(1);
+    expect(row.metrics.cr).toBe(50);
+
+    const res = await api("GET", `/api/programs/${program.id}/stats`);
+    expect(res.status).toBe(200);
+    const stats = await json<{
+      totals: { clicks: number; bots: number; conversions: number; conversion_rate: number };
+      affiliates: Array<{ clicks: number; bots: number; conversion_rate: number }>;
+    }>(res);
+    expect(stats.totals).toMatchObject({ clicks: 4, bots: 2, conversions: 1, conversion_rate: 50 });
+    expect(stats.affiliates[0]).toMatchObject({ clicks: 4, bots: 2, conversion_rate: 50 });
   });
 
   it("MCP: a date-only `to` covers the whole day", () => {

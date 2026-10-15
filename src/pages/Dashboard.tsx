@@ -642,6 +642,11 @@ function OverviewPanel({
             <div className="card stat">
               <div className="stat-label">Clicks</div>
               <div className="stat-value">{visibleStats.totals.clicks}</div>
+              {visibleStats.totals.bots > 0 && (
+                <div className="text-xs text-[var(--velo-muted)]">
+                  {visibleStats.totals.bots} bots (not in CR)
+                </div>
+              )}
             </div>
             <div className="card stat">
               <div className="stat-label">Conversions</div>

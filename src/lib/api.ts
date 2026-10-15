@@ -282,7 +282,10 @@ export type RotationConfig = {
 };
 
 export type CampaignMetrics = {
+  /** All clicks, bots included. */
   clicks: number;
+  /** Bot clicks: no cost, left out of CR / EPC / CPC. */
+  bot_clicks: number;
   lp_clicks: number;
   leads: number;
   revenue_cents: number;
@@ -357,6 +360,7 @@ export type Affiliate = {
 
 export type AffiliateStats = Affiliate & {
   clicks: number;
+  bots: number;
   conversions: number;
   revenue_cents: number;
   conversion_rate: number;
@@ -369,6 +373,7 @@ export type ProgramStats = {
   program: Program;
   totals: {
     clicks: number;
+    bots: number;
     conversions: number;
     revenue_cents: number;
     conversion_rate: number;

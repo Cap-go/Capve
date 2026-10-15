@@ -254,7 +254,8 @@ const CLICK_CONVERTED = `EXISTS(SELECT 1 FROM conversions cv WHERE cv.click_id =
  * registration + FTD is one conversion (per-event counts are in `events`).
  * Cost uses values stored on the click at click time: `cost_cents` (CPC/CPM or `cost`
  * URL param) plus `cpa_cost_cents` once per converted click. Click-less conversions are
- * charged the campaign's current CPA rate.
+ * charged the campaign's current CPA rate. Bot clicks (`is_bot`) are counted in `clicks`
+ * and `bot_clicks` but carry no cost and are left out of CR / EPC / CPC denominators.
  */
 export async function getGroupedReport(
   db: D1Database,
@@ -286,10 +287,10 @@ export async function getGroupedReport(
           COUNT(*) AS clicks,
           COALESCE(SUM(c.is_unique), 0) AS unique_clicks,
           COALESCE(SUM(c.is_bot), 0) AS bot_clicks,
-          SUM(CASE WHEN c.lp_clicked_at IS NOT NULL THEN 1 ELSE 0 END) AS lp_clicks,
+          SUM(CASE WHEN c.lp_clicked_at IS NOT NULL AND c.is_bot = 0 THEN 1 ELSE 0 END) AS lp_clicks,
           SUM(CASE WHEN ${CLICK_CONVERTED} THEN 1 ELSE 0 END) AS converted_clicks,
-          COALESCE(SUM(c.cost_cents), 0)
-            + COALESCE(SUM(CASE WHEN c.cpa_cost_cents IS NOT NULL AND ${CLICK_CONVERTED}
+          COALESCE(SUM(CASE WHEN c.is_bot = 0 THEN c.cost_cents END), 0)
+            + COALESCE(SUM(CASE WHEN c.is_bot = 0 AND c.cpa_cost_cents IS NOT NULL AND ${CLICK_CONVERTED}
                 THEN c.cpa_cost_cents ELSE 0 END), 0) AS cost
          FROM clicks c
          JOIN programs p ON p.id = c.program_id
@@ -407,6 +408,7 @@ export async function getGroupedReport(
       bot_clicks: acc.bot_clicks,
       metrics: computeMetrics({
         clicks: acc.clicks,
+        bot_clicks: acc.bot_clicks,
         lp_clicks: acc.lp_clicks,
         leads: acc.leads,
         revenue_cents: acc.revenue_by_currency[currency] ?? 0,
@@ -420,7 +422,7 @@ export async function getGroupedReport(
             { count: e.count, revenue_cents: e.revenue_by_currency[currency] ?? 0 },
           ]),
         ),
-        acc.clicks,
+        acc.clicks - acc.bot_clicks,
         cost_cents,
       ),
       currency,

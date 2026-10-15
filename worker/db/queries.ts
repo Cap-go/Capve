@@ -623,10 +623,11 @@ export async function getProgramStats(db: D1Database, program: Program): Promise
   const [clickRows, convertedRows, conversionRows] = await Promise.all([
     db
       .prepare(
-        "SELECT affiliate_id, COUNT(*) AS count FROM clicks WHERE program_id = ? GROUP BY affiliate_id",
+        `SELECT affiliate_id, COUNT(*) AS count, COALESCE(SUM(is_bot), 0) AS bots
+         FROM clicks WHERE program_id = ? GROUP BY affiliate_id`,
       )
       .bind(program.id)
-      .all<{ affiliate_id: string; count: number }>(),
+      .all<{ affiliate_id: string; count: number; bots: number }>(),
     db
       .prepare(
         `SELECT cv.affiliate_id, COUNT(DISTINCT cv.click_id) AS count
@@ -664,6 +665,7 @@ export async function getProgramStats(db: D1Database, program: Program): Promise
     events: Record<string, EventAcc>;
   };
   const clicksBy = new Map((clickRows.results ?? []).map((r) => [r.affiliate_id, r.count]));
+  const botsBy = new Map((clickRows.results ?? []).map((r) => [r.affiliate_id, r.bots]));
   const conversionsBy = new Map<string, ConvAcc>();
   const accFor = (affiliateId: string) => {
     let acc = conversionsBy.get(affiliateId);
@@ -705,26 +707,31 @@ export async function getProgramStats(db: D1Database, program: Program): Promise
 
   const stats: AffiliateStats[] = affiliates.map((affiliate) => {
     const clickCount = clicksBy.get(affiliate.id) ?? 0;
+    const botCount = botsBy.get(affiliate.id) ?? 0;
+    // Bot clicks are listed separately and left out of CR denominators.
+    const humanClicks = clickCount - botCount;
     const conversions = conversionsBy.get(affiliate.id);
     const conversionCount = conversions?.count ?? 0;
     const events = conversions?.events ?? {};
     return {
       ...affiliate,
       clicks: clickCount,
+      bots: botCount,
       conversions: conversionCount,
       revenue_cents: conversions?.revenue_by_currency[currency] ?? 0,
-      conversion_rate: conversionRatePct(conversionCount, clickCount),
+      conversion_rate: conversionRatePct(conversionCount, humanClicks),
       events: Object.fromEntries(Object.entries(events).map(([name, ev]) => [name, ev.count])),
-      event_metrics: eventMetrics(events, clickCount),
+      event_metrics: eventMetrics(events, humanClicks),
       revenue_by_currency: conversions?.revenue_by_currency ?? {},
     };
   });
 
-  const totals = { clicks: 0, conversions: 0, revenue_cents: 0 };
+  const totals = { clicks: 0, bots: 0, conversions: 0, revenue_cents: 0 };
   const revenueByCurrency: Record<string, number> = {};
   const totalEvents: Record<string, EventAcc> = {};
   for (const row of stats) {
     totals.clicks += row.clicks;
+    totals.bots += row.bots;
     totals.conversions += row.conversions;
     totals.revenue_cents += row.revenue_cents;
     addTo(revenueByCurrency, row.revenue_by_currency);
@@ -741,9 +748,9 @@ export async function getProgramStats(db: D1Database, program: Program): Promise
     program,
     totals: {
       ...totals,
-      conversion_rate: conversionRatePct(totals.conversions, totals.clicks),
+      conversion_rate: conversionRatePct(totals.conversions, totals.clicks - totals.bots),
       events: Object.fromEntries(Object.entries(totalEvents).map(([name, ev]) => [name, ev.count])),
-      event_metrics: eventMetrics(totalEvents, totals.clicks),
+      event_metrics: eventMetrics(totalEvents, totals.clicks - totals.bots),
       revenue_by_currency: revenueByCurrency,
     },
     currency,

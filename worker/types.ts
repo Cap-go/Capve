@@ -92,7 +92,10 @@ export type Affiliate = {
 };
 
 export type AffiliateStats = Affiliate & {
+  /** All clicks, bots included. */
   clicks: number;
+  /** Bot clicks (excluded from CR). */
+  bots: number;
   /** Distinct converted clicks + click-less conversions (events do not add up). */
   conversions: number;
   /** Revenue in `currency` only. */
@@ -108,7 +111,10 @@ export type AffiliateStats = Affiliate & {
 export type ProgramStats = {
   program: Program;
   totals: {
+    /** All clicks, bots included. */
     clicks: number;
+    /** Bot clicks (excluded from CR). */
+    bots: number;
     conversions: number;
     revenue_cents: number;
     conversion_rate: number;

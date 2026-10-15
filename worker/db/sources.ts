@@ -203,6 +203,8 @@ export async function applyCostUpdate(
       scope.sql,
       "created_at >= ?",
       "created_at <= ?",
+      // Bot clicks carry no cost in reports: spread the spend over human clicks only.
+      "is_bot = 0",
       ...filters.map((f) => `${f.dim} = ?`),
     ].join(" AND ");
     const binds = [...scope.binds, input.from, input.to, ...filters.map((f) => f.value)];
