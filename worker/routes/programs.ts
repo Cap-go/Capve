@@ -22,6 +22,7 @@ import {
 } from "../lib/urls";
 import { canWrite, requireUser, requireWrite } from "../lib/access";
 import { ensurePostbackKey } from "../db/postback-key";
+import { campaignTrackingBaseUrl, getCampaignTrackingDomain } from "../db/tracking-domains";
 
 const programs = new Hono<{ Bindings: Env }>();
 
@@ -230,7 +231,8 @@ programs.post("/:id/affiliates", async (c) => {
     name,
   });
 
-  const trackingUrl = buildTrackingUrl(c.env.APP_URL, affiliate.code);
+  const base = await campaignTrackingBaseUrl(c.env.DB, c.env.APP_URL, program.id);
+  const trackingUrl = buildTrackingUrl(base, affiliate.code);
   return c.json({ affiliate, tracking_url: trackingUrl }, 201);
 });
 
@@ -244,13 +246,15 @@ programs.get("/:id/tracking", async (c) => {
   // The postback key lets anyone record conversions: only owners/admins see it.
   const postbackKey = await ensurePostbackKey(c.env.DB, session.account_id);
   const showKey = canWrite(session.role);
+  // Campaign links use the campaign's custom tracking domain when one is set.
+  const domain = await getCampaignTrackingDomain(c.env.DB, program.id);
+  const base = domain ? `https://${domain.hostname}` : c.env.APP_URL;
   return c.json({
     tracking: {
-      postback_url: buildPostbackUrl(c.env.APP_URL, showKey ? postbackKey.key : undefined),
+      postback_url: buildPostbackUrl(base, showKey ? postbackKey.key : undefined),
       postback_key_required: postbackKey.required,
-      campaign_url: program.campaign_key
-        ? buildCampaignUrl(c.env.APP_URL, program.campaign_key)
-        : null,
+      campaign_url: program.campaign_key ? buildCampaignUrl(base, program.campaign_key) : null,
+      tracking_domain: domain ? { id: domain.id, hostname: domain.hostname } : null,
       offer_url_macro: "{click_id}",
       redirect_params: ["velo_ref", "click_id"],
     },

@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AdminPanel } from "../components/AdminPanel";
+import { AccountSettingsPanel, TrackingDomainPicker } from "../components/AccountSettingsPanel";
+import { AutomationPanel } from "../components/AutomationPanel";
 import { CampaignReportPanel } from "../components/CampaignReport";
 import { EntityPanel } from "../components/EntityPanel";
 import { PathEditor } from "../components/PathEditor";
@@ -367,7 +369,10 @@ export function DashboardPage() {
           ) : entity === "reports" ? (
             <CampaignReportPanel canWrite={canWrite} />
           ) : entity === "settings" ? (
-            <OpsPanel role={user.role ?? "owner"} />
+            <div className="space-y-6">
+              <AccountSettingsPanel canWrite={(user.role ?? "owner") !== "viewer"} />
+              <OpsPanel role={user.role ?? "owner"} />
+            </div>
           ) : entity === "mcp" ? (
             <McpPanel />
           ) : (
@@ -470,7 +475,7 @@ export function DashboardPage() {
                   onError={setError}
                   onClone={cloneSelectedProgram}
                   onDelete={() => deleteSelectedProgram(selectedProgram)}
-                  onPostbackKeyChange={() =>
+                  onTrackingChanged={() =>
                     api
                       .tracking(selectedId)
                       .then(({ tracking: t }) => setTracking(t))
@@ -524,7 +529,7 @@ function OverviewPanel({
   onProgramSaved,
   onError,
   onClone,
-  onPostbackKeyChange,
+  onTrackingChanged,
   onDelete,
 }: {
   busy: boolean;
@@ -543,7 +548,7 @@ function OverviewPanel({
   onProgramSaved: (program: Program) => void;
   onError: (message: string) => void;
   onClone: () => void;
-  onPostbackKeyChange: () => void;
+  onTrackingChanged: () => void;
   onDelete: () => void;
 }) {
   const base = appBaseUrl();
@@ -772,6 +777,12 @@ function OverviewPanel({
         </div>
         {tracking ? (
           <div className="mt-4 space-y-3">
+            <TrackingDomainPicker
+              campaignId={selectedId}
+              currentId={tracking.tracking_domain?.id ?? null}
+              canWrite={canWrite}
+              onChanged={onTrackingChanged}
+            />
             <p className="text-sm text-[var(--velo-muted)]">
               Incoming postback URL (configure in affiliate network). Without{" "}
               <span className="mono">cnv_status</span> a conversion is recorded as{" "}
@@ -779,7 +790,7 @@ function OverviewPanel({
               <span className="mono">rejected</span>, … to set or update it.
             </p>
             <CodeBlock>{tracking.postback_url}</CodeBlock>
-            {canWrite ? <PostbackKeyControls onChange={onPostbackKeyChange} /> : null}
+            {canWrite ? <PostbackKeyControls onChange={onTrackingChanged} /> : null}
             <p className="text-sm text-[var(--velo-muted)]">
               Several events per campaign? Give the network one URL per event. Each event is counted on
               its own in stats:
@@ -848,6 +859,8 @@ function OverviewPanel({
           hint="Called on every conversion of this campaign, including status changes. Add one per event (registration, FTD, ...) to report each to your traffic source."
         />
       </Section>
+
+      <AutomationPanel campaignId={selectedId} canWrite={canWrite} />
 
       <PathEditor programId={selectedId} trackingOrigin={origin} canWrite={canWrite} />
       <RoutingRules programId={selectedId} canWrite={canWrite} />

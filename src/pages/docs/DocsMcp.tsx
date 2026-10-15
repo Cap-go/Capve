@@ -102,8 +102,32 @@ const TOOL_GROUPS: Array<[string, string[]]> = [
       "update_campaign_cost",
     ],
   ],
-  ["Reports", ["report_campaigns", "report_grouped", "report_trends"]],
+  ["Reports", ["report_campaigns", "report_grouped", "report_drilldown", "report_trends"]],
   ["Automation", ["list_triggers", "create_trigger", "delete_trigger", "list_notes", "add_note"]],
+  [
+    "Zone rules & alerts",
+    [
+      "list_automation_rules",
+      "create_automation_rule",
+      "set_automation_rule_enabled",
+      "run_automation_rule",
+      "delete_automation_rule",
+      "list_zone_blacklist",
+      "add_zones_to_blacklist",
+      "remove_blacklisted_zone",
+    ],
+  ],
+  [
+    "Settings & domains",
+    [
+      "get_settings",
+      "update_settings",
+      "list_tracking_domains",
+      "add_tracking_domain",
+      "delete_tracking_domain",
+      "set_campaign_tracking_domain",
+    ],
+  ],
   ["Team", ["whoami", "list_team", "invite_team_member", "remove_team_member"]],
 ];
 

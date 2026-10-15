@@ -1,5 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
+import { parseRangeBoundary } from "../worker/lib/timezone";
 import { TOOLS } from "../worker/mcp/tools";
 import { registerTestUser } from "./helpers";
 import { initSql } from "./schema";
@@ -248,15 +249,16 @@ describe("metrics correctness", () => {
   });
 
   it("MCP: a date-only `to` covers the whole day", () => {
+    // MCP passes calendar days through; the API resolves them in the account timezone.
     const report = TOOLS.find((t) => t.name === "report_campaigns")!;
     const call = report.call({ from: "2026-01-31", to: "2026-01-31" });
-    expect(call.query?.from).toBe(String(Date.UTC(2026, 0, 31)));
-    expect(call.query?.to).toBe(String(Date.UTC(2026, 1, 1) - 1));
+    expect(call.query?.from).toBe("2026-01-31");
+    expect(call.query?.to).toBe("2026-01-31");
     expect(report.call({ to: "1700000000000" }).query?.to).toBe("1700000000000");
+    expect(parseRangeBoundary("2026-01-31", "UTC", "from")).toBe(Date.UTC(2026, 0, 31));
+    expect(parseRangeBoundary("2026-01-31", "UTC", "to")).toBe(Date.UTC(2026, 1, 1) - 1);
 
     const trends = TOOLS.find((t) => t.name === "report_trends")!;
-    expect(trends.call({ campaign_id: "prg_1", to: "2026-01-31" }).query?.to).toBe(
-      String(Date.UTC(2026, 1, 1) - 1),
-    );
+    expect(trends.call({ campaign_id: "prg_1", to: "2026-01-31" }).query?.to).toBe("2026-01-31");
   });
 });

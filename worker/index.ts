@@ -16,6 +16,11 @@ import { campaignCosts, sources } from "./routes/sources";
 import { tokens } from "./routes/tokens";
 import { readBearerToken, requireUser } from "./lib/access";
 import { handleMcpRequest } from "./mcp/server";
+import { automation } from "./routes/automation";
+import { drilldown } from "./routes/drilldown";
+import { settings } from "./routes/settings";
+import { trackingDomains } from "./routes/tracking-domains";
+import { hostGate } from "./lib/host-gate";
 import { runScheduled } from "./cron";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -24,6 +29,9 @@ app.use("*", async (c, next) => {
   await next();
   c.header("X-Content-Type-Options", "nosniff");
 });
+
+// Custom tracking domains serve only /r, /c, /lp, /click; unknown hosts get 404.
+app.use("*", hostGate);
 
 app.get("/api/health", (c) => c.json({ ok: true, service: "capve" }));
 
@@ -40,7 +48,11 @@ app.route("/api/campaigns", campaignCosts);
 app.route("/api/sources", sources);
 app.route("/api/v1/convert", convert);
 app.route("/api/ops", ops);
+app.route("/api/reports/drilldown", drilldown);
 app.route("/api/reports", reports);
+app.route("/api/settings", settings);
+app.route("/api/automation", automation);
+app.route("/api/tracking-domains", trackingDomains);
 app.route("/api/tokens", tokens);
 app.route("/api/postbacks", postbacks);
 app.route("/r", redirect);
