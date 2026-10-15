@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AdminPanel } from "../components/AdminPanel";
 import { CampaignReportPanel } from "../components/CampaignReport";
@@ -63,7 +63,9 @@ export function DashboardPage() {
   const [conversions, setConversions] = useState<ConversionLogRow[]>([]);
   const [programName, setProgramName] = useState("");
   const [destinationUrl, setDestinationUrl] = useState("");
+  const [editName, setEditName] = useState("");
   const [editDestinationUrl, setEditDestinationUrl] = useState("");
+  const settingsSyncedFor = useRef<string | null>(null);
   const [affiliateName, setAffiliateName] = useState("");
   const [lastLink, setLastLink] = useState("");
   const [convertSecretOnce, setConvertSecretOnce] = useState("");
@@ -144,9 +146,13 @@ export function DashboardPage() {
     };
   }, [selectedId, lastLink, tab]);
 
+  // Load the settings drafts once per selected campaign so refreshes keep unsaved edits.
   useEffect(() => {
     const program = programs.find((p) => p.id === selectedId) ?? stats?.program;
-    setEditDestinationUrl(program?.destination_url ?? "");
+    if (!program || program.id !== selectedId || settingsSyncedFor.current === selectedId) return;
+    settingsSyncedFor.current = selectedId;
+    setEditName(program.name);
+    setEditDestinationUrl(program.destination_url ?? "");
   }, [selectedId, programs, stats?.program]);
 
   function setEntity(next: EntityView) {
@@ -200,9 +206,12 @@ export function DashboardPage() {
     setError("");
     try {
       const { program } = await api.updateProgram(selectedId, {
+        name: editName.trim(),
         destination_url: editDestinationUrl.trim() || null,
       });
       setPrograms((prev) => prev.map((item) => (item.id === program.id ? program : item)));
+      setEditName(program.name);
+      setEditDestinationUrl(program.destination_url ?? "");
       if (stats) setStats({ ...stats, program });
       const { tracking: t } = await api.tracking(selectedId);
       setTracking(t);
@@ -398,9 +407,11 @@ export function DashboardPage() {
                 selectedProgram={selectedProgram}
                 tracking={tracking}
                 visibleStats={visibleStats}
+                editName={editName}
                 editDestinationUrl={editDestinationUrl}
                 affiliateName={affiliateName}
                 onAffiliateNameChange={setAffiliateName}
+                onNameChange={setEditName}
                 onDestinationChange={setEditDestinationUrl}
                 onCreateAffiliate={createAffiliate}
                 onSaveSettings={saveProgramSettings}
@@ -424,9 +435,11 @@ function OverviewPanel({
   selectedProgram,
   tracking,
   visibleStats,
+  editName,
   editDestinationUrl,
   affiliateName,
   onAffiliateNameChange,
+  onNameChange,
   onDestinationChange,
   onCreateAffiliate,
   onSaveSettings,
@@ -440,9 +453,11 @@ function OverviewPanel({
   selectedProgram: Program;
   tracking: ProgramTracking | null;
   visibleStats: ProgramStats | null;
+  editName: string;
   editDestinationUrl: string;
   affiliateName: string;
   onAffiliateNameChange: (v: string) => void;
+  onNameChange: (v: string) => void;
   onDestinationChange: (v: string) => void;
   onCreateAffiliate: (e: FormEvent) => void;
   onSaveSettings: (e: FormEvent) => void;
@@ -511,6 +526,12 @@ function OverviewPanel({
         )}
 
         <form className="mt-4 space-y-3" onSubmit={onSaveSettings}>
+          <Field
+            label="Campaign name"
+            required
+            value={editName}
+            onChange={(e) => onNameChange(e.target.value)}
+          />
           <Field
             label="Destination URL (optional)"
             type="url"
