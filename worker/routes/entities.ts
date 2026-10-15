@@ -15,7 +15,7 @@ import {
 } from "../db/entities";
 import type { Env } from "../types";
 import { requireUser, requireWrite } from "../lib/access";
-import { optionalHttpUrl, parseHttpUrl } from "../lib/urls";
+import { parseHttpUrl } from "../lib/urls";
 
 const entities = new Hono<{ Bindings: Env }>();
 
@@ -57,20 +57,14 @@ entities.post("/traffic-sources", async (c) => {
     cost_type?: "cpc" | "cpm" | "cpa";
     default_cost_cents?: number;
     postback_percent?: number;
-    s2s_postback_url?: string | null;
   }>();
   const name = body.name?.trim();
   if (!name) return c.json({ error: "Name required" }, 400);
-  const postback = optionalHttpUrl(body.s2s_postback_url);
-  if (postback === false) {
-    return c.json({ error: "s2s_postback_url must be an http/https URL" }, 400);
-  }
   const source = await createTrafficSource(c.env.DB, session.account_id, {
     name,
     cost_type: body.cost_type,
     default_cost_cents: body.default_cost_cents,
     postback_percent: body.postback_percent,
-    s2s_postback_url: postback,
   });
   return c.json({ traffic_source: source }, 201);
 });
@@ -84,17 +78,10 @@ entities.get("/networks", async (c) => {
 entities.post("/networks", async (c) => {
   const session = await requireWrite(c);
   if (session instanceof Response) return session;
-  const body = await c.req.json<{ name?: string; postback_url_template?: string | null }>();
+  const body = await c.req.json<{ name?: string }>();
   const name = body.name?.trim();
   if (!name) return c.json({ error: "Name required" }, 400);
-  const template = optionalHttpUrl(body.postback_url_template);
-  if (template === false) {
-    return c.json({ error: "postback_url_template must be an http/https URL" }, 400);
-  }
-  const network = await createAffiliateNetwork(c.env.DB, session.account_id, {
-    name,
-    postback_url_template: template,
-  });
+  const network = await createAffiliateNetwork(c.env.DB, session.account_id, { name });
   return c.json({ network }, 201);
 });
 

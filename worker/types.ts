@@ -34,7 +34,6 @@ export type Program = {
   slug: string;
   api_key: string;
   destination_url: string | null;
-  s2s_postback_url: string | null;
   campaign_key: string | null;
   group_id: string | null;
   traffic_source_id: string | null;
@@ -67,6 +66,7 @@ export type Conversion = {
   amount_cents: number;
   status: string;
   status2: string | null;
+  event: string | null;
   currency: string;
   created_at: number;
 };
@@ -89,6 +89,8 @@ export type AffiliateStats = Affiliate & {
   conversions: number;
   revenue_cents: number;
   conversion_rate: number;
+  /** Approved conversions per event (registration, ftd, ...). */
+  events: Record<string, number>;
 };
 
 export type ProgramStats = {
@@ -98,6 +100,7 @@ export type ProgramStats = {
     conversions: number;
     revenue_cents: number;
     conversion_rate: number;
+    events: Record<string, number>;
   };
   affiliates: AffiliateStats[];
 };

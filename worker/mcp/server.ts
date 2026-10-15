@@ -12,6 +12,7 @@ const INSTRUCTIONS =
   "Capve is an open-source campaign and affiliate tracker (Binom alternative). " +
   "Campaigns send visitors through paths (direct URL, lander, offer) chosen by a rotation. " +
   "Use list_campaigns first to find ids. Money values are integer cents. " +
+  "Conversions can carry an event (registration, ftd, ...); outgoing postbacks (create_postback) can be limited to one event. " +
   "Report dates accept ISO dates or Unix milliseconds.";
 
 type JsonRpcId = string | number | null;

@@ -7,11 +7,11 @@ import { MCP_EXAMPLE_PROMPTS, claudeCodeCommand } from "../lib/mcp";
 const features = [
   {
     title: "Reports",
-    body: "Clicks, conversions, cost, revenue, and ROI per campaign. Daily trends and CSV export.",
+    body: "Clicks, conversions, cost, revenue, and ROI per campaign. Registrations, FTDs and other events in their own columns. CSV export.",
   },
   {
     title: "Routing",
-    body: "Send traffic through paths, rotations, landers, and offers.",
+    body: "Send traffic through paths, rotations, landers, and offers. As many postbacks per campaign, source, or network as you need.",
   },
   {
     title: "AI and API",
@@ -115,7 +115,7 @@ export function LandingPage() {
           <div className="self-start">
             <CodeBlock>{claudeCodeCommand(appBaseUrl())}</CodeBlock>
             <p className="mt-3 text-sm text-[var(--velo-muted)]">
-              40 tools: campaigns, paths, offers, landers, traffic sources, reports, triggers, team.
+              44 tools: campaigns, paths, offers, landers, postbacks, traffic sources, reports, triggers, team.
             </p>
           </div>
         </div>

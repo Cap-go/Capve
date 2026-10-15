@@ -48,9 +48,15 @@ async function handleClickRedirect(
   program: { id: string; destination_url: string | null; campaign_key: string | null },
   affiliate: { id: string; code: string },
 ) {
-  const resolved = resolveRedirectTarget(program.destination_url, c.req.query("url"));
-  if (!resolved.ok) {
-    return c.text(resolved.error, resolved.status as 400 | 503);
+  // Destination is optional: campaigns can route only through paths. The same-host
+  // `?url=` override needs a destination to compare against, so it is ignored without one.
+  let baseDestination: string | null = null;
+  if (program.destination_url) {
+    const resolved = resolveRedirectTarget(program.destination_url, c.req.query("url"));
+    if (!resolved.ok) {
+      return c.text(resolved.error, resolved.status as 400 | 503);
+    }
+    baseDestination = resolved.url.toString();
   }
 
   const clickId = id("clk");
@@ -73,7 +79,6 @@ async function handleClickRedirect(
   };
 
   const config = await getRotationConfig(c.env.DB, program.id);
-  const baseDestination = resolved.url.toString();
   let destination = fallbackDestination(baseDestination, ctx);
   let pathId: string | null = null;
   let landerId: string | null = null;

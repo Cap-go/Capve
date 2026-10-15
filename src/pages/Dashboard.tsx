@@ -4,6 +4,7 @@ import { AdminPanel } from "../components/AdminPanel";
 import { CampaignReportPanel } from "../components/CampaignReport";
 import { EntityPanel } from "../components/EntityPanel";
 import { PathEditor } from "../components/PathEditor";
+import { PostbackList } from "../components/PostbackList";
 import { McpPanel } from "../components/McpPanel";
 import { OpsPanel, NotesPanel } from "../components/OpsPanel";
 import { CodeBlock } from "../components/CodeBlock";
@@ -21,6 +22,7 @@ import {
 } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { appBaseUrl } from "../lib/constants";
+import { eventLabel, sortEvents } from "../lib/events";
 
 type Tab = "overview" | "clicklog" | "conversions";
 type EntityView =
@@ -62,7 +64,6 @@ export function DashboardPage() {
   const [programName, setProgramName] = useState("");
   const [destinationUrl, setDestinationUrl] = useState("");
   const [editDestinationUrl, setEditDestinationUrl] = useState("");
-  const [s2sPostbackUrl, setS2sPostbackUrl] = useState("");
   const [affiliateName, setAffiliateName] = useState("");
   const [lastLink, setLastLink] = useState("");
   const [convertSecretOnce, setConvertSecretOnce] = useState("");
@@ -146,7 +147,6 @@ export function DashboardPage() {
   useEffect(() => {
     const program = programs.find((p) => p.id === selectedId) ?? stats?.program;
     setEditDestinationUrl(program?.destination_url ?? "");
-    setS2sPostbackUrl(program?.s2s_postback_url ?? "");
   }, [selectedId, programs, stats?.program]);
 
   function setEntity(next: EntityView) {
@@ -200,8 +200,7 @@ export function DashboardPage() {
     setError("");
     try {
       const { program } = await api.updateProgram(selectedId, {
-        destination_url: editDestinationUrl,
-        s2s_postback_url: s2sPostbackUrl.trim() || null,
+        destination_url: editDestinationUrl.trim() || null,
       });
       setPrograms((prev) => prev.map((item) => (item.id === program.id ? program : item)));
       if (stats) setStats({ ...stats, program });
@@ -334,7 +333,7 @@ export function DashboardPage() {
           ) : entity === "mcp" ? (
             <McpPanel />
           ) : (
-            <EntityPanel kind={entity} />
+            <EntityPanel kind={entity} canWrite={(user.role ?? "owner") !== "viewer"} />
           )
         ) : (
         <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
@@ -349,12 +348,11 @@ export function DashboardPage() {
                 required
               />
               <Field
-                label="Destination URL"
+                label="Destination URL (optional)"
                 type="url"
-                placeholder="https://yourapp.com"
+                placeholder="Empty = route through paths"
                 value={destinationUrl}
                 onChange={(e) => setDestinationUrl(e.target.value)}
-                required
               />
               <button className="btn btn-primary w-full" disabled={busy} type="submit">
                 Create campaign
@@ -401,11 +399,9 @@ export function DashboardPage() {
                 tracking={tracking}
                 visibleStats={visibleStats}
                 editDestinationUrl={editDestinationUrl}
-                s2sPostbackUrl={s2sPostbackUrl}
                 affiliateName={affiliateName}
                 onAffiliateNameChange={setAffiliateName}
                 onDestinationChange={setEditDestinationUrl}
-                onS2sChange={setS2sPostbackUrl}
                 onCreateAffiliate={createAffiliate}
                 onSaveSettings={saveProgramSettings}
                 onClone={cloneSelectedProgram}
@@ -429,11 +425,9 @@ function OverviewPanel({
   tracking,
   visibleStats,
   editDestinationUrl,
-  s2sPostbackUrl,
   affiliateName,
   onAffiliateNameChange,
   onDestinationChange,
-  onS2sChange,
   onCreateAffiliate,
   onSaveSettings,
   onClone,
@@ -447,16 +441,15 @@ function OverviewPanel({
   tracking: ProgramTracking | null;
   visibleStats: ProgramStats | null;
   editDestinationUrl: string;
-  s2sPostbackUrl: string;
   affiliateName: string;
   onAffiliateNameChange: (v: string) => void;
   onDestinationChange: (v: string) => void;
-  onS2sChange: (v: string) => void;
   onCreateAffiliate: (e: FormEvent) => void;
   onSaveSettings: (e: FormEvent) => void;
   onClone: () => void;
 }) {
   const base = appBaseUrl();
+  const eventNames = sortEvents(Object.keys(visibleStats?.totals.events ?? {}));
   return (
     <>
       <div className="card p-5">
@@ -497,6 +490,13 @@ function OverviewPanel({
               Incoming postback URL (configure in affiliate network):
             </p>
             <CodeBlock>{tracking.postback_url}</CodeBlock>
+            <p className="text-sm text-[var(--velo-muted)]">
+              Several events per campaign? Give the network one URL per event. Each event is
+              counted on its own in stats:
+            </p>
+            <CodeBlock>
+              {`${tracking.postback_url}&event=registration\n${tracking.postback_url}&event=ftd`}
+            </CodeBlock>
             {tracking.campaign_url && (
               <>
                 <p className="text-sm text-[var(--velo-muted)]">Campaign click URL:</p>
@@ -512,22 +512,27 @@ function OverviewPanel({
 
         <form className="mt-4 space-y-3" onSubmit={onSaveSettings}>
           <Field
-            label="Destination URL"
+            label="Destination URL (optional)"
             type="url"
+            placeholder="Empty = route through paths"
             value={editDestinationUrl}
             onChange={(e) => onDestinationChange(e.target.value)}
-            required
-          />
-          <Field
-            label="S2S postback URL (outgoing)"
-            placeholder="https://traffic-source.com/postback?click={click_id}&payout={payout}"
-            value={s2sPostbackUrl}
-            onChange={(e) => onS2sChange(e.target.value)}
           />
           <button className="btn btn-secondary" disabled={busy} type="submit">
             Save settings
           </button>
         </form>
+      </div>
+
+      <div className="card p-5">
+        <h2 className="font-semibold">Outgoing postbacks</h2>
+        <div className="mt-4">
+          <PostbackList
+            owner={{ campaign_id: selectedId }}
+            canWrite={canWrite}
+            hint="Called on every conversion of this campaign, including status changes. Add one per event (registration, FTD, ...) to report each to your traffic source."
+          />
+        </div>
       </div>
 
       <PathEditor programId={selectedId} />
@@ -546,7 +551,7 @@ function OverviewPanel({
           />
           <button
             className="btn btn-primary self-end sm:mt-7"
-            disabled={busy || !selectedProgram.destination_url}
+            disabled={busy}
             type="submit"
           >
             Create link
@@ -578,6 +583,12 @@ function OverviewPanel({
               <div className="stat-label">CR</div>
               <div className="stat-value">{formatPercent(visibleStats.totals.conversion_rate)}</div>
             </div>
+            {eventNames.map((name) => (
+              <div className="card stat" key={name}>
+                <div className="stat-label">{eventLabel(name)}</div>
+                <div className="stat-value">{visibleStats.totals.events[name]}</div>
+              </div>
+            ))}
           </div>
 
           <div className="card overflow-hidden p-5">
@@ -590,6 +601,9 @@ function OverviewPanel({
                     <th>Code</th>
                     <th>Clicks</th>
                     <th>Leads</th>
+                    {eventNames.map((name) => (
+                      <th key={name}>{eventLabel(name)}</th>
+                    ))}
                     <th>Revenue</th>
                     <th>CR</th>
                   </tr>
@@ -601,6 +615,9 @@ function OverviewPanel({
                       <td className="mono">{affiliate.code}</td>
                       <td>{affiliate.clicks}</td>
                       <td>{affiliate.conversions}</td>
+                      {eventNames.map((name) => (
+                        <td key={name}>{affiliate.events[name] ?? 0}</td>
+                      ))}
                       <td>{formatMoney(affiliate.revenue_cents)}</td>
                       <td>{formatPercent(affiliate.conversion_rate)}</td>
                     </tr>
@@ -690,6 +707,7 @@ function ConversionsTable({
               <th>Order ID</th>
               <th>Click ID</th>
               <th>Affiliate</th>
+              <th>Event</th>
               <th>Status</th>
               <th>Revenue</th>
               <th>Time</th>
@@ -698,7 +716,7 @@ function ConversionsTable({
           <tbody>
             {conversions.length === 0 && (
               <tr>
-                <td colSpan={6} className="text-[var(--velo-muted)]">
+                <td colSpan={7} className="text-[var(--velo-muted)]">
                   No conversions yet.
                 </td>
               </tr>
@@ -708,6 +726,7 @@ function ConversionsTable({
                 <td className="mono">{row.order_id}</td>
                 <td className="mono">{row.click_id ?? "—"}</td>
                 <td>{row.affiliate_name}</td>
+                <td className="mono">{row.event ?? "—"}</td>
                 <td>
                   {row.status}
                   {row.status2 ? ` / ${row.status2}` : ""}

@@ -246,33 +246,35 @@ describe("security hardening", () => {
       const a = await registerTestUser();
       const program = await createProgram(a.authHeaders, "Postbacks");
 
-      const bad = await api(`/api/programs/${program.id}`, a.authHeaders, "PATCH", {
-        s2s_postback_url: "javascript:alert(1)",
+      for (const url of ["javascript:alert(1)", "ftp://ts.example.com/pb", "file:///etc/passwd"]) {
+        const bad = await api("/api/postbacks", a.authHeaders, "POST", {
+          campaign_id: program.id,
+          url,
+        });
+        expect(bad.status).toBe(400);
+      }
+      const good = await api("/api/postbacks", a.authHeaders, "POST", {
+        campaign_id: program.id,
+        url: "https://ts.example.com/pb?cid={click_id}",
       });
-      expect(bad.status).toBe(400);
-      const good = await api(`/api/programs/${program.id}`, a.authHeaders, "PATCH", {
-        s2s_postback_url: "https://ts.example.com/pb?cid={click_id}",
-      });
-      expect(good.status).toBe(200);
-      const { program: updated } = await json<{ program: { s2s_postback_url: string } }>(good);
-      expect(updated.s2s_postback_url).toBe("https://ts.example.com/pb?cid={click_id}");
+      expect(good.status).toBe(201);
+      const { postback } = await json<{ postback: { id: string; url: string } }>(good);
+      expect(postback.url).toBe("https://ts.example.com/pb?cid={click_id}");
 
-      const badSource = await api("/api/entities/traffic-sources", a.authHeaders, "POST", {
-        name: "Bad",
-        s2s_postback_url: "ftp://ts.example.com/pb",
+      const badPatch = await api(`/api/postbacks/${postback.id}`, a.authHeaders, "PATCH", {
+        url: "javascript:alert(1)",
       });
-      expect(badSource.status).toBe(400);
+      expect(badPatch.status).toBe(400);
 
-      const badNetwork = await api("/api/entities/networks", a.authHeaders, "POST", {
-        name: "Bad",
-        postback_url_template: "file:///etc/passwd",
+      // Postbacks of another account are invisible and cannot be attached to its entities.
+      const b = await registerTestUser();
+      const foreign = await api("/api/postbacks", b.authHeaders, "POST", {
+        campaign_id: program.id,
+        url: "https://evil.example.com/pb",
       });
-      expect(badNetwork.status).toBe(400);
-      const goodNetwork = await api("/api/entities/networks", a.authHeaders, "POST", {
-        name: "Good",
-        postback_url_template: "https://net.example.com/pb?sub={click_id}&p={payout}",
-      });
-      expect(goodNetwork.status).toBe(201);
+      expect(foreign.status).toBe(404);
+      const foreignDelete = await api(`/api/postbacks/${postback.id}`, b.authHeaders, "DELETE");
+      expect(foreignDelete.status).toBe(404);
 
       const badTrigger = await api("/api/ops/triggers", a.authHeaders, "POST", {
         name: "Bad",

@@ -1,5 +1,6 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Fragment, useEffect, useState } from "react";
 import { ErrorBox, Field } from "../components/ui";
+import { PostbackList } from "./PostbackList";
 import {
   api,
   formatMoney,
@@ -12,7 +13,14 @@ import {
 
 type EntityKind = "sources" | "networks" | "offers" | "landers" | "groups";
 
-export function EntityPanel({ kind }: { kind: EntityKind }) {
+const POSTBACK_HINTS = {
+  sources:
+    "Called on approved conversions of campaigns using this source (sampled by its postback %). Add one per event, e.g. registration and FTD pixels.",
+  networks:
+    "Called on approved conversions of clicks that went to this network's offers. Add one per event, e.g. registration and FTD.",
+};
+
+export function EntityPanel({ kind, canWrite = true }: { kind: EntityKind; canWrite?: boolean }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [name, setName] = useState("");
@@ -24,16 +32,37 @@ export function EntityPanel({ kind }: { kind: EntityKind }) {
   const [offers, setOffers] = useState<Offer[]>([]);
   const [landers, setLanders] = useState<Lander[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
+  const [networkId, setNetworkId] = useState("");
+  const [payout, setPayout] = useState("0");
+  const [postbackCounts, setPostbackCounts] = useState<Record<string, number>>({});
+  const [openId, setOpenId] = useState<string | null>(null);
+
+  async function reloadPostbackCounts() {
+    const { postbacks } = await api.postbacks();
+    const counts: Record<string, number> = {};
+    for (const pb of postbacks) {
+      const owner = pb.traffic_source_id ?? pb.network_id;
+      if (owner) counts[owner] = (counts[owner] ?? 0) + 1;
+    }
+    setPostbackCounts(counts);
+  }
+
+  function togglePostbacks(ownerId: string) {
+    if (openId === ownerId) reloadPostbackCounts().catch(() => {});
+    setOpenId(openId === ownerId ? null : ownerId);
+  }
 
   async function reload() {
     if (kind === "sources") setSources((await api.trafficSources()).traffic_sources);
-    if (kind === "networks") setNetworks((await api.networks()).networks);
+    if (kind === "networks" || kind === "offers") setNetworks((await api.networks()).networks);
     if (kind === "offers") setOffers((await api.offers()).offers);
+    if (kind === "sources" || kind === "networks") await reloadPostbackCounts();
     if (kind === "landers") setLanders((await api.landers()).landers);
     if (kind === "groups") setGroups((await api.groups()).groups);
   }
 
   useEffect(() => {
+    setOpenId(null);
     reload().catch((err) =>
       setError(err instanceof Error ? err.message : "Failed to load"),
     );
@@ -51,9 +80,14 @@ export function EntityPanel({ kind }: { kind: EntityKind }) {
           default_cost_cents: Math.round(Number(costCents) * 100) || 0,
         });
       } else if (kind === "networks") {
-        await api.createNetwork({ name, postback_url_template: url || null });
+        await api.createNetwork({ name });
       } else if (kind === "offers") {
-        await api.createOffer({ name, url });
+        await api.createOffer({
+          name,
+          url,
+          network_id: networkId || null,
+          payout_cents: Math.round(Number(payout) * 100) || 0,
+        });
       } else if (kind === "landers") {
         await api.createLander({ name, url });
       } else {
@@ -118,13 +152,39 @@ export function EntityPanel({ kind }: { kind: EntityKind }) {
               required
             />
           )}
-          {kind === "networks" && (
-            <Field
-              label="Postback URL template (optional)"
-              placeholder="https://network.com/postback?click={click_id}"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-            />
+          {kind === "offers" && (
+            <>
+              <label className="block space-y-2">
+                <span className="text-sm font-medium text-[var(--velo-muted)]">
+                  Affiliate network
+                </span>
+                <select
+                  className="input"
+                  value={networkId}
+                  onChange={(e) => setNetworkId(e.target.value)}
+                >
+                  <option value="">None</option>
+                  {networks.map((network) => (
+                    <option key={network.id} value={network.id}>
+                      {network.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Field
+                label="Default payout (USD)"
+                type="number"
+                min="0"
+                step="0.01"
+                value={payout}
+                onChange={(e) => setPayout(e.target.value)}
+              />
+            </>
+          )}
+          {(kind === "sources" || kind === "networks") && (
+            <p className="text-sm text-[var(--velo-muted)]">
+              Add postbacks (one per event: registration, FTD, ...) from the list below.
+            </p>
           )}
           {kind === "offers" && (
             <p className="text-sm text-[var(--velo-muted)]">
@@ -151,31 +211,76 @@ export function EntityPanel({ kind }: { kind: EntityKind }) {
                   </>
                 )}
                 {(kind === "offers" || kind === "landers") && <th>URL</th>}
-                {kind === "offers" && <th>Payout</th>}
-                {kind === "networks" && <th>Postback template</th>}
+                {kind === "offers" && (
+                  <>
+                    <th>Network</th>
+                    <th>Payout</th>
+                  </>
+                )}
+                {(kind === "sources" || kind === "networks") && <th>Postbacks</th>}
               </tr>
             </thead>
             <tbody>
               {kind === "sources" &&
                 sources.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.name}</td>
-                    <td>{formatMoney(row.default_cost_cents)}</td>
-                    <td className="mono">{row.cost_type.toUpperCase()}</td>
-                  </tr>
+                  <Fragment key={row.id}>
+                    <tr>
+                      <td>{row.name}</td>
+                      <td>{formatMoney(row.default_cost_cents)}</td>
+                      <td className="mono">{row.cost_type.toUpperCase()}</td>
+                      <td>
+                        <PostbackToggle
+                          count={postbackCounts[row.id] ?? 0}
+                          open={openId === row.id}
+                          onClick={() => togglePostbacks(row.id)}
+                        />
+                      </td>
+                    </tr>
+                    {openId === row.id && (
+                      <tr>
+                        <td colSpan={4}>
+                          <PostbackList
+                            owner={{ traffic_source_id: row.id }}
+                            canWrite={canWrite}
+                            hint={POSTBACK_HINTS.sources}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               {kind === "networks" &&
                 networks.map((row) => (
-                  <tr key={row.id}>
-                    <td>{row.name}</td>
-                    <td className="mono text-xs">{row.postback_url_template ?? "—"}</td>
-                  </tr>
+                  <Fragment key={row.id}>
+                    <tr>
+                      <td>{row.name}</td>
+                      <td>
+                        <PostbackToggle
+                          count={postbackCounts[row.id] ?? 0}
+                          open={openId === row.id}
+                          onClick={() => togglePostbacks(row.id)}
+                        />
+                      </td>
+                    </tr>
+                    {openId === row.id && (
+                      <tr>
+                        <td colSpan={2}>
+                          <PostbackList
+                            owner={{ network_id: row.id }}
+                            canWrite={canWrite}
+                            hint={POSTBACK_HINTS.networks}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
               {kind === "offers" &&
                 offers.map((row) => (
                   <tr key={row.id}>
                     <td>{row.name}</td>
                     <td className="mono text-xs">{row.url}</td>
+                    <td>{networks.find((n) => n.id === row.network_id)?.name ?? "—"}</td>
                     <td>{formatMoney(row.payout_cents)}</td>
                   </tr>
                 ))}
@@ -197,5 +302,21 @@ export function EntityPanel({ kind }: { kind: EntityKind }) {
         </div>
       </div>
     </div>
+  );
+}
+
+function PostbackToggle({
+  count,
+  open,
+  onClick,
+}: {
+  count: number;
+  open: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button className="underline" onClick={onClick} type="button">
+      {open ? "Close" : count === 0 ? "Add postbacks" : `${count} postback${count === 1 ? "" : "s"}`}
+    </button>
   );
 }

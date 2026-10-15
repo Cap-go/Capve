@@ -14,7 +14,6 @@ export type TrafficSource = {
   cost_type: CostType;
   default_cost_cents: number;
   postback_percent: number;
-  s2s_postback_url: string | null;
   created_at: number;
 };
 
@@ -22,7 +21,6 @@ export type AffiliateNetwork = {
   id: string;
   user_id: string;
   name: string;
-  postback_url_template: string | null;
   created_at: number;
 };
 

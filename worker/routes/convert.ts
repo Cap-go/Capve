@@ -6,6 +6,7 @@ import {
   resolveAffiliateByCode,
   resolveAffiliateFromClick,
 } from "../lib/conversion";
+import { normalizeEvent } from "../lib/postback";
 import type { Env } from "../types";
 import { readAffiliateCookie } from "../lib/auth";
 
@@ -40,6 +41,7 @@ convert.post("/", async (c) => {
     cnv_id?: string;
     status?: string;
     status2?: string;
+    event?: string;
     currency?: string;
     disable_postback?: boolean;
   }>();
@@ -49,6 +51,11 @@ convert.post("/", async (c) => {
 
   if (!orderId || typeof amount !== "number" || amount < 0) {
     return c.json({ error: "order_id and amount (number >= 0) required" }, 400);
+  }
+
+  const event = normalizeEvent(body.event);
+  if (event === false) {
+    return c.json({ error: "event must be 1-40 chars: a-z, 0-9, _ . -" }, 400);
   }
 
   const clickId = body.click_id?.trim() || body.cnv_id?.trim();
@@ -83,6 +90,7 @@ convert.post("/", async (c) => {
     amount,
     status: body.status?.trim() || "lead",
     status2: body.status2?.trim() || null,
+    event,
     currency: body.currency?.trim() || "USD",
     disable_s2s: body.disable_postback === true,
   });

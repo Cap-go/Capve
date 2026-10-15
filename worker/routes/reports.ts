@@ -14,6 +14,11 @@ import { requireUser } from "../lib/access";
 
 const reports = new Hono<{ Bindings: Env }>();
 
+/** Event names present in report rows, for one CSV column per event. */
+function eventNames(rows: Array<{ events: Record<string, number> }>): string[] {
+  return [...new Set(rows.flatMap((row) => Object.keys(row.events)))].sort();
+}
+
 reports.get("/campaigns", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
@@ -43,6 +48,7 @@ reports.get("/campaigns.csv", async (c) => {
   });
 
   const campaigns = await listCampaignReports(c.env.DB, session.account_id, filters);
+  const events = eventNames(campaigns);
   const rows = campaigns.map((row) => [
     row.name,
     row.campaign_key ?? row.slug,
@@ -60,6 +66,7 @@ reports.get("/campaigns.csv", async (c) => {
     row.metrics.roi,
     (row.metrics.epc_cents / 100).toFixed(2),
     (row.metrics.cpc_cents / 100).toFixed(2),
+    ...events.map((event) => row.events[event] ?? 0),
   ]);
 
   const csv = toCsv(
@@ -80,6 +87,7 @@ reports.get("/campaigns.csv", async (c) => {
       "ROI %",
       "EPC",
       "CPC",
+      ...events,
     ],
     rows,
   );
@@ -128,6 +136,7 @@ reports.get("/grouped", async (c) => {
 reports.get("/grouped.csv", async (c) => {
   const result = await groupedReport(c);
   if ("error" in result) return result.error;
+  const events = eventNames(result.rows);
   const csv = toCsv(
     [
       result.by,
@@ -142,6 +151,7 @@ reports.get("/grouped.csv", async (c) => {
       "Profit",
       "ROI %",
       "EPC",
+      ...events,
     ],
     result.rows.map((row) => [
       row.label,
@@ -156,6 +166,7 @@ reports.get("/grouped.csv", async (c) => {
       (row.metrics.profit_cents / 100).toFixed(2),
       row.metrics.roi,
       (row.metrics.epc_cents / 100).toFixed(2),
+      ...events.map((event) => row.events[event] ?? 0),
     ]),
   );
   return new Response(csv, {
@@ -236,6 +247,7 @@ reports.get("/conversions.csv", async (c) => {
       "amount",
       "status",
       "status2",
+      "event",
       "currency",
       "affiliate_code",
       "affiliate_name",

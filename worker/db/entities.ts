@@ -39,8 +39,7 @@ export async function listTrafficSources(
 ): Promise<TrafficSource[]> {
   const { results } = await db
     .prepare(
-      `SELECT id, user_id, name, cost_type, default_cost_cents, postback_percent,
-              s2s_postback_url, created_at
+      `SELECT id, user_id, name, cost_type, default_cost_cents, postback_percent, created_at
        FROM traffic_sources WHERE user_id = ? ORDER BY name`,
     )
     .bind(userId)
@@ -56,7 +55,6 @@ export async function createTrafficSource(
     cost_type?: CostType;
     default_cost_cents?: number;
     postback_percent?: number;
-    s2s_postback_url?: string | null;
   },
 ): Promise<TrafficSource> {
   const source: TrafficSource = {
@@ -66,14 +64,13 @@ export async function createTrafficSource(
     cost_type: input.cost_type ?? "cpc",
     default_cost_cents: input.default_cost_cents ?? 0,
     postback_percent: input.postback_percent ?? 100,
-    s2s_postback_url: input.s2s_postback_url ?? null,
     created_at: Date.now(),
   };
   await db
     .prepare(
       `INSERT INTO traffic_sources
-       (id, user_id, name, cost_type, default_cost_cents, postback_percent, s2s_postback_url, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+       (id, user_id, name, cost_type, default_cost_cents, postback_percent, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       source.id,
@@ -82,7 +79,6 @@ export async function createTrafficSource(
       source.cost_type,
       source.default_cost_cents,
       source.postback_percent,
-      source.s2s_postback_url,
       source.created_at,
     )
     .run();
@@ -95,7 +91,7 @@ export async function listAffiliateNetworks(
 ): Promise<AffiliateNetwork[]> {
   const { results } = await db
     .prepare(
-      "SELECT id, user_id, name, postback_url_template, created_at FROM affiliate_networks WHERE user_id = ? ORDER BY name",
+      "SELECT id, user_id, name, created_at FROM affiliate_networks WHERE user_id = ? ORDER BY name",
     )
     .bind(userId)
     .all<AffiliateNetwork>();
@@ -105,20 +101,19 @@ export async function listAffiliateNetworks(
 export async function createAffiliateNetwork(
   db: D1Database,
   userId: string,
-  input: { name: string; postback_url_template?: string | null },
+  input: { name: string },
 ): Promise<AffiliateNetwork> {
   const network: AffiliateNetwork = {
     id: id("net"),
     user_id: userId,
     name: input.name,
-    postback_url_template: input.postback_url_template ?? null,
     created_at: Date.now(),
   };
   await db
     .prepare(
-      "INSERT INTO affiliate_networks (id, user_id, name, postback_url_template, created_at) VALUES (?, ?, ?, ?, ?)",
+      "INSERT INTO affiliate_networks (id, user_id, name, created_at) VALUES (?, ?, ?, ?)",
     )
-    .bind(network.id, network.user_id, network.name, network.postback_url_template, network.created_at)
+    .bind(network.id, network.user_id, network.name, network.created_at)
     .run();
   return network;
 }

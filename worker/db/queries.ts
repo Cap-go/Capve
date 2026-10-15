@@ -12,7 +12,7 @@ import { affiliateCode, conversionRate, id, isUniqueConstraintError } from "../l
 import { approvedStatusSql } from "../lib/metrics";
 
 const PROGRAM_COLUMNS =
-  "id, user_id, name, slug, api_key, destination_url, s2s_postback_url, campaign_key, group_id, traffic_source_id, tags, status, created_at";
+  "id, user_id, name, slug, api_key, destination_url, campaign_key, group_id, traffic_source_id, tags, status, created_at";
 
 const USER_COLUMNS = "id, email, name, email_verified, is_platform_admin, created_at";
 
@@ -121,8 +121,8 @@ export async function createProgram(
     .prepare(
       `INSERT INTO programs (
         id, user_id, name, slug, api_key, destination_url, convert_secret,
-        s2s_postback_url, campaign_key, group_id, traffic_source_id, tags, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        campaign_key, group_id, traffic_source_id, tags, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       program.id,
@@ -132,7 +132,6 @@ export async function createProgram(
       program.api_key,
       program.destination_url,
       program.convert_secret,
-      program.s2s_postback_url ?? null,
       program.campaign_key ?? null,
       program.group_id ?? null,
       program.traffic_source_id ?? null,
@@ -150,7 +149,6 @@ export async function updateProgram(
   updates: {
     name?: string;
     destination_url?: string | null;
-    s2s_postback_url?: string | null;
     group_id?: string | null;
     traffic_source_id?: string | null;
     tags?: string | null;
@@ -166,10 +164,6 @@ export async function updateProgram(
       updates.destination_url === undefined
         ? existing.destination_url
         : updates.destination_url,
-    s2s_postback_url:
-      updates.s2s_postback_url === undefined
-        ? existing.s2s_postback_url
-        : updates.s2s_postback_url,
     group_id: updates.group_id === undefined ? existing.group_id : updates.group_id,
     traffic_source_id:
       updates.traffic_source_id === undefined
@@ -181,14 +175,13 @@ export async function updateProgram(
 
   await db
     .prepare(
-      `UPDATE programs SET name = ?, destination_url = ?, s2s_postback_url = ?,
+      `UPDATE programs SET name = ?, destination_url = ?,
        group_id = ?, traffic_source_id = ?, tags = ?, status = ?
        WHERE id = ? AND user_id = ?`,
     )
     .bind(
       next.name,
       next.destination_url,
-      next.s2s_postback_url,
       next.group_id,
       next.traffic_source_id,
       next.tags,
@@ -391,6 +384,7 @@ export type ConversionInput = {
   amount_cents: number;
   status?: string;
   status2?: string | null;
+  event?: string | null;
   currency?: string;
   created_at: number;
 };
@@ -404,6 +398,7 @@ export type StoredConversion = {
   amount_cents: number;
   status: string;
   status2: string | null;
+  event: string | null;
   currency: string;
 };
 
@@ -425,6 +420,7 @@ export async function recordConversion(
     amount_cents: conversion.amount_cents,
     status: conversion.status ?? "lead",
     status2: conversion.status2 ?? null,
+    event: conversion.event ?? null,
     currency: conversion.currency ?? "USD",
   };
   try {
@@ -432,8 +428,8 @@ export async function recordConversion(
       .prepare(
         `INSERT INTO conversions (
           id, program_id, affiliate_id, click_id, order_id,
-          amount_cents, status, status2, currency, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          amount_cents, status, status2, event, currency, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         conversion.id,
@@ -444,6 +440,7 @@ export async function recordConversion(
         inserted.amount_cents,
         inserted.status,
         inserted.status2,
+        inserted.event,
         inserted.currency,
         conversion.created_at,
       )
@@ -455,7 +452,7 @@ export async function recordConversion(
 
   const existing = await db
     .prepare(
-      `SELECT id, click_id, order_id, amount_cents, status, status2, currency
+      `SELECT id, click_id, order_id, amount_cents, status, status2, event, currency
        FROM conversions WHERE program_id = ? AND order_id = ?`,
     )
     .bind(conversion.program_id, conversion.order_id)
@@ -542,7 +539,7 @@ export async function listConversionLog(
     .prepare(
       `SELECT
         cv.id, cv.program_id, cv.affiliate_id, cv.click_id, cv.order_id,
-        cv.amount_cents, cv.status, cv.status2, cv.currency, cv.created_at,
+        cv.amount_cents, cv.status, cv.status2, cv.event, cv.currency, cv.created_at,
         a.name AS affiliate_name, a.code AS affiliate_code
       FROM conversions cv
       JOIN affiliates a ON a.id = cv.affiliate_id
@@ -566,17 +563,28 @@ export async function getProgramStats(db: D1Database, program: Program): Promise
       .all<{ affiliate_id: string; count: number }>(),
     db
       .prepare(
-        `SELECT cv.affiliate_id, COUNT(*) AS count, COALESCE(SUM(cv.amount_cents), 0) AS revenue
+        `SELECT cv.affiliate_id, cv.event, COUNT(*) AS count,
+           COALESCE(SUM(cv.amount_cents), 0) AS revenue
          FROM conversions cv
          WHERE cv.program_id = ? AND ${approvedStatusSql("cv")}
-         GROUP BY cv.affiliate_id`,
+         GROUP BY cv.affiliate_id, cv.event`,
       )
       .bind(program.id)
-      .all<{ affiliate_id: string; count: number; revenue: number }>(),
+      .all<{ affiliate_id: string; event: string | null; count: number; revenue: number }>(),
   ]);
 
   const clicksBy = new Map((clickRows.results ?? []).map((r) => [r.affiliate_id, r.count]));
-  const conversionsBy = new Map((conversionRows.results ?? []).map((r) => [r.affiliate_id, r]));
+  const conversionsBy = new Map<
+    string,
+    { count: number; revenue: number; events: Record<string, number> }
+  >();
+  for (const row of conversionRows.results ?? []) {
+    const acc = conversionsBy.get(row.affiliate_id) ?? { count: 0, revenue: 0, events: {} };
+    acc.count += row.count;
+    acc.revenue += row.revenue;
+    if (row.event) acc.events[row.event] = (acc.events[row.event] ?? 0) + row.count;
+    conversionsBy.set(row.affiliate_id, acc);
+  }
 
   const stats: AffiliateStats[] = affiliates.map((affiliate) => {
     const clickCount = clicksBy.get(affiliate.id) ?? 0;
@@ -588,6 +596,7 @@ export async function getProgramStats(db: D1Database, program: Program): Promise
       conversions: conversionCount,
       revenue_cents: conversions?.revenue ?? 0,
       conversion_rate: conversionRate(conversionCount, clickCount),
+      events: conversions?.events ?? {},
     };
   });
 
@@ -600,11 +609,19 @@ export async function getProgramStats(db: D1Database, program: Program): Promise
     { clicks: 0, conversions: 0, revenue_cents: 0 },
   );
 
+  const events: Record<string, number> = {};
+  for (const row of stats) {
+    for (const [event, count] of Object.entries(row.events)) {
+      events[event] = (events[event] ?? 0) + count;
+    }
+  }
+
   return {
     program,
     totals: {
       ...totals,
       conversion_rate: conversionRate(totals.conversions, totals.clicks),
+      events,
     },
     affiliates: stats,
   };

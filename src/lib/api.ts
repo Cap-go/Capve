@@ -72,7 +72,6 @@ export type Program = {
   slug: string;
   api_key: string;
   destination_url: string | null;
-  s2s_postback_url: string | null;
   campaign_key: string | null;
   group_id: string | null;
   traffic_source_id: string | null;
@@ -88,7 +87,6 @@ export type TrafficSource = {
   cost_type: "cpc" | "cpm" | "cpa";
   default_cost_cents: number;
   postback_percent: number;
-  s2s_postback_url: string | null;
   created_at: number;
 };
 
@@ -96,9 +94,29 @@ export type AffiliateNetwork = {
   id: string;
   user_id: string;
   name: string;
-  postback_url_template: string | null;
   created_at: number;
 };
+
+/** Outgoing postback on exactly one campaign, traffic source or network. */
+export type Postback = {
+  id: string;
+  user_id: string;
+  program_id: string | null;
+  traffic_source_id: string | null;
+  network_id: string | null;
+  /** Conversion event it fires for; null = every conversion. */
+  event: string | null;
+  url: string;
+  created_at: number;
+};
+
+export type PostbackOwner =
+  | { campaign_id: string }
+  | { traffic_source_id: string }
+  | { network_id: string };
+
+/** Approved conversions per event (registration, ftd, ...). */
+export type EventCounts = Record<string, number>;
 
 export type Lander = {
   id: string;
@@ -146,6 +164,7 @@ export type ConversionLogRow = {
   amount_cents: number;
   status: string;
   status2: string | null;
+  event: string | null;
   currency: string;
   created_at: number;
   affiliate_name: string;
@@ -154,7 +173,6 @@ export type ConversionLogRow = {
 
 export type ProgramTracking = {
   postback_url: string;
-  s2s_postback_url: string | null;
   campaign_url: string | null;
   offer_url_macro: string;
   redirect_params: string[];
@@ -214,6 +232,7 @@ export type CampaignReportRow = Program & {
   cost_type: "cpc" | "cpm" | "cpa" | null;
   default_cost_cents: number;
   metrics: CampaignMetrics;
+  events: EventCounts;
 };
 
 export type TrendPoint = {
@@ -223,6 +242,7 @@ export type TrendPoint = {
   leads: number;
   revenue_cents: number;
   cost_cents: number;
+  events: EventCounts;
 };
 
 export type GroupedReportRow = {
@@ -231,6 +251,7 @@ export type GroupedReportRow = {
   unique_clicks: number;
   bot_clicks: number;
   metrics: CampaignMetrics;
+  events: EventCounts;
 };
 
 export type ReportFilters = {
@@ -254,6 +275,7 @@ export type AffiliateStats = Affiliate & {
   conversions: number;
   revenue_cents: number;
   conversion_rate: number;
+  events: EventCounts;
 };
 
 export type ProgramStats = {
@@ -263,6 +285,7 @@ export type ProgramStats = {
     conversions: number;
     revenue_cents: number;
     conversion_rate: number;
+    events: EventCounts;
   };
   affiliates: AffiliateStats[];
 };
@@ -316,12 +339,9 @@ export const api = {
   createProgram: (name: string, destinationUrl: string) =>
     request<{ program: Program; convert_secret: string }>("/api/programs", {
       method: "POST",
-      body: JSON.stringify({ name, destination_url: destinationUrl }),
+      body: JSON.stringify({ name, destination_url: destinationUrl || undefined }),
     }),
-  updateProgram: (
-    programId: string,
-    data: { name?: string; destination_url?: string; s2s_postback_url?: string | null },
-  ) =>
+  updateProgram: (programId: string, data: { name?: string; destination_url?: string | null }) =>
     request<{ program: Program }>(`/api/programs/${programId}`, {
       method: "PATCH",
       body: JSON.stringify(data),
@@ -354,7 +374,7 @@ export const api = {
       body: JSON.stringify(data),
     }),
   networks: () => request<{ networks: AffiliateNetwork[] }>("/api/entities/networks"),
-  createNetwork: (data: { name: string; postback_url_template?: string | null }) =>
+  createNetwork: (data: { name: string }) =>
     request<{ network: AffiliateNetwork }>("/api/entities/networks", {
       method: "POST",
       body: JSON.stringify(data),
@@ -366,11 +386,32 @@ export const api = {
       body: JSON.stringify(data),
     }),
   offers: () => request<{ offers: Offer[] }>("/api/entities/offers"),
-  createOffer: (data: { name: string; url: string; network_id?: string | null }) =>
+  createOffer: (data: {
+    name: string;
+    url: string;
+    network_id?: string | null;
+    payout_cents?: number;
+  }) =>
     request<{ offer: Offer }>("/api/entities/offers", {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  postbacks: (owner?: PostbackOwner) =>
+    request<{ postbacks: Postback[] }>(
+      `/api/postbacks${owner ? `?${new URLSearchParams(owner as Record<string, string>)}` : ""}`,
+    ),
+  createPostback: (owner: PostbackOwner, data: { event: string | null; url: string }) =>
+    request<{ postback: Postback }>("/api/postbacks", {
+      method: "POST",
+      body: JSON.stringify({ ...owner, ...data }),
+    }),
+  updatePostback: (postbackId: string, data: { event?: string | null; url?: string }) =>
+    request<{ postback: Postback }>(`/api/postbacks/${postbackId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deletePostback: (postbackId: string) =>
+    request<{ ok: boolean }>(`/api/postbacks/${postbackId}`, { method: "DELETE" }),
   groups: () => request<{ groups: Group[] }>("/api/entities/groups"),
   createGroup: (name: string) =>
     request<{ group: Group }>("/api/entities/groups", {
