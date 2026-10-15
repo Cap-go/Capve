@@ -392,4 +392,11 @@ CREATE TABLE IF NOT EXISTS tracking_domains (
 );
 
 CREATE INDEX IF NOT EXISTS idx_tracking_domains_user ON tracking_domains(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_clicks_traffic_source ON clicks(traffic_source_id);
+CREATE INDEX IF NOT EXISTS idx_routing_rules_program ON routing_rules(program_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_paths_rule ON paths(rule_id);
+CREATE INDEX IF NOT EXISTS idx_path_landers_path ON path_landers(path_id);
+CREATE INDEX IF NOT EXISTS idx_path_offers_path ON path_offers(path_id);
+CREATE INDEX IF NOT EXISTS idx_blocklist_user ON blocklist_entries(user_id);
 `;
