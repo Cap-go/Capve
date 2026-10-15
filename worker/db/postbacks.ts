@@ -56,12 +56,6 @@ export async function createPostback(
   input: { event: string | null; url: string },
 ): Promise<Postback | null> {
   const column = OWNER_COLUMN[owner.kind];
-  const count = await db
-    .prepare(`SELECT COUNT(*) AS n FROM postbacks WHERE ${column} = ?`)
-    .bind(owner.id)
-    .first<{ n: number }>();
-  if ((count?.n ?? 0) >= MAX_POSTBACKS_PER_OWNER) return null;
-
   const postback: Postback = {
     id: id("pb"),
     user_id: userId,
@@ -72,8 +66,13 @@ export async function createPostback(
     url: input.url,
     created_at: Date.now(),
   };
-  await db
-    .prepare(`INSERT INTO postbacks (${COLUMNS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`)
+  // Conditional insert keeps the per-owner limit atomic.
+  const result = await db
+    .prepare(
+      `INSERT INTO postbacks (${COLUMNS})
+       SELECT ?, ?, ?, ?, ?, ?, ?, ?
+       WHERE (SELECT COUNT(*) FROM postbacks WHERE ${column} = ?) < ?`,
+    )
     .bind(
       postback.id,
       postback.user_id,
@@ -83,9 +82,11 @@ export async function createPostback(
       postback.event,
       postback.url,
       postback.created_at,
+      owner.id,
+      MAX_POSTBACKS_PER_OWNER,
     )
     .run();
-  return postback;
+  return (result.meta.changes ?? 0) > 0 ? postback : null;
 }
 
 export async function updatePostback(
@@ -139,17 +140,23 @@ export async function copyCampaignPostbacks(db: D1Database, fromProgramId: strin
  */
 export async function postbacksForConversion(
   db: D1Database,
-  owners: { program_id: string; traffic_source_id: string | null; network_id: string | null },
+  owners: {
+    user_id: string;
+    program_id: string;
+    traffic_source_id: string | null;
+    network_id: string | null;
+  },
   event: string | null,
 ): Promise<Postback[]> {
   const { results } = await db
     .prepare(
       `SELECT ${COLUMNS} FROM postbacks
-       WHERE (program_id = ? OR traffic_source_id = ? OR network_id = ?)
+       WHERE user_id = ?
+         AND (program_id = ? OR traffic_source_id = ? OR network_id = ?)
          AND (event IS NULL OR event = ?)
        ORDER BY created_at`,
     )
-    .bind(owners.program_id, owners.traffic_source_id, owners.network_id, event)
+    .bind(owners.user_id, owners.program_id, owners.traffic_source_id, owners.network_id, event)
     .all<Postback>();
   return results ?? [];
 }

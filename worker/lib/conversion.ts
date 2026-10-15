@@ -49,7 +49,7 @@ function sampled(key: string, percent: number): boolean {
  */
 async function fireConversionPostbacks(
   db: D1Database,
-  program: { id: string; traffic_source_id?: string | null },
+  program: { id: string; user_id: string; traffic_source_id?: string | null },
   macros: {
     click_id: string | null;
     payout: number;
@@ -64,13 +64,14 @@ async function fireConversionPostbacks(
   const click = macros.click_id ? await getTrackedClick(db, macros.click_id) : null;
   const network = click?.offer_id
     ? await db
-        .prepare("SELECT network_id FROM offers WHERE id = ?")
-        .bind(click.offer_id)
+        .prepare("SELECT network_id FROM offers WHERE id = ? AND user_id = ?")
+        .bind(click.offer_id, program.user_id)
         .first<{ network_id: string | null }>()
     : null;
   const postbacks = await postbacksForConversion(
     db,
     {
+      user_id: program.user_id,
       program_id: program.id,
       traffic_source_id: program.traffic_source_id ?? null,
       network_id: network?.network_id ?? null,

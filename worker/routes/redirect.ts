@@ -48,9 +48,10 @@ async function handleClickRedirect(
   program: { id: string; destination_url: string | null; campaign_key: string | null },
   affiliate: { id: string; code: string },
 ) {
-  // Destination is optional: campaigns can route only through paths.
+  // Destination is optional: campaigns can route only through paths. The same-host
+  // `?url=` override needs a destination to compare against, so it is ignored without one.
   let baseDestination: string | null = null;
-  if (program.destination_url || c.req.query("url")) {
+  if (program.destination_url) {
     const resolved = resolveRedirectTarget(program.destination_url, c.req.query("url"));
     if (!resolved.ok) {
       return c.text(resolved.error, resolved.status as 400 | 503);
