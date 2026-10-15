@@ -18,6 +18,7 @@ import {
   type ConversionLogRow,
   type Program,
   type ProgramStats,
+  type PostbackKey,
   type ProgramTracking,
 } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -330,6 +331,8 @@ export function DashboardPage() {
           </nav>
         )}
 
+        {user.email_verified === false ? <VerifyEmailBanner /> : null}
+
         <ErrorBox message={error} />
 
         {entity !== "campaigns" ? (
@@ -416,6 +419,12 @@ export function DashboardPage() {
                 onCreateAffiliate={createAffiliate}
                 onSaveSettings={saveProgramSettings}
                 onClone={cloneSelectedProgram}
+                onPostbackKeyChange={() =>
+                  api
+                    .tracking(selectedId)
+                    .then(({ tracking: t }) => setTracking(t))
+                    .catch(() => undefined)
+                }
               />
             )}
           </section>
@@ -444,6 +453,7 @@ function OverviewPanel({
   onCreateAffiliate,
   onSaveSettings,
   onClone,
+  onPostbackKeyChange,
 }: {
   busy: boolean;
   canWrite: boolean;
@@ -462,6 +472,7 @@ function OverviewPanel({
   onCreateAffiliate: (e: FormEvent) => void;
   onSaveSettings: (e: FormEvent) => void;
   onClone: () => void;
+  onPostbackKeyChange: () => void;
 }) {
   const base = appBaseUrl();
   const eventNames = sortEvents(Object.keys(visibleStats?.totals.events ?? {}));
@@ -505,6 +516,7 @@ function OverviewPanel({
               Incoming postback URL (configure in affiliate network):
             </p>
             <CodeBlock>{tracking.postback_url}</CodeBlock>
+            {canWrite ? <PostbackKeyControls onChange={onPostbackKeyChange} /> : null}
             <p className="text-sm text-[var(--velo-muted)]">
               Several events per campaign? Give the network one URL per event. Each event is
               counted on its own in stats:
@@ -759,6 +771,105 @@ function ConversionsTable({
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+function VerifyEmailBanner() {
+  const [message, setMessage] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  async function resend() {
+    setBusy(true);
+    setMessage("");
+    try {
+      const res = await api.resendVerification();
+      setMessage(res.already_verified ? "Your email is already verified." : "Verification email sent.");
+    } catch (err) {
+      setMessage(err instanceof Error ? err.message : "Could not send the email");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="card flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
+      <p>
+        <span className="font-semibold">Verify your email.</span> Check your inbox for the link.
+        Team invites need a verified email.
+      </p>
+      <div className="flex items-center gap-3">
+        {message ? <span className="text-[var(--velo-muted)]">{message}</span> : null}
+        <button className="btn btn-secondary" disabled={busy} onClick={resend} type="button">
+          Resend email
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function PostbackKeyControls({ onChange }: { onChange: () => void }) {
+  const [settings, setSettings] = useState<PostbackKey | null>(null);
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    api
+      .postbackKey()
+      .then(({ postback_key }) => setSettings(postback_key))
+      .catch(() => setSettings(null));
+  }, []);
+
+  async function update(action: () => Promise<{ postback_key: PostbackKey }>) {
+    setBusy(true);
+    setError("");
+    try {
+      const { postback_key } = await action();
+      setSettings(postback_key);
+      onChange();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update postback key");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!settings) return null;
+
+  return (
+    <div className="space-y-2 rounded-md border border-[var(--velo-border)] p-3 text-sm">
+      <p>
+        Postback key <span className="mono break-all">{settings.key}</span> (account-wide,
+        sent as <code>&amp;key=</code>). Without a valid key, payouts are capped to the offer
+        payout.
+      </p>
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="flex items-center gap-2">
+          <input
+            checked={settings.required}
+            disabled={busy}
+            onChange={(e) => {
+              const required = e.target.checked;
+              void update(() => api.setPostbackKeyRequired(required));
+            }}
+            type="checkbox"
+          />
+          Reject postbacks without the key
+        </label>
+        <button
+          className="underline"
+          disabled={busy}
+          onClick={() => {
+            if (window.confirm("Rotate the key? Postback URLs with the old key stop working.")) {
+              void update(() => api.rotatePostbackKey());
+            }
+          }}
+          type="button"
+        >
+          Rotate key
+        </button>
+      </div>
+      <ErrorBox message={error} />
     </div>
   );
 }

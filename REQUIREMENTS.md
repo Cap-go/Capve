@@ -19,15 +19,16 @@ A Capve instance lets a user:
 
 | Requirement | Implementation |
 | --- | --- |
-| Auth | Email/password sessions (`worker/lib/session.ts`, `worker/lib/access.ts`); `AUTH_SECRET` is a Worker secret in production |
+| Auth | Email/password sessions (`worker/lib/session.ts`, `worker/lib/access.ts`); `AUTH_SECRET` is a Worker secret in production; new accounts verify their email (`/verify-email`); password reset and "sign out everywhere" revoke sessions (`users.session_version`); login/register/forgot-password rate limited (`ratelimits` bindings) |
+| Email-matched access | Team invites and `PLATFORM_ADMIN_EMAILS` only apply to verified emails |
 | Teams | Owner invites by email; invite applies only after the invitee accepts |
 | Click redirect | `/r/:code`, `/c/:key` → path target; appends `click_id` + `velo_ref`; paused campaigns 404 |
 | Click context | country/region/city/ISP from `request.cf`, device/OS/browser from UA, `sub1`–`sub10`, external `clickid`, per-click `cost`, unique + bot flags |
 | URL macros | `{clickid}`/`{click_id}`, `{campaign_id}`, `{offer_id}`, `{lander_id}`, `{country}`, `{external_id}`, `{sub1}`–`{sub10}`, `{lp_click_url}` |
 | LP click | `/lp/:clickId` marks the LP click and redirects to the click's offer |
-| Postback | `GET /click?cnv_id=&payout=&cnv_status=&tx_id=&event=`; repeat for same click (and event) updates status/payout; no payout → offer payout (events: 0) |
+| Postback | `GET /click?cnv_id=&payout=&cnv_status=&tx_id=&event=&key=`; repeat for same click (and event) updates status/payout; no payout → offer payout (events: 0); per-account postback key: without a valid key payout is capped to the offer payout, and with enforcement on keyless postbacks get 403 |
 | Conversion events | `event=registration`, `event=ftd`, … each recorded as its own conversion; per-event counts in stats, reports and CSV |
-| Outgoing postbacks | Many per campaign (all statuses), traffic source (approved, `postback_percent`) and network (approved, offer's network); each optionally limited to one event |
+| Outgoing postbacks | Many per campaign (all statuses), traffic source (once on becoming approved, `postback_percent`) and network (once on becoming approved, offer's network); pending/hold are not approved; each optionally limited to one event |
 | Convert API | `POST /api/v1/convert` with `X-Program-Secret`; CORS enabled; idempotent by `(program_id, order_id)` |
 | Reports | `/api/reports/*` incl. `/grouped?by=` (country, device, OS, browser, ISP, offer, lander, path, traffic source, sub1–sub10, date…); rejected statuses excluded from revenue |
 | MCP | `POST /mcp` (Streamable HTTP, stateless JSON-RPC) in `worker/mcp/`; each tool replays an `/api` route with the bearer token; tokens in `api_tokens` (hash only), managed at `/api/tokens` with a session cookie only |
@@ -49,8 +50,9 @@ Tracking and API paths are listed in `assets.run_worker_first` in `wrangler.toml
 
 - **One-click:** [Deploy to Cloudflare](https://deploy.workers.cloudflare.com/?url=https://github.com/Cap-go/Capve) provisions Worker + D1.
 - Set the session secret: `bunx wrangler secret put AUTH_SECRET` (32+ chars).
-- Optional: `PLATFORM_ADMIN_EMAILS` var; register that account right after deploy.
-- Optional: Cloudflare Email Service `send_email` binding for password-reset emails.
+- Optional: `PLATFORM_ADMIN_EMAILS` var; register and verify that account right after deploy.
+- Cloudflare Email Service `send_email` binding for password-reset and verification emails (needed for team invites and platform admin, which require a verified email).
+- `ratelimits` bindings (`AUTH_IP_LIMITER`, `AUTH_EMAIL_LIMITER`) for `/api/auth`; optional, auth is not limited without them.
 
 ### Tests (`bun run test`)
 

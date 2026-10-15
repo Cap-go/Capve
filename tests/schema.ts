@@ -6,6 +6,9 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT,
   email_verified INTEGER NOT NULL DEFAULT 0,
   is_platform_admin INTEGER NOT NULL DEFAULT 0,
+  session_version INTEGER NOT NULL DEFAULT 0,
+  postback_key TEXT,
+  postback_key_required INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 );
 

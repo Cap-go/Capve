@@ -19,7 +19,8 @@ import {
   buildTrackingUrl,
   parseHttpUrl,
 } from "../lib/urls";
-import { requireUser, requireWrite } from "../lib/access";
+import { canWrite, requireUser, requireWrite } from "../lib/access";
+import { ensurePostbackKey } from "../db/postback-key";
 
 const programs = new Hono<{ Bindings: Env }>();
 
@@ -168,9 +169,13 @@ programs.get("/:id/tracking", async (c) => {
   const program = await getProgram(c.env.DB, c.req.param("id"), session.account_id);
   if (!program) return c.json({ error: "Not found" }, 404);
 
+  // The postback key lets anyone record conversions: only owners/admins see it.
+  const postbackKey = await ensurePostbackKey(c.env.DB, session.account_id);
+  const showKey = canWrite(session.role);
   return c.json({
     tracking: {
-      postback_url: buildPostbackUrl(c.env.APP_URL),
+      postback_url: buildPostbackUrl(c.env.APP_URL, showKey ? postbackKey.key : undefined),
+      postback_key_required: postbackKey.required,
       campaign_url: program.campaign_key
         ? buildCampaignUrl(c.env.APP_URL, program.campaign_key)
         : null,

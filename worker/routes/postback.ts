@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { getOfferForUser, getTrackedClick } from "../db/queries";
+import { getPostbackKey, postbackKeyMatches } from "../db/postback-key";
 import { createConversion, resolveAffiliateFromClick } from "../lib/conversion";
 import { normalizeEvent } from "../lib/postback";
 import type { Env } from "../types";
@@ -37,6 +38,14 @@ postback.get("/", async (c) => {
   }
 
   const { click, program, affiliate } = resolved;
+
+  // Click ids are visible to visitors, so the account's postback key gates trust:
+  // enforced -> reject without it; otherwise keyless postbacks are capped to the offer payout.
+  const keySettings = await getPostbackKey(c.env.DB, program.user_id);
+  const keyValid = postbackKeyMatches(keySettings?.postback_key, c.req.query("key")?.trim());
+  if (keySettings?.postback_key_required === 1 && !keyValid) {
+    return c.text("invalid postback key", 403);
+  }
   const explicitStatus = c.req.query("cnv_status")?.trim() || undefined;
   const status2 = c.req.query("cnv_status2")?.trim() || null;
   const currency = c.req.query("cnv_currency")?.trim() || "USD";
@@ -52,15 +61,18 @@ postback.get("/", async (c) => {
 
   // No payout on a plain postback → fall back to the clicked offer's payout.
   // Events (registration, ftd, ...) only carry the payout they send.
+  const needsOffer = (payout === undefined && !event) || (payout !== undefined && !keyValid);
+  const tracked = needsOffer ? await getTrackedClick(c.env.DB, click.id) : null;
+  const offer = tracked?.offer_id
+    ? await getOfferForUser(c.env.DB, tracked.offer_id, program.user_id)
+    : null;
   let amount = payout;
   if (amount === undefined && event) {
     amount = 0;
   } else if (amount === undefined) {
-    const tracked = await getTrackedClick(c.env.DB, click.id);
-    const offer = tracked?.offer_id
-      ? await getOfferForUser(c.env.DB, tracked.offer_id, program.user_id)
-      : null;
     amount = (offer?.payout_cents ?? 0) / 100;
+  } else if (!keyValid && offer?.payout_cents) {
+    amount = Math.min(amount, offer.payout_cents / 100);
   }
 
   const result = await createConversion(c.env.DB, program, affiliate, {

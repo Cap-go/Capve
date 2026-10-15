@@ -16,6 +16,9 @@ export type Env = {
   EMAIL?: EmailBinding;
   EMAIL_FROM?: string;
   PLATFORM_ADMIN_EMAILS?: string;
+  /** Workers Rate Limiting bindings for /api/auth; missing = no limit (tests, old installs). */
+  AUTH_IP_LIMITER?: RateLimit;
+  AUTH_EMAIL_LIMITER?: RateLimit;
 };
 
 export type User = {
@@ -24,6 +27,7 @@ export type User = {
   name: string | null;
   email_verified: number;
   is_platform_admin: number;
+  session_version: number;
   created_at: number;
 };
 

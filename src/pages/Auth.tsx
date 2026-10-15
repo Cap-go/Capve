@@ -1,4 +1,4 @@
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { ErrorBox, Field, Shell } from "../components/ui";
 import { api } from "../lib/api";
@@ -192,6 +192,55 @@ export function ResetPasswordPage() {
             {busy ? "Saving…" : "Update password"}
           </button>
         </form>
+      </div>
+    </Shell>
+  );
+}
+
+export function VerifyEmailPage() {
+  const { refresh } = useAuth();
+  const token = new URLSearchParams(window.location.search).get("token") ?? "";
+  const [state, setState] = useState<"working" | "done" | "error">(token ? "working" : "error");
+  const [error, setError] = useState(token ? "" : "Missing verification token.");
+  const started = useRef(false);
+
+  useEffect(() => {
+    if (!token || started.current) return;
+    started.current = true;
+    api
+      .verifyEmail(token)
+      .then(async () => {
+        await refresh();
+        setState("done");
+      })
+      .catch((err) => {
+        setError(err instanceof Error ? err.message : "Verification failed");
+        setState("error");
+      });
+  }, [token]);
+
+  return (
+    <Shell cta={<Link className="btn btn-ghost" to="/app">Dashboard</Link>}>
+      <div className="mx-auto max-w-md px-6 py-16">
+        <h1 className="text-3xl font-semibold">Verify email</h1>
+        {state === "working" ? (
+          <p className="mt-4 text-[var(--velo-muted)]">Verifying…</p>
+        ) : state === "done" ? (
+          <p className="mt-4">
+            Your email is verified.{" "}
+            <Link className="underline" to="/app">
+              Open your dashboard
+            </Link>
+            .
+          </p>
+        ) : (
+          <div className="mt-4 space-y-3">
+            <ErrorBox message={error} />
+            <p className="text-sm text-[var(--velo-muted)]">
+              Sign in and use “Resend email” on the dashboard to get a new link.
+            </p>
+          </div>
+        )}
       </div>
     </Shell>
   );

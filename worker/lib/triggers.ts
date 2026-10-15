@@ -20,6 +20,6 @@ function substituteMacros(
 ): string {
   return template.replace(/\{([a-z_]+)\}/g, (_, key: string) => {
     const value = payload[key];
-    return value == null ? "" : String(value);
+    return value == null ? "" : encodeURIComponent(String(value));
   });
 }

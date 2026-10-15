@@ -374,6 +374,10 @@ describe("binom parity", () => {
 
     const { location, clickId } = await click(affiliate.code);
     expect(location.hostname).toBe("offer.example.com");
+    // Payouts above the offer payout need the account postback key.
+    const { postback_key } = await json<{ postback_key: { key: string } }>(
+      await SELF.fetch("http://localhost/api/ops/postback-key", { headers: authHeaders }),
+    );
 
     tsPostbacks.length = 0;
     const reg = await postback(`cnv_id=${clickId}&event=registration`);
@@ -386,11 +390,15 @@ describe("binom parity", () => {
     ]);
 
     tsPostbacks.length = 0;
-    expect((await postback(`cnv_id=${clickId}&event=ftd&payout=100`)).status).toBe("created");
+    expect(
+      (await postback(`cnv_id=${clickId}&event=ftd&payout=100&key=${postback_key.key}`)).status,
+    ).toBe("created");
     expect(tsPostbacks.sort()).toEqual(["/camp?e=ftd&s=lead", "/net-ftd?p=100"]);
 
     tsPostbacks.length = 0;
-    expect((await postback(`cnv_id=${clickId}&event=ftd&payout=100`)).status).toBe("duplicate");
+    expect(
+      (await postback(`cnv_id=${clickId}&event=ftd&payout=100&key=${postback_key.key}`)).status,
+    ).toBe("duplicate");
     expect(tsPostbacks).toHaveLength(0);
 
     const bad = await SELF.fetch(`http://localhost/click?cnv_id=${clickId}&event=bad%20event`);

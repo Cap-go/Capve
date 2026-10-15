@@ -6,6 +6,13 @@ export type User = {
   role?: TeamRole;
   account_id?: string;
   is_platform_admin?: boolean;
+  email_verified?: boolean;
+};
+
+export type PostbackKey = {
+  key: string;
+  required: boolean;
+  postback_url: string;
 };
 
 export type PlatformOverview = {
@@ -173,6 +180,7 @@ export type ConversionLogRow = {
 
 export type ProgramTracking = {
   postback_url: string;
+  postback_key_required?: boolean;
   campaign_url: string | null;
   offer_url_macro: string;
   redirect_params: string[];
@@ -335,6 +343,24 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ token, password }),
     }),
+  verifyEmail: (token: string) =>
+    request<{ ok: boolean }>("/api/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+  resendVerification: () =>
+    request<{ ok: boolean; already_verified?: boolean }>("/api/auth/resend-verification", {
+      method: "POST",
+    }),
+  logoutAll: () => request<{ ok: boolean }>("/api/auth/logout-all", { method: "POST" }),
+  postbackKey: () => request<{ postback_key: PostbackKey }>("/api/ops/postback-key"),
+  setPostbackKeyRequired: (required: boolean) =>
+    request<{ postback_key: PostbackKey }>("/api/ops/postback-key", {
+      method: "PUT",
+      body: JSON.stringify({ required }),
+    }),
+  rotatePostbackKey: () =>
+    request<{ postback_key: PostbackKey }>("/api/ops/postback-key/rotate", { method: "POST" }),
   programs: () => request<{ programs: Program[] }>("/api/programs"),
   createProgram: (name: string, destinationUrl: string) =>
     request<{ program: Program; convert_secret: string }>("/api/programs", {
