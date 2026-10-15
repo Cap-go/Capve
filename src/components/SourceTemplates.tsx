@@ -434,13 +434,14 @@ export function CampaignSourcePanel({ programId, canWrite }: { programId: string
     }
   }
 
+  // A source token can be named like a built-in filter (e.g. Adcash `country`): keep the first.
   const filterOptions = [
     ...(link?.tokens ?? [])
       .filter((t) => t.slot !== "cost")
       .map((t) => ({ value: t.param, label: `${t.name} (${t.param})` })),
     ...Array.from({ length: 10 }, (_, i) => ({ value: `sub${i + 1}`, label: `sub${i + 1}` })),
     { value: "country", label: "Country" },
-  ];
+  ].filter((option, index, all) => all.findIndex((o) => o.value === option.value) === index);
 
   return (
     <div className="card p-5">

@@ -171,7 +171,7 @@ export function RoutingRules({ programId, canWrite = true }: { programId: string
                 <span className="ml-2 text-xs text-[var(--velo-muted)]">{rule.timezone}</span>
               </div>
               {canWrite && (
-                <div className="space-x-2 whitespace-nowrap">
+                <div className="flex flex-wrap gap-2">
                   <button className="btn btn-secondary text-xs" disabled={busy || index === 0} onClick={() => move(rule, -1)} type="button">
                     Up
                   </button>
