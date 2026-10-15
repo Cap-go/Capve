@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import {
+  EXPORT_MAX_ROWS,
   exportClickLogCsv,
   exportConversionsCsv,
   getCampaignTrends,
@@ -9,27 +10,92 @@ import {
   listCampaignReports,
 } from "../db/reports";
 import type { Env } from "../types";
-import { parseReportFilters, toCsv } from "../lib/metrics";
+import { csvEscape, toCsv, type EventMetrics } from "../lib/metrics";
+import { zonedReportFilters } from "../lib/report-range";
 import { requireUser } from "../lib/access";
 
 const reports = new Hono<{ Bindings: Env }>();
+
+/** Streams CSV pages so large exports never sit in memory as one string. */
+function streamCsv(
+  headers: string[],
+  pages: AsyncGenerator<Array<Array<string | number>>>,
+  filename: string,
+): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(`${headers.join(",")}\n`));
+    },
+    async pull(controller) {
+      try {
+        const { value, done } = await pages.next();
+        if (done) {
+          controller.close();
+          return;
+        }
+        const lines = value.map((row) => row.map((cell) => csvEscape(cell)).join(","));
+        controller.enqueue(encoder.encode(`${lines.join("\n")}\n`));
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    async cancel() {
+      await pages.return(undefined);
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "X-Export-Row-Limit": String(EXPORT_MAX_ROWS),
+    },
+  });
+}
 
 /** Event names present in report rows, for one CSV column per event. */
 function eventNames(rows: Array<{ events: Record<string, number> }>): string[] {
   return [...new Set(rows.flatMap((row) => Object.keys(row.events)))].sort();
 }
 
+type CsvMetricsRow = {
+  events: Record<string, number>;
+  event_metrics: Record<string, EventMetrics>;
+  revenue_by_currency: Record<string, number>;
+};
+
+const money = (cents: number | null | undefined) => (cents == null ? "" : (cents / 100).toFixed(2));
+
+/** Per-event columns (count, revenue, CR, CPA) and, with several currencies, revenue per currency. */
+function extraColumns(rows: CsvMetricsRow[]) {
+  const events = eventNames(rows);
+  const currencies = [...new Set(rows.flatMap((row) => Object.keys(row.revenue_by_currency)))].sort();
+  const multiCurrency = currencies.length > 1;
+  return {
+    headers: [
+      ...events.flatMap((event) => [event, `${event} Revenue`, `${event} CR %`, `${event} CPA`]),
+      ...(multiCurrency ? currencies.map((currency) => `Revenue ${currency}`) : []),
+    ],
+    values: (row: CsvMetricsRow) => [
+      ...events.flatMap((event) => {
+        const metrics = row.event_metrics[event];
+        return [
+          metrics?.count ?? 0,
+          money(metrics?.revenue_cents ?? 0),
+          metrics?.cr ?? 0,
+          money(metrics?.cpa_cents),
+        ];
+      }),
+      ...(multiCurrency ? currencies.map((currency) => money(row.revenue_by_currency[currency] ?? 0)) : []),
+    ],
+  };
+}
+
 reports.get("/campaigns", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
 
-  const filters = parseReportFilters({
-    from: c.req.query("from"),
-    to: c.req.query("to"),
-    group_id: c.req.query("group_id"),
-    traffic_source_id: c.req.query("traffic_source_id"),
-    status: c.req.query("status"),
-  });
+  const filters = await zonedReportFilters(c.env.DB, session.account_id, (k) => c.req.query(k));
 
   const campaigns = await listCampaignReports(c.env.DB, session.account_id, filters);
   return c.json({ campaigns });
@@ -39,16 +105,11 @@ reports.get("/campaigns.csv", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
 
-  const filters = parseReportFilters({
-    from: c.req.query("from"),
-    to: c.req.query("to"),
-    group_id: c.req.query("group_id"),
-    traffic_source_id: c.req.query("traffic_source_id"),
-    status: c.req.query("status"),
-  });
+  const filters = await zonedReportFilters(c.env.DB, session.account_id, (k) => c.req.query(k));
 
   const campaigns = await listCampaignReports(c.env.DB, session.account_id, filters);
-  const events = eventNames(campaigns);
+  const extra = extraColumns(campaigns);
+  const currency = campaigns[0]?.currency ?? "USD";
   const rows = campaigns.map((row) => [
     row.name,
     row.campaign_key ?? row.slug,
@@ -63,10 +124,10 @@ reports.get("/campaigns.csv", async (c) => {
     (row.metrics.revenue_cents / 100).toFixed(2),
     (row.metrics.cost_cents / 100).toFixed(2),
     (row.metrics.profit_cents / 100).toFixed(2),
-    row.metrics.roi,
+    row.metrics.roi ?? "",
     (row.metrics.epc_cents / 100).toFixed(2),
     (row.metrics.cpc_cents / 100).toFixed(2),
-    ...events.map((event) => row.events[event] ?? 0),
+    ...extra.values(row),
   ]);
 
   const csv = toCsv(
@@ -79,15 +140,15 @@ reports.get("/campaigns.csv", async (c) => {
       "Clicks",
       "LP Clicks",
       "LP CTR %",
-      "Leads",
+      "Conversions",
       "CR %",
-      "Revenue",
+      `Revenue (${currency})`,
       "Cost",
       "Profit",
       "ROI %",
       "EPC",
       "CPC",
-      ...events,
+      ...extra.headers,
     ],
     rows,
   );
@@ -111,13 +172,7 @@ async function groupedReport(c: Context<{ Bindings: Env }>) {
     };
   }
 
-  const filters = parseReportFilters({
-    from: c.req.query("from"),
-    to: c.req.query("to"),
-    group_id: c.req.query("group_id"),
-    traffic_source_id: c.req.query("traffic_source_id"),
-    status: c.req.query("status"),
-  });
+  const filters = await zonedReportFilters(c.env.DB, session.account_id, (k) => c.req.query(k));
   const campaignId = c.req.query("campaign_id")?.trim() || undefined;
   const rows = await getGroupedReport(c.env.DB, session.account_id, by, {
     ...filters,
@@ -136,7 +191,8 @@ reports.get("/grouped", async (c) => {
 reports.get("/grouped.csv", async (c) => {
   const result = await groupedReport(c);
   if ("error" in result) return result.error;
-  const events = eventNames(result.rows);
+  const extra = extraColumns(result.rows);
+  const currency = result.rows[0]?.currency ?? "USD";
   const csv = toCsv(
     [
       result.by,
@@ -146,12 +202,12 @@ reports.get("/grouped.csv", async (c) => {
       "LP Clicks",
       "Conversions",
       "CR %",
-      "Revenue",
+      `Revenue (${currency})`,
       "Cost",
       "Profit",
       "ROI %",
       "EPC",
-      ...events,
+      ...extra.headers,
     ],
     result.rows.map((row) => [
       row.label,
@@ -164,9 +220,9 @@ reports.get("/grouped.csv", async (c) => {
       (row.metrics.revenue_cents / 100).toFixed(2),
       (row.metrics.cost_cents / 100).toFixed(2),
       (row.metrics.profit_cents / 100).toFixed(2),
-      row.metrics.roi,
+      row.metrics.roi ?? "",
       (row.metrics.epc_cents / 100).toFixed(2),
-      ...events.map((event) => row.events[event] ?? 0),
+      ...extra.values(row),
     ]),
   );
   return new Response(csv, {
@@ -181,9 +237,8 @@ reports.get("/campaigns/:id/trends", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
 
-  const filters = parseReportFilters({
-    from: c.req.query("from"),
-    to: c.req.query("to"),
+  const filters = await zonedReportFilters(c.env.DB, session.account_id, (k) => c.req.query(k), {
+    onlyRange: true,
   });
 
   const trends = await getCampaignTrends(c.env.DB, c.req.param("id"), session.account_id, filters);
@@ -197,13 +252,11 @@ reports.get("/clicks.csv", async (c) => {
   const programId = c.req.query("program_id");
   if (!programId) return c.json({ error: "program_id required" }, 400);
 
-  const filters = parseReportFilters({
-    from: c.req.query("from"),
-    to: c.req.query("to"),
+  const filters = await zonedReportFilters(c.env.DB, session.account_id, (k) => c.req.query(k), {
+    onlyRange: true,
   });
 
-  const rows = await exportClickLogCsv(c.env.DB, programId, session.account_id, filters);
-  const csv = toCsv(
+  return streamCsv(
     [
       "click_id",
       "time",
@@ -215,15 +268,9 @@ reports.get("/clicks.csv", async (c) => {
       "path_id",
       "converted",
     ],
-    rows,
+    exportClickLogCsv(c.env.DB, programId, session.account_id, filters),
+    "clicklog.csv",
   );
-
-  return new Response(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="clicklog.csv"',
-    },
-  });
 });
 
 reports.get("/conversions.csv", async (c) => {
@@ -233,13 +280,11 @@ reports.get("/conversions.csv", async (c) => {
   const programId = c.req.query("program_id");
   if (!programId) return c.json({ error: "program_id required" }, 400);
 
-  const filters = parseReportFilters({
-    from: c.req.query("from"),
-    to: c.req.query("to"),
+  const filters = await zonedReportFilters(c.env.DB, session.account_id, (k) => c.req.query(k), {
+    onlyRange: true,
   });
 
-  const rows = await exportConversionsCsv(c.env.DB, programId, session.account_id, filters);
-  const csv = toCsv(
+  return streamCsv(
     [
       "order_id",
       "click_id",
@@ -252,15 +297,9 @@ reports.get("/conversions.csv", async (c) => {
       "affiliate_code",
       "affiliate_name",
     ],
-    rows,
+    exportConversionsCsv(c.env.DB, programId, session.account_id, filters),
+    "conversions.csv",
   );
-
-  return new Response(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="conversions.csv"',
-    },
-  });
 });
 
 export { reports };

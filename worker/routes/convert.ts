@@ -7,6 +7,7 @@ import {
   resolveAffiliateFromClick,
 } from "../lib/conversion";
 import { normalizeEvent } from "../lib/postback";
+import { backgroundTasks } from "../lib/background";
 import type { Env } from "../types";
 import { readAffiliateCookie } from "../lib/auth";
 
@@ -30,7 +31,7 @@ convert.post("/", async (c) => {
 
   const program = await getProgramByConvertSecret(c.env.DB, secret);
   if (!program) {
-    return c.json({ error: "Invalid program secret" }, 401);
+    return c.json({ error: "Invalid campaign secret" }, 401);
   }
 
   const body = await c.req.json<{
@@ -65,7 +66,7 @@ convert.post("/", async (c) => {
   if (clickId) {
     const resolved = await resolveAffiliateFromClick(c.env.DB, clickId, program.id);
     if (!resolved) {
-      return c.json({ error: "Click not found for this program" }, 404);
+      return c.json({ error: "Click not found for this campaign" }, 404);
     }
     affiliate = resolved.affiliate;
     resolvedClickId = resolved.click.id;
@@ -77,7 +78,7 @@ convert.post("/", async (c) => {
     }
     const resolved = await resolveAffiliateByCode(c.env.DB, program.id, affiliateCode);
     if (!resolved) {
-      return c.json({ error: "Affiliate not found for this program" }, 404);
+      return c.json({ error: "Affiliate not found for this campaign" }, 404);
     }
     affiliate = resolved.affiliate;
   }
@@ -93,7 +94,7 @@ convert.post("/", async (c) => {
     event,
     currency: body.currency?.trim() || "USD",
     disable_s2s: body.disable_postback === true,
-  });
+  }, backgroundTasks(c));
 
   return c.json({ ok: true, ...result });
 });

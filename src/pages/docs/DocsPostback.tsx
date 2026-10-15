@@ -3,8 +3,8 @@ import { appBaseUrl } from "../../lib/constants";
 
 export function DocsPostback() {
   const base = appBaseUrl();
-  const postbackUrl = `${base}/click?cnv_id={click_id}&payout={payout}&cnv_status={status}`;
-  const networkPostback = `${base}/click?cnv_id={external_id}&payout={sum}&cnv_status=approved`;
+  const postbackUrl = `${base}/click?cnv_id={click_id}&payout={payout}&cnv_status={status}&key=YOUR_POSTBACK_KEY`;
+  const networkPostback = `${base}/click?cnv_id={external_id}&payout={sum}&cnv_status=approved&key=YOUR_POSTBACK_KEY`;
 
   return (
     <article className="prose prose-invert max-w-none">
@@ -19,6 +19,24 @@ export function DocsPostback() {
       <h2>Incoming postback (network → Capve)</h2>
       <p>Configure this URL in your affiliate network as the conversion postback:</p>
       <CodeBlock>{postbackUrl}</CodeBlock>
+
+      <h3>Postback key</h3>
+      <p>
+        Click IDs end up in visitors&apos; URLs, so anyone could call the postback with one. Each
+        account has a postback key, shown in the campaign&apos;s <em>Tracking &amp; postback</em>{" "}
+        card (owners and admins), where you can also rotate it. Pass it as <code>key</code>:
+      </p>
+      <ul>
+        <li>
+          Without a valid key, the payout is capped to the clicked offer&apos;s payout (when the
+          offer has one).
+        </li>
+        <li>
+          Turn on <em>Reject postbacks without the key</em> once every network URL includes it:
+          postbacks with a missing or wrong key then get <code>403</code>.
+        </li>
+        <li>Rotating the key invalidates the old one immediately.</li>
+      </ul>
 
       <h3>Parameters</h3>
       <table className="table">
@@ -38,6 +56,16 @@ export function DocsPostback() {
             <td>
               Click ID from the tracking link (<code>clk_…</code>). Also accepted as{" "}
               <code>click_id</code>.
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <code>key</code>
+            </td>
+            <td>Recommended</td>
+            <td>
+              Account postback key. Required when key enforcement is on; without it payouts are
+              capped to the offer payout.
             </td>
           </tr>
           <tr>
@@ -120,15 +148,25 @@ ${postbackUrl}&event=ftd`}</CodeBlock>
           <tr>
             <td>Traffic source</td>
             <td>
-              Approved conversions of campaigns using the source, sampled by its postback %
+              Once, when a conversion of a campaign using the source becomes approved, sampled by
+              its postback %
             </td>
           </tr>
           <tr>
             <td>Affiliate network</td>
-            <td>Approved conversions of clicks sent to one of the network&apos;s offers</td>
+            <td>
+              Once, when a conversion of a click sent to one of the network&apos;s offers becomes
+              approved
+            </td>
           </tr>
         </tbody>
       </table>
+      <p>
+        Approved means not rejected and not <code>pending</code> or <code>hold</code>. A
+        conversion that arrives as <code>pending</code> fires source and network postbacks when a
+        later postback moves it to an approved status (e.g. <code>sale</code>). Later payout or
+        status updates of an already approved conversion do not fire them again.
+      </p>
       <p>
         Macros: <code>{"{click_id}"}</code> (also <code>{"{clickid}"}</code>),{" "}
         <code>{"{external_id}"}</code> = the source&apos;s click ID captured from{" "}

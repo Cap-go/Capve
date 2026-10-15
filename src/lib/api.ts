@@ -6,6 +6,13 @@ export type User = {
   role?: TeamRole;
   account_id?: string;
   is_platform_admin?: boolean;
+  email_verified?: boolean;
+};
+
+export type PostbackKey = {
+  key: string;
+  required: boolean;
+  postback_url: string;
 };
 
 export type PlatformOverview = {
@@ -110,6 +117,19 @@ export type Postback = {
   created_at: number;
 };
 
+/** One outgoing postback attempt (1 = first try, 2 = retry). */
+export type PostbackDelivery = {
+  id: string;
+  postback_id: string;
+  conversion_id: string | null;
+  url: string;
+  status_code: number | null;
+  error: string | null;
+  attempt: number;
+  ok: boolean;
+  created_at: number;
+};
+
 export type PostbackOwner =
   | { campaign_id: string }
   | { traffic_source_id: string }
@@ -173,9 +193,12 @@ export type ConversionLogRow = {
 
 export type ProgramTracking = {
   postback_url: string;
+  postback_key_required?: boolean;
   campaign_url: string | null;
   offer_url_macro: string;
   redirect_params: string[];
+  /** Custom tracking domain used for this campaign's links, if any. */
+  tracking_domain?: { id: string; hostname: string } | null;
 };
 
 export type RotationMode = "normal" | "smart" | "fix_on" | "top_to_bottom";
@@ -197,6 +220,51 @@ export type Path = {
   lander_name: string | null;
   offer_url: string | null;
   offer_name: string | null;
+  rule_id?: string | null;
+  landers?: PathItem[];
+  offers?: PathItem[];
+};
+
+export type PathItem = { id: string; weight: number; url: string; name: string };
+
+export type RuleOperator = "in" | "not_in";
+
+export type RuleCondition = { field: string; op: RuleOperator; values: string[] };
+
+export type RoutingRule = {
+  id: string;
+  program_id: string;
+  name: string;
+  sort_order: number;
+  conditions: RuleCondition[];
+  timezone: string;
+  enabled: boolean;
+  created_at: number;
+  paths: Path[];
+};
+
+export type TrafficFilter = {
+  program_id: string;
+  bot_action: "route" | "safe_page";
+  safe_page_url: string | null;
+  block_datacenter: boolean;
+};
+
+export type BlocklistKind = "ip" | "asn" | "ua";
+
+export type BlocklistEntry = { id: string; kind: BlocklistKind; value: string; created_at: number };
+
+export type PathInput = {
+  name: string;
+  flow_type: FlowType;
+  weight?: number;
+  sort_order?: number;
+  direct_url?: string | null;
+  lander_id?: string | null;
+  offer_id?: string | null;
+  rule_id?: string | null;
+  landers?: { lander_id: string; weight: number }[];
+  offers?: { offer_id: string; weight: number }[];
 };
 
 export type Rotation = {
@@ -210,10 +278,14 @@ export type Rotation = {
 export type RotationConfig = {
   rotation: Rotation;
   paths: Path[];
+  rules?: RoutingRule[];
 };
 
 export type CampaignMetrics = {
+  /** All clicks, bots included. */
   clicks: number;
+  /** Bot clicks: no cost, left out of CR / EPC / CPC. */
+  bot_clicks: number;
   lp_clicks: number;
   leads: number;
   revenue_cents: number;
@@ -223,7 +295,23 @@ export type CampaignMetrics = {
   cr: number;
   epc_cents: number;
   cpc_cents: number;
-  roi: number;
+  /** null when there is no cost. */
+  roi: number | null;
+};
+
+/** Per-event metrics: count, revenue, CR (count / clicks) and cost per event. */
+export type EventMetrics = {
+  count: number;
+  revenue_cents: number;
+  cr: number;
+  cpa_cents: number | null;
+};
+
+type CurrencyFields = {
+  event_metrics: Record<string, EventMetrics>;
+  /** Currency of `revenue_cents`. */
+  currency: string;
+  revenue_by_currency: Record<string, number>;
 };
 
 export type CampaignReportRow = Program & {
@@ -233,7 +321,7 @@ export type CampaignReportRow = Program & {
   default_cost_cents: number;
   metrics: CampaignMetrics;
   events: EventCounts;
-};
+} & CurrencyFields;
 
 export type TrendPoint = {
   date: string;
@@ -252,7 +340,7 @@ export type GroupedReportRow = {
   bot_clicks: number;
   metrics: CampaignMetrics;
   events: EventCounts;
-};
+} & CurrencyFields;
 
 export type ReportFilters = {
   from?: number;
@@ -272,25 +360,32 @@ export type Affiliate = {
 
 export type AffiliateStats = Affiliate & {
   clicks: number;
+  bots: number;
   conversions: number;
   revenue_cents: number;
   conversion_rate: number;
   events: EventCounts;
+  event_metrics: Record<string, EventMetrics>;
+  revenue_by_currency: Record<string, number>;
 };
 
 export type ProgramStats = {
   program: Program;
   totals: {
     clicks: number;
+    bots: number;
     conversions: number;
     revenue_cents: number;
     conversion_rate: number;
     events: EventCounts;
+    event_metrics: Record<string, EventMetrics>;
+    revenue_by_currency: Record<string, number>;
   };
+  currency: string;
   affiliates: AffiliateStats[];
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     credentials: "include",
     headers: {
@@ -305,6 +400,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error((data as { error?: string }).error ?? "Request failed");
   }
   return data as T;
+}
+
+/** Paging and created_at window (Unix ms) for click/conversion logs. */
+export type LogPage = { limit?: number; offset?: number; from?: number; to?: number };
+
+function logQuery(page: LogPage): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(page)) {
+    if (value != null) params.set(key, String(value));
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
 }
 
 export type ApiToken = {
@@ -335,24 +442,63 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ token, password }),
     }),
+  verifyEmail: (token: string) =>
+    request<{ ok: boolean }>("/api/auth/verify-email", {
+      method: "POST",
+      body: JSON.stringify({ token }),
+    }),
+  resendVerification: () =>
+    request<{ ok: boolean; already_verified?: boolean }>("/api/auth/resend-verification", {
+      method: "POST",
+    }),
+  logoutAll: () => request<{ ok: boolean }>("/api/auth/logout-all", { method: "POST" }),
+  postbackKey: () => request<{ postback_key: PostbackKey }>("/api/ops/postback-key"),
+  setPostbackKeyRequired: (required: boolean) =>
+    request<{ postback_key: PostbackKey }>("/api/ops/postback-key", {
+      method: "PUT",
+      body: JSON.stringify({ required }),
+    }),
+  rotatePostbackKey: () =>
+    request<{ postback_key: PostbackKey }>("/api/ops/postback-key/rotate", { method: "POST" }),
   programs: () => request<{ programs: Program[] }>("/api/programs"),
-  createProgram: (name: string, destinationUrl: string) =>
+  createProgram: (data: {
+    name: string;
+    destination_url?: string;
+    traffic_source_id?: string;
+    group_id?: string;
+  }) =>
     request<{ program: Program; convert_secret: string }>("/api/programs", {
       method: "POST",
-      body: JSON.stringify({ name, destination_url: destinationUrl || undefined }),
+      body: JSON.stringify({
+        name: data.name,
+        destination_url: data.destination_url || undefined,
+        traffic_source_id: data.traffic_source_id || undefined,
+        group_id: data.group_id || undefined,
+      }),
     }),
-  updateProgram: (programId: string, data: { name?: string; destination_url?: string | null }) =>
+  updateProgram: (
+    programId: string,
+    data: {
+      name?: string;
+      destination_url?: string | null;
+      traffic_source_id?: string | null;
+      group_id?: string | null;
+      status?: "active" | "paused";
+    },
+  ) =>
     request<{ program: Program }>(`/api/programs/${programId}`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+  deleteProgram: (programId: string) =>
+    request<{ ok: boolean }>(`/api/programs/${programId}`, { method: "DELETE" }),
   tracking: (programId: string) =>
     request<{ tracking: ProgramTracking }>(`/api/programs/${programId}/tracking`),
-  clicks: (programId: string, limit = 50) =>
-    request<{ clicks: ClickLogRow[] }>(`/api/programs/${programId}/clicks?limit=${limit}`),
-  conversions: (programId: string, limit = 50) =>
+  clicks: (programId: string, page: LogPage = {}) =>
+    request<{ clicks: ClickLogRow[] }>(`/api/programs/${programId}/clicks${logQuery(page)}`),
+  conversions: (programId: string, page: LogPage = {}) =>
     request<{ conversions: ConversionLogRow[] }>(
-      `/api/programs/${programId}/conversions?limit=${limit}`,
+      `/api/programs/${programId}/conversions${logQuery(page)}`,
     ),
   stats: (programId: string) => request<ProgramStats>(`/api/programs/${programId}/stats`),
   createAffiliate: (programId: string, name: string) =>
@@ -373,7 +519,24 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  updateTrafficSource: (
+    sourceId: string,
+    data: Partial<Pick<TrafficSource, "name" | "cost_type" | "default_cost_cents" | "postback_percent">>,
+  ) =>
+    request<{ traffic_source: TrafficSource }>(`/api/entities/traffic-sources/${sourceId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteTrafficSource: (sourceId: string) =>
+    request<{ ok: boolean }>(`/api/entities/traffic-sources/${sourceId}`, { method: "DELETE" }),
   networks: () => request<{ networks: AffiliateNetwork[] }>("/api/entities/networks"),
+  updateNetwork: (networkId: string, data: { name?: string }) =>
+    request<{ network: AffiliateNetwork }>(`/api/entities/networks/${networkId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteNetwork: (networkId: string) =>
+    request<{ ok: boolean }>(`/api/entities/networks/${networkId}`, { method: "DELETE" }),
   createNetwork: (data: { name: string }) =>
     request<{ network: AffiliateNetwork }>("/api/entities/networks", {
       method: "POST",
@@ -385,7 +548,24 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  updateLander: (landerId: string, data: { name?: string; url?: string }) =>
+    request<{ lander: Lander }>(`/api/entities/landers/${landerId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteLander: (landerId: string) =>
+    request<{ ok: boolean }>(`/api/entities/landers/${landerId}`, { method: "DELETE" }),
   offers: () => request<{ offers: Offer[] }>("/api/entities/offers"),
+  updateOffer: (
+    offerId: string,
+    data: { name?: string; url?: string; network_id?: string | null; payout_cents?: number },
+  ) =>
+    request<{ offer: Offer }>(`/api/entities/offers/${offerId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteOffer: (offerId: string) =>
+    request<{ ok: boolean }>(`/api/entities/offers/${offerId}`, { method: "DELETE" }),
   createOffer: (data: {
     name: string;
     url: string;
@@ -412,12 +592,16 @@ export const api = {
     }),
   deletePostback: (postbackId: string) =>
     request<{ ok: boolean }>(`/api/postbacks/${postbackId}`, { method: "DELETE" }),
+  postbackDeliveries: (postbackId: string) =>
+    request<{ deliveries: PostbackDelivery[] }>(`/api/postbacks/${postbackId}/deliveries?limit=10`),
   groups: () => request<{ groups: Group[] }>("/api/entities/groups"),
   createGroup: (name: string) =>
     request<{ group: Group }>("/api/entities/groups", {
       method: "POST",
       body: JSON.stringify({ name }),
     }),
+  deleteGroup: (groupId: string) =>
+    request<{ ok: boolean }>(`/api/entities/groups/${groupId}`, { method: "DELETE" }),
   rotation: (programId: string) =>
     request<RotationConfig>(`/api/programs/${programId}/rotation`),
   updateRotation: (programId: string, data: { mode?: RotationMode; fixed_path_id?: string | null }) =>
@@ -453,6 +637,8 @@ export const api = {
       lander_id: string | null;
       offer_id: string | null;
       enabled: boolean;
+      landers: { lander_id: string; weight: number }[];
+      offers: { offer_id: string; weight: number }[];
     }>,
   ) =>
     request<{ path: Path }>(`/api/programs/${programId}/paths/${pathId}`, {
@@ -463,6 +649,54 @@ export const api = {
     request<{ ok: boolean }>(`/api/programs/${programId}/paths/${pathId}`, {
       method: "DELETE",
     }),
+  createPathWithItems: (programId: string, data: PathInput) =>
+    request<{ path: Path }>(`/api/programs/${programId}/paths`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  rules: (programId: string) =>
+    request<{ rules: RoutingRule[] }>(`/api/programs/${programId}/rules`),
+  createRule: (
+    programId: string,
+    data: { name: string; conditions: RuleCondition[]; timezone?: string },
+  ) =>
+    request<{ rule: RoutingRule }>(`/api/programs/${programId}/rules`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateRule: (
+    programId: string,
+    ruleId: string,
+    data: Partial<{
+      name: string;
+      conditions: RuleCondition[];
+      timezone: string;
+      sort_order: number;
+      enabled: boolean;
+    }>,
+  ) =>
+    request<{ rule: RoutingRule }>(`/api/programs/${programId}/rules/${ruleId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteRule: (programId: string, ruleId: string) =>
+    request<{ ok: boolean }>(`/api/programs/${programId}/rules/${ruleId}`, { method: "DELETE" }),
+  trafficFilter: (programId: string) =>
+    request<{ filter: TrafficFilter }>(`/api/programs/${programId}/traffic-filter`),
+  updateTrafficFilter: (programId: string, data: Partial<Omit<TrafficFilter, "program_id">>) =>
+    request<{ filter: TrafficFilter }>(`/api/programs/${programId}/traffic-filter`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  blocklist: () =>
+    request<{ entries: BlocklistEntry[]; datacenter_asns: number[] }>("/api/antifraud/blocklist"),
+  addToBlocklist: (kind: BlocklistKind, values: string[]) =>
+    request<{ entries: BlocklistEntry[] }>("/api/antifraud/blocklist", {
+      method: "POST",
+      body: JSON.stringify({ kind, values }),
+    }),
+  removeFromBlocklist: (entryId: string) =>
+    request<{ ok: boolean }>(`/api/antifraud/blocklist/${entryId}`, { method: "DELETE" }),
   campaignReports: (filters: ReportFilters = {}) => {
     const params = new URLSearchParams();
     if (filters.from != null) params.set("from", String(filters.from));
@@ -540,7 +774,7 @@ export const api = {
     }),
   deleteTrigger: (triggerId: string) =>
     request<{ ok: boolean }>(`/api/ops/triggers/${triggerId}`, { method: "DELETE" }),
-  bulkUpdatePrograms: (programIds: string[], updates: { status?: string }) =>
+  bulkUpdatePrograms: (programIds: string[], updates: { status?: "active" | "paused" }) =>
     request<{ updated: number }>("/api/ops/programs/bulk", {
       method: "POST",
       body: JSON.stringify({ program_ids: programIds, ...updates }),
@@ -557,13 +791,22 @@ export const api = {
     ),
 };
 
-export function formatMoney(cents: number): string {
-  return new Intl.NumberFormat(undefined, {
-    style: "currency",
-    currency: "USD",
-  }).format(cents / 100);
+export function formatMoney(cents: number, currency = "USD"): string {
+  try {
+    return new Intl.NumberFormat(undefined, { style: "currency", currency }).format(cents / 100);
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${currency}`;
+  }
 }
 
-export function formatPercent(value: number): string {
-  return `${value.toFixed(1)}%`;
+/** Other currencies than `currency`, e.g. "+ €12.00" (revenue is never summed across currencies). */
+export function otherCurrencies(byCurrency: Record<string, number>, currency: string): string {
+  return Object.entries(byCurrency)
+    .filter(([cur, cents]) => cur !== currency && cents !== 0)
+    .map(([cur, cents]) => `+ ${formatMoney(cents, cur)}`)
+    .join(" ");
+}
+
+export function formatPercent(value: number | null): string {
+  return value == null ? "—" : `${value.toFixed(1)}%`;
 }

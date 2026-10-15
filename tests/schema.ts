@@ -6,6 +6,9 @@ CREATE TABLE IF NOT EXISTS users (
   name TEXT,
   email_verified INTEGER NOT NULL DEFAULT 0,
   is_platform_admin INTEGER NOT NULL DEFAULT 0,
+  session_version INTEGER NOT NULL DEFAULT 0,
+  postback_key TEXT,
+  postback_key_required INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 );
 
@@ -34,6 +37,7 @@ CREATE TABLE IF NOT EXISTS programs (
   traffic_source_id TEXT,
   tags TEXT,
   status TEXT NOT NULL DEFAULT 'active',
+  tracking_domain_id TEXT,
   created_at INTEGER NOT NULL
 );
 
@@ -124,6 +128,8 @@ CREATE TABLE IF NOT EXISTS clicks (
   sub10 TEXT,
   external_id TEXT,
   cost_cents INTEGER,
+  traffic_source_id TEXT,
+  cpa_cost_cents INTEGER,
   visitor_hash TEXT,
   is_unique INTEGER NOT NULL DEFAULT 1,
   is_bot INTEGER NOT NULL DEFAULT 0,
@@ -134,12 +140,14 @@ CREATE TABLE IF NOT EXISTS clicks (
 CREATE INDEX IF NOT EXISTS idx_clicks_affiliate ON clicks(affiliate_id);
 CREATE INDEX IF NOT EXISTS idx_clicks_program_created ON clicks(program_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_clicks_program_visitor ON clicks(program_id, visitor_hash, created_at);
+CREATE INDEX IF NOT EXISTS idx_clicks_program_affiliate ON clicks(program_id, affiliate_id);
 
 CREATE TABLE IF NOT EXISTS rotations (
   id TEXT PRIMARY KEY,
   program_id TEXT NOT NULL UNIQUE REFERENCES programs(id),
   mode TEXT NOT NULL DEFAULT 'normal',
   fixed_path_id TEXT,
+  rr_counter INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 );
 
@@ -154,7 +162,8 @@ CREATE TABLE IF NOT EXISTS paths (
   lander_id TEXT,
   offer_id TEXT,
   enabled INTEGER NOT NULL DEFAULT 1,
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  rule_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS visitor_assignments (
@@ -183,7 +192,7 @@ CREATE TABLE IF NOT EXISTS conversions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_conversions_affiliate ON conversions(affiliate_id);
-CREATE INDEX IF NOT EXISTS idx_conversions_program ON conversions(program_id);
+CREATE INDEX IF NOT EXISTS idx_conversions_program_created ON conversions(program_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_conversions_click ON conversions(click_id);
 
 CREATE TABLE IF NOT EXISTS team_members (
@@ -242,4 +251,152 @@ CREATE TABLE IF NOT EXISTS postbacks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_postbacks_user ON postbacks(user_id);
+
+CREATE TABLE IF NOT EXISTS postback_deliveries (
+  id TEXT PRIMARY KEY,
+  postback_id TEXT NOT NULL REFERENCES postbacks(id) ON DELETE CASCADE,
+  conversion_id TEXT,
+  url TEXT NOT NULL,
+  status_code INTEGER,
+  error TEXT,
+  attempt INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_postback_deliveries_postback ON postback_deliveries(postback_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_postback_deliveries_created ON postback_deliveries(created_at);
+
+CREATE TABLE IF NOT EXISTS traffic_source_settings (
+  traffic_source_id TEXT PRIMARY KEY REFERENCES traffic_sources(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  template TEXT,
+  tokens TEXT NOT NULL DEFAULT '[]',
+  api_provider TEXT,
+  api_key_sealed TEXT,
+  last_sync_at INTEGER,
+  last_sync_error TEXT,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_traffic_source_settings_provider ON traffic_source_settings(api_provider);
+
+CREATE TABLE IF NOT EXISTS cost_updates (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  program_id TEXT REFERENCES programs(id) ON DELETE CASCADE,
+  traffic_source_id TEXT REFERENCES traffic_sources(id) ON DELETE SET NULL,
+  from_ms INTEGER NOT NULL,
+  to_ms INTEGER NOT NULL,
+  filter_dim TEXT,
+  filter_value TEXT,
+  total_cents INTEGER NOT NULL,
+  clicks_updated INTEGER NOT NULL,
+  origin TEXT NOT NULL DEFAULT 'manual',
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_cost_updates_program ON cost_updates(program_id, created_at);
+
+CREATE TABLE IF NOT EXISTS routing_rules (
+  id TEXT PRIMARY KEY,
+  program_id TEXT NOT NULL REFERENCES programs(id),
+  name TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  conditions TEXT NOT NULL DEFAULT '[]',
+  timezone TEXT NOT NULL DEFAULT 'UTC',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS path_landers (
+  id TEXT PRIMARY KEY,
+  path_id TEXT NOT NULL REFERENCES paths(id) ON DELETE CASCADE,
+  lander_id TEXT NOT NULL REFERENCES landers(id),
+  weight INTEGER NOT NULL DEFAULT 100,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS path_offers (
+  id TEXT PRIMARY KEY,
+  path_id TEXT NOT NULL REFERENCES paths(id) ON DELETE CASCADE,
+  offer_id TEXT NOT NULL REFERENCES offers(id),
+  weight INTEGER NOT NULL DEFAULT 100,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS blocklist_entries (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  kind TEXT NOT NULL,
+  value TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(user_id, kind, value)
+);
+
+CREATE TABLE IF NOT EXISTS campaign_traffic_filters (
+  program_id TEXT PRIMARY KEY REFERENCES programs(id),
+  bot_action TEXT NOT NULL DEFAULT 'route',
+  safe_page_url TEXT,
+  block_datacenter INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS account_settings (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  timezone TEXT NOT NULL DEFAULT 'UTC',
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS automation_rules (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  program_id TEXT NOT NULL REFERENCES programs(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  dimension TEXT,
+  min_clicks INTEGER,
+  event TEXT,
+  roi_below REAL,
+  spend_above_cents INTEGER,
+  window_hours INTEGER NOT NULL DEFAULT 24,
+  notify_email TEXT,
+  webhook_url TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  last_run_at INTEGER,
+  last_fired_at INTEGER,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_rules_user ON automation_rules(user_id);
+CREATE INDEX IF NOT EXISTS idx_automation_rules_program ON automation_rules(program_id);
+
+CREATE TABLE IF NOT EXISTS zone_blacklist (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  program_id TEXT NOT NULL REFERENCES programs(id) ON DELETE CASCADE,
+  dimension TEXT NOT NULL,
+  value TEXT NOT NULL,
+  rule_id TEXT,
+  reason TEXT,
+  created_at INTEGER NOT NULL,
+  UNIQUE(program_id, dimension, value)
+);
+
+CREATE INDEX IF NOT EXISTS idx_zone_blacklist_user ON zone_blacklist(user_id);
+
+CREATE TABLE IF NOT EXISTS tracking_domains (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  hostname TEXT NOT NULL UNIQUE,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tracking_domains_user ON tracking_domains(user_id);
+
+CREATE INDEX IF NOT EXISTS idx_clicks_traffic_source ON clicks(traffic_source_id);
+CREATE INDEX IF NOT EXISTS idx_routing_rules_program ON routing_rules(program_id, sort_order);
+CREATE INDEX IF NOT EXISTS idx_paths_rule ON paths(rule_id);
+CREATE INDEX IF NOT EXISTS idx_path_landers_path ON path_landers(path_id);
+CREATE INDEX IF NOT EXISTS idx_path_offers_path ON path_offers(path_id);
+CREATE INDEX IF NOT EXISTS idx_blocklist_user ON blocklist_entries(user_id);
 `;

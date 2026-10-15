@@ -8,13 +8,19 @@ import type {
   ProgramStats,
 } from "../types";
 import { campaignKeyFromName } from "./entities";
-import { affiliateCode, conversionRate, id, isUniqueConstraintError } from "../lib/utils";
-import { approvedStatusSql } from "../lib/metrics";
+import { affiliateCode, id, isUniqueConstraintError } from "../lib/utils";
+import {
+  approvedStatusSql,
+  computeEventMetrics,
+  conversionRatePct,
+  primaryCurrency,
+} from "../lib/metrics";
 
 const PROGRAM_COLUMNS =
   "id, user_id, name, slug, api_key, destination_url, campaign_key, group_id, traffic_source_id, tags, status, created_at";
 
-const USER_COLUMNS = "id, email, name, email_verified, is_platform_admin, created_at";
+const USER_COLUMNS =
+  "id, email, name, email_verified, is_platform_admin, session_version, created_at";
 
 export async function getUserByEmail(db: D1Database, email: string) {
   return db
@@ -26,6 +32,7 @@ export async function getUserByEmail(db: D1Database, email: string) {
       name: string | null;
       email_verified: number;
       is_platform_admin: number;
+      session_version: number;
       created_at: number;
     }>();
 }
@@ -40,6 +47,7 @@ export async function getUserById(db: D1Database, userId: string) {
       name: string | null;
       email_verified: number;
       is_platform_admin: number;
+      session_version: number;
       created_at: number;
     }>();
 }
@@ -58,30 +66,37 @@ export async function createUser(
     email: string;
     password_hash: string;
     name?: string | null;
-    is_platform_admin?: boolean;
     created_at: number;
   },
 ) {
+  // New accounts start unverified; invites and platform admin need a verified email.
   await db
     .prepare(
-      "INSERT INTO users (id, email, password_hash, name, email_verified, is_platform_admin, created_at) VALUES (?, ?, ?, ?, 1, ?, ?)",
+      "INSERT INTO users (id, email, password_hash, name, email_verified, is_platform_admin, created_at) VALUES (?, ?, ?, ?, 0, 0, ?)",
     )
-    .bind(
-      user.id,
-      user.email.toLowerCase(),
-      user.password_hash,
-      user.name ?? null,
-      user.is_platform_admin ? 1 : 0,
-      user.created_at,
-    )
+    .bind(user.id, user.email.toLowerCase(), user.password_hash, user.name ?? null, user.created_at)
     .run();
 }
 
+/** Sets the password and bumps session_version so every existing session is revoked. */
 export async function updateUserPassword(db: D1Database, userId: string, passwordHash: string) {
   await db
-    .prepare("UPDATE users SET password_hash = ? WHERE id = ?")
+    .prepare(
+      "UPDATE users SET password_hash = ?, session_version = session_version + 1 WHERE id = ?",
+    )
     .bind(passwordHash, userId)
     .run();
+}
+
+export async function bumpSessionVersion(db: D1Database, userId: string) {
+  await db
+    .prepare("UPDATE users SET session_version = session_version + 1 WHERE id = ?")
+    .bind(userId)
+    .run();
+}
+
+export async function markEmailVerified(db: D1Database, userId: string) {
+  await db.prepare("UPDATE users SET email_verified = 1 WHERE id = ?").bind(userId).run();
 }
 
 export async function listPrograms(db: D1Database, userId: string): Promise<Program[]> {
@@ -279,6 +294,10 @@ export type ClickContextColumns = Partial<
   Record<(typeof CLICK_CONTEXT_COLUMNS)[number], string | number | null>
 >;
 
+/** Traffic source of the click's campaign at click time (bind: program id). */
+const CLICK_SOURCE_SQL =
+  "FROM programs p JOIN traffic_sources ts ON ts.id = p.traffic_source_id WHERE p.id = ?";
+
 export async function recordClick(
   db: D1Database,
   click: {
@@ -291,18 +310,44 @@ export async function recordClick(
     lander_id?: string | null;
     offer_id?: string | null;
     is_unique?: boolean;
+    /**
+     * When set, `is_unique` is computed inside the INSERT (no prior click with the
+     * same visitor_hash on this campaign since this time): one D1 round trip.
+     */
+    unique_since?: number;
     is_bot?: boolean;
     created_at: number;
   } & ClickContextColumns,
 ) {
   const contextValues = CLICK_CONTEXT_COLUMNS.map((column) => click[column] ?? null);
+  const costIndex = CLICK_CONTEXT_COLUMNS.indexOf("cost_cents");
+  const contextPlaceholders = CLICK_CONTEXT_COLUMNS.map((column) =>
+    // Without an explicit `cost`, snapshot the source's CPC/CPM cost now (history stays fixed).
+    column === "cost_cents"
+      ? `COALESCE(?, (SELECT CASE ts.cost_type WHEN 'cpc' THEN ts.default_cost_cents
+          WHEN 'cpm' THEN ts.default_cost_cents / 1000.0 END ${CLICK_SOURCE_SQL}))`
+      : "?",
+  );
+  const explicitCost = contextValues[costIndex];
+  const uniqueInline = click.unique_since != null;
+  const uniqueSql = uniqueInline
+    ? "NOT EXISTS (SELECT 1 FROM clicks WHERE program_id = ? AND visitor_hash = ? AND created_at >= ?)"
+    : "?";
+  const uniqueBinds = uniqueInline
+    ? [click.program_id, click.visitor_hash ?? null, click.unique_since!]
+    : [click.is_unique === false ? 0 : 1];
   await db
     .prepare(
       `INSERT INTO clicks (
         id, program_id, affiliate_id, ip, user_agent,
         path_id, lander_id, offer_id, ${CLICK_CONTEXT_COLUMNS.join(", ")},
+        traffic_source_id, cpa_cost_cents,
         is_unique, is_bot, created_at
-      ) VALUES (${Array.from({ length: 11 + CLICK_CONTEXT_COLUMNS.length }, () => "?").join(", ")})`,
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ${contextPlaceholders.join(", ")},
+        (SELECT traffic_source_id FROM programs WHERE id = ?),
+        CASE WHEN ? IS NULL THEN (SELECT CASE WHEN ts.cost_type = 'cpa' THEN ts.default_cost_cents END
+          ${CLICK_SOURCE_SQL}) END,
+        ${uniqueSql}, ?, ?)`,
     )
     .bind(
       click.id,
@@ -313,8 +358,13 @@ export async function recordClick(
       click.path_id ?? null,
       click.lander_id ?? null,
       click.offer_id ?? null,
-      ...contextValues,
-      click.is_unique === false ? 0 : 1,
+      ...contextValues.flatMap((value, index) =>
+        index === costIndex ? [value, click.program_id] : [value],
+      ),
+      click.program_id,
+      explicitCost,
+      click.program_id,
+      ...uniqueBinds,
       click.is_bot ? 1 : 0,
       click.created_at,
     )
@@ -485,12 +535,28 @@ export async function recordConversion(
   return { status: "updated", conversion: next, previous_status: existing.status };
 }
 
+export type LogPage = { limit?: number; offset?: number; from?: number; to?: number };
+
+function logWindow(alias: string, programId: string, page: LogPage) {
+  const clauses = [`${alias}.program_id = ?`];
+  const params: Array<string | number> = [programId];
+  if (page.from !== undefined) {
+    clauses.push(`${alias}.created_at >= ?`);
+    params.push(page.from);
+  }
+  if (page.to !== undefined) {
+    clauses.push(`${alias}.created_at <= ?`);
+    params.push(page.to);
+  }
+  return { where: clauses.join(" AND "), params };
+}
+
 export async function listClickLog(
   db: D1Database,
   programId: string,
-  limit = 50,
-  offset = 0,
+  page: LogPage = {},
 ): Promise<ClickLogRow[]> {
+  const { where, params } = logWindow("c", programId, page);
   const { results } = await db
     .prepare(
       `SELECT
@@ -499,11 +565,11 @@ export async function listClickLog(
         EXISTS(SELECT 1 FROM conversions cv WHERE cv.click_id = c.id) AS converted
       FROM clicks c
       JOIN affiliates a ON a.id = c.affiliate_id
-      WHERE c.program_id = ?
+      WHERE ${where}
       ORDER BY c.created_at DESC
       LIMIT ? OFFSET ?`,
     )
-    .bind(programId, limit, offset)
+    .bind(...params, page.limit ?? 50, page.offset ?? 0)
     .all<{
       id: string;
       program_id: string;
@@ -532,9 +598,9 @@ export async function listClickLog(
 export async function listConversionLog(
   db: D1Database,
   programId: string,
-  limit = 50,
-  offset = 0,
+  page: LogPage = {},
 ): Promise<ConversionLogRow[]> {
+  const { where, params } = logWindow("cv", programId, page);
   const { results } = await db
     .prepare(
       `SELECT
@@ -543,76 +609,138 @@ export async function listConversionLog(
         a.name AS affiliate_name, a.code AS affiliate_code
       FROM conversions cv
       JOIN affiliates a ON a.id = cv.affiliate_id
-      WHERE cv.program_id = ?
+      WHERE ${where}
       ORDER BY cv.created_at DESC
       LIMIT ? OFFSET ?`,
     )
-    .bind(programId, limit, offset)
+    .bind(...params, page.limit ?? 50, page.offset ?? 0)
     .all<ConversionLogRow>();
   return results ?? [];
 }
 
 export async function getProgramStats(db: D1Database, program: Program): Promise<ProgramStats> {
   const affiliates = await listAffiliates(db, program.id);
-  const [clickRows, conversionRows] = await Promise.all([
+  const [clickRows, convertedRows, conversionRows] = await Promise.all([
     db
       .prepare(
-        "SELECT affiliate_id, COUNT(*) AS count FROM clicks WHERE program_id = ? GROUP BY affiliate_id",
+        `SELECT affiliate_id, COUNT(*) AS count, COALESCE(SUM(is_bot), 0) AS bots
+         FROM clicks WHERE program_id = ? GROUP BY affiliate_id`,
+      )
+      .bind(program.id)
+      .all<{ affiliate_id: string; count: number; bots: number }>(),
+    db
+      .prepare(
+        `SELECT cv.affiliate_id, COUNT(DISTINCT cv.click_id) AS count
+         FROM conversions cv
+         WHERE cv.program_id = ? AND cv.click_id IS NOT NULL AND ${approvedStatusSql("cv")}
+         GROUP BY cv.affiliate_id`,
       )
       .bind(program.id)
       .all<{ affiliate_id: string; count: number }>(),
     db
       .prepare(
-        `SELECT cv.affiliate_id, cv.event, COUNT(*) AS count,
+        `SELECT cv.affiliate_id, cv.event, UPPER(cv.currency) AS currency,
+           COUNT(DISTINCT COALESCE(cv.click_id, cv.id)) AS units,
+           SUM(CASE WHEN cv.click_id IS NULL THEN 1 ELSE 0 END) AS clickless,
            COALESCE(SUM(cv.amount_cents), 0) AS revenue
          FROM conversions cv
          WHERE cv.program_id = ? AND ${approvedStatusSql("cv")}
-         GROUP BY cv.affiliate_id, cv.event`,
+         GROUP BY cv.affiliate_id, cv.event, UPPER(cv.currency)`,
       )
       .bind(program.id)
-      .all<{ affiliate_id: string; event: string | null; count: number; revenue: number }>(),
+      .all<{
+        affiliate_id: string;
+        event: string | null;
+        currency: string | null;
+        units: number;
+        clickless: number;
+        revenue: number;
+      }>(),
   ]);
 
+  type EventAcc = { count: number; revenue_by_currency: Record<string, number> };
+  type ConvAcc = {
+    count: number;
+    revenue_by_currency: Record<string, number>;
+    events: Record<string, EventAcc>;
+  };
   const clicksBy = new Map((clickRows.results ?? []).map((r) => [r.affiliate_id, r.count]));
-  const conversionsBy = new Map<
-    string,
-    { count: number; revenue: number; events: Record<string, number> }
-  >();
+  const botsBy = new Map((clickRows.results ?? []).map((r) => [r.affiliate_id, r.bots]));
+  const conversionsBy = new Map<string, ConvAcc>();
+  const accFor = (affiliateId: string) => {
+    let acc = conversionsBy.get(affiliateId);
+    if (!acc) {
+      acc = { count: 0, revenue_by_currency: {}, events: {} };
+      conversionsBy.set(affiliateId, acc);
+    }
+    return acc;
+  };
+  for (const row of convertedRows.results ?? []) accFor(row.affiliate_id).count += row.count;
+  const currencyCounts = new Map<string, number>();
   for (const row of conversionRows.results ?? []) {
-    const acc = conversionsBy.get(row.affiliate_id) ?? { count: 0, revenue: 0, events: {} };
-    acc.count += row.count;
-    acc.revenue += row.revenue;
-    if (row.event) acc.events[row.event] = (acc.events[row.event] ?? 0) + row.count;
-    conversionsBy.set(row.affiliate_id, acc);
+    const acc = accFor(row.affiliate_id);
+    const currency = row.currency || "USD";
+    acc.count += row.clickless;
+    acc.revenue_by_currency[currency] = (acc.revenue_by_currency[currency] ?? 0) + row.revenue;
+    currencyCounts.set(currency, (currencyCounts.get(currency) ?? 0) + row.units);
+    if (row.event) {
+      const ev = (acc.events[row.event] ??= { count: 0, revenue_by_currency: {} });
+      ev.count += row.units;
+      ev.revenue_by_currency[currency] = (ev.revenue_by_currency[currency] ?? 0) + row.revenue;
+    }
   }
+  const currency = primaryCurrency(currencyCounts);
+  const eventMetrics = (events: Record<string, EventAcc>, clicks: number) =>
+    computeEventMetrics(
+      Object.fromEntries(
+        Object.entries(events).map(([name, ev]) => [
+          name,
+          { count: ev.count, revenue_cents: ev.revenue_by_currency[currency] ?? 0 },
+        ]),
+      ),
+      clicks,
+      null,
+    );
+  const addTo = (target: Record<string, number>, source: Record<string, number>) => {
+    for (const [key, value] of Object.entries(source)) target[key] = (target[key] ?? 0) + value;
+  };
 
   const stats: AffiliateStats[] = affiliates.map((affiliate) => {
     const clickCount = clicksBy.get(affiliate.id) ?? 0;
+    const botCount = botsBy.get(affiliate.id) ?? 0;
+    // Bot clicks are listed separately and left out of CR denominators.
+    const humanClicks = clickCount - botCount;
     const conversions = conversionsBy.get(affiliate.id);
     const conversionCount = conversions?.count ?? 0;
+    const events = conversions?.events ?? {};
     return {
       ...affiliate,
       clicks: clickCount,
+      bots: botCount,
       conversions: conversionCount,
-      revenue_cents: conversions?.revenue ?? 0,
-      conversion_rate: conversionRate(conversionCount, clickCount),
-      events: conversions?.events ?? {},
+      revenue_cents: conversions?.revenue_by_currency[currency] ?? 0,
+      conversion_rate: conversionRatePct(conversionCount, humanClicks),
+      events: Object.fromEntries(Object.entries(events).map(([name, ev]) => [name, ev.count])),
+      event_metrics: eventMetrics(events, humanClicks),
+      revenue_by_currency: conversions?.revenue_by_currency ?? {},
     };
   });
 
-  const totals = stats.reduce(
-    (acc, row) => ({
-      clicks: acc.clicks + row.clicks,
-      conversions: acc.conversions + row.conversions,
-      revenue_cents: acc.revenue_cents + row.revenue_cents,
-    }),
-    { clicks: 0, conversions: 0, revenue_cents: 0 },
-  );
-
-  const events: Record<string, number> = {};
+  const totals = { clicks: 0, bots: 0, conversions: 0, revenue_cents: 0 };
+  const revenueByCurrency: Record<string, number> = {};
+  const totalEvents: Record<string, EventAcc> = {};
   for (const row of stats) {
-    for (const [event, count] of Object.entries(row.events)) {
-      events[event] = (events[event] ?? 0) + count;
+    totals.clicks += row.clicks;
+    totals.bots += row.bots;
+    totals.conversions += row.conversions;
+    totals.revenue_cents += row.revenue_cents;
+    addTo(revenueByCurrency, row.revenue_by_currency);
+  }
+  for (const acc of conversionsBy.values()) {
+    for (const [name, ev] of Object.entries(acc.events)) {
+      const total = (totalEvents[name] ??= { count: 0, revenue_by_currency: {} });
+      total.count += ev.count;
+      addTo(total.revenue_by_currency, ev.revenue_by_currency);
     }
   }
 
@@ -620,9 +748,12 @@ export async function getProgramStats(db: D1Database, program: Program): Promise
     program,
     totals: {
       ...totals,
-      conversion_rate: conversionRate(totals.conversions, totals.clicks),
-      events,
+      conversion_rate: conversionRatePct(totals.conversions, totals.clicks - totals.bots),
+      events: Object.fromEntries(Object.entries(totalEvents).map(([name, ev]) => [name, ev.count])),
+      event_metrics: eventMetrics(totalEvents, totals.clicks - totals.bots),
+      revenue_by_currency: revenueByCurrency,
     },
+    currency,
     affiliates: stats,
   };
 }

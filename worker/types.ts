@@ -1,3 +1,4 @@
+import type { EventMetrics } from "./lib/metrics";
 export type EmailBinding = {
   send: (message: {
     to: string;
@@ -16,6 +17,11 @@ export type Env = {
   EMAIL?: EmailBinding;
   EMAIL_FROM?: string;
   PLATFORM_ADMIN_EMAILS?: string;
+  /** Workers Rate Limiting bindings for /api/auth; missing = no limit (tests, old installs). */
+  AUTH_IP_LIMITER?: RateLimit;
+  AUTH_EMAIL_LIMITER?: RateLimit;
+  /** Days to keep raw clicks without conversions; unset/0 = keep forever. */
+  RAW_CLICK_RETENTION_DAYS?: string;
 };
 
 export type User = {
@@ -24,6 +30,7 @@ export type User = {
   name: string | null;
   email_verified: number;
   is_platform_admin: number;
+  session_version: number;
   created_at: number;
 };
 
@@ -85,22 +92,37 @@ export type Affiliate = {
 };
 
 export type AffiliateStats = Affiliate & {
+  /** All clicks, bots included. */
   clicks: number;
+  /** Bot clicks (excluded from CR). */
+  bots: number;
+  /** Distinct converted clicks + click-less conversions (events do not add up). */
   conversions: number;
+  /** Revenue in `currency` only. */
   revenue_cents: number;
+  /** Percent, capped at 100. */
   conversion_rate: number;
   /** Approved conversions per event (registration, ftd, ...). */
   events: Record<string, number>;
+  event_metrics: Record<string, EventMetrics>;
+  revenue_by_currency: Record<string, number>;
 };
 
 export type ProgramStats = {
   program: Program;
   totals: {
+    /** All clicks, bots included. */
     clicks: number;
+    /** Bot clicks (excluded from CR). */
+    bots: number;
     conversions: number;
     revenue_cents: number;
     conversion_rate: number;
     events: Record<string, number>;
+    event_metrics: Record<string, EventMetrics>;
+    revenue_by_currency: Record<string, number>;
   };
+  /** Currency of every `revenue_cents` field (most used currency). */
+  currency: string;
   affiliates: AffiliateStats[];
 };

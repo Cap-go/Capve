@@ -19,17 +19,27 @@ A Capve instance lets a user:
 
 | Requirement | Implementation |
 | --- | --- |
-| Auth | Email/password sessions (`worker/lib/session.ts`, `worker/lib/access.ts`); `AUTH_SECRET` is a Worker secret in production |
+| Auth | Email/password sessions (`worker/lib/session.ts`, `worker/lib/access.ts`); `AUTH_SECRET` is a Worker secret in production; new accounts verify their email (`/verify-email`); password reset and "sign out everywhere" revoke sessions (`users.session_version`); login/register/forgot-password rate limited (`ratelimits` bindings) |
+| Email-matched access | Team invites and `PLATFORM_ADMIN_EMAILS` only apply to verified emails |
 | Teams | Owner invites by email; invite applies only after the invitee accepts |
 | Click redirect | `/r/:code`, `/c/:key` → path target; appends `click_id` + `velo_ref`; paused campaigns 404 |
 | Click context | country/region/city/ISP from `request.cf`, device/OS/browser from UA, `sub1`–`sub10`, external `clickid`, per-click `cost`, unique + bot flags |
+| Routing rules | Ordered per-campaign rules (`worker/lib/rules.ts`): AND-ed `in`/`not_in` conditions on geo, device, OS, browser, ISP/ASN, language, connection, bot, referrer, IP/CIDR, weekday/hour (rule timezone), sub1–sub10; first match uses its own paths, else default pool |
+| Weighted landers/offers | A path holds several weighted landers and offers (`path_landers`, `path_offers`); the chosen ones are stored on the click |
+| Anti-fraud | Account blocklist (IP/CIDR, ASN, UA substring), optional datacenter-ASN flag, per-campaign `bot_action` (`route` or configured `safe_page_url`); flagged clicks get `is_bot = 1` |
 | URL macros | `{clickid}`/`{click_id}`, `{campaign_id}`, `{offer_id}`, `{lander_id}`, `{country}`, `{external_id}`, `{sub1}`–`{sub10}`, `{lp_click_url}` |
 | LP click | `/lp/:clickId` marks the LP click and redirects to the click's offer |
-| Postback | `GET /click?cnv_id=&payout=&cnv_status=&tx_id=&event=`; repeat for same click (and event) updates status/payout; no payout → offer payout (events: 0) |
+| Postback | `GET /click?cnv_id=&payout=&cnv_status=&tx_id=&event=&key=`; repeat for same click (and event) updates status/payout; no payout → offer payout (events: 0); per-account postback key: without a valid key payout is capped to the offer payout, and with enforcement on keyless postbacks get 403 |
 | Conversion events | `event=registration`, `event=ftd`, … each recorded as its own conversion; per-event counts in stats, reports and CSV |
-| Outgoing postbacks | Many per campaign (all statuses), traffic source (approved, `postback_percent`) and network (approved, offer's network); each optionally limited to one event |
+| Outgoing postbacks | Many per campaign (all statuses), traffic source (once on becoming approved, `postback_percent`) and network (once on becoming approved, offer's network); pending/hold are not approved; each optionally limited to one event |
+| Source templates & tokens | Built-in traffic source / network templates (`worker/lib/source-templates.ts`); per-source named tokens map URL params to `sub1`–`sub10` / `external_id` / `cost` on click and label subs in reports |
+| Cost updates | `POST /api/campaigns/:id/costs` spreads a total evenly over matching clicks' `cost_cents` (date range, optional token filter); hourly cron (`worker/cron/`) pulls spend from cost APIs (Adcash) with an encrypted API key |
 | Convert API | `POST /api/v1/convert` with `X-Program-Secret`; CORS enabled; idempotent by `(program_id, order_id)` |
 | Reports | `/api/reports/*` incl. `/grouped?by=` (country, device, OS, browser, ISP, offer, lander, path, traffic source, sub1–sub10, date…); rejected statuses excluded from revenue |
+| Drilldown | `/api/reports/drilldown?by=campaign,sub1,country,offer` (1–4 levels) → nested rows with grouped-report metrics |
+| Timezone | Account timezone (`/api/settings`, default UTC); date buckets use the offset at range start; `YYYY-MM-DD` ranges are calendar days in that timezone |
+| Automation | `/api/automation/*`: zone blacklist rules (≥ N clicks, 0 conversions/event in H hours), ROI/spend alerts via email + webhook; `zone_blacklist` exported as TXT/CSV; cron `*/15` (`worker/cron/`) |
+| Tracking domains | `/api/tracking-domains`; campaigns can pick one; those hosts serve only `/r`, `/c`, `/lp`, `/click`; unknown hosts 404. Hostnames are added as Worker custom domains manually in Cloudflare |
 | MCP | `POST /mcp` (Streamable HTTP, stateless JSON-RPC) in `worker/mcp/`; each tool replays an `/api` route with the bearer token; tokens in `api_tokens` (hash only), managed at `/api/tokens` with a session cookie only |
 | Redirect safety | Only configured destinations/offers/landers; `?url=` same host only; postback/webhook URLs must be http(s) |
 
@@ -37,7 +47,7 @@ A Capve instance lets a user:
 
 **Public** (no session): `/`, `/docs/*`, `/login`, `/register`, `/r/:code`, `/c/:key`, `/lp/:clickId`, `/click`, `POST /api/v1/convert` + OPTIONS, `GET /api/v1/snippet`, `GET /api/health`, `/api/auth/*`.
 
-**Session or API token** (`Authorization: Bearer capve_…`): `/app`, `/api/programs*`, `/api/campaigns*`, `/api/entities*`, `/api/reports*`, `/api/ops*`, `/api/admin*`, `/mcp`.
+**Session or API token** (`Authorization: Bearer capve_…`): `/app`, `/api/programs*`, `/api/campaigns*`, `/api/entities*`, `/api/reports*`, `/api/ops*`, `/api/sources*`, `/api/admin*`, `/api/settings*`, `/api/automation*`, `/api/tracking-domains*`, `/mcp`.
 
 **Session cookie only**: `/api/tokens*` (a token cannot mint tokens).
 
@@ -49,8 +59,9 @@ Tracking and API paths are listed in `assets.run_worker_first` in `wrangler.toml
 
 - **One-click:** [Deploy to Cloudflare](https://deploy.workers.cloudflare.com/?url=https://github.com/Cap-go/Capve) provisions Worker + D1.
 - Set the session secret: `bunx wrangler secret put AUTH_SECRET` (32+ chars).
-- Optional: `PLATFORM_ADMIN_EMAILS` var; register that account right after deploy.
-- Optional: Cloudflare Email Service `send_email` binding for password-reset emails.
+- Optional: `PLATFORM_ADMIN_EMAILS` var; register and verify that account right after deploy.
+- Cloudflare Email Service `send_email` binding for password-reset and verification emails (needed for team invites and platform admin, which require a verified email).
+- `ratelimits` bindings (`AUTH_IP_LIMITER`, `AUTH_EMAIL_LIMITER`) for `/api/auth`; optional, auth is not limited without them.
 
 ### Tests (`bun run test`)
 

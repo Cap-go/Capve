@@ -1,4 +1,4 @@
-import { SELF } from "cloudflare:test";
+import { env, SELF } from "cloudflare:test";
 
 export function cookieFrom(response: Response, name: string): string | undefined {
   const headers = response.headers.getSetCookie?.() ?? [];
@@ -12,7 +12,8 @@ export function cookieFrom(response: Response, name: string): string | undefined
   return undefined;
 }
 
-export async function registerTestUser(email?: string) {
+/** Registers a user; marks the email verified unless `verified: false` (new accounts start unverified). */
+export async function registerTestUser(email?: string, options: { verified?: boolean } = {}) {
   const address = email ?? `test-${crypto.randomUUID()}@example.com`;
   const res = await SELF.fetch("http://localhost/api/auth/register", {
     method: "POST",
@@ -30,6 +31,11 @@ export async function registerTestUser(email?: string) {
 
   const session = cookieFrom(res, "capve_session");
   if (!session) throw new Error("missing session cookie");
+  if (options.verified !== false) {
+    await env.DB.prepare("UPDATE users SET email_verified = 1 WHERE email = ?")
+      .bind(address.toLowerCase())
+      .run();
+  }
 
   return {
     email: address,
@@ -39,3 +45,14 @@ export async function registerTestUser(email?: string) {
     },
   };
 }
+
+/** Lets deferred (waitUntil) work run before asserting that nothing happened. */
+export function settle(ms = 50): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** A real browser user agent: clicks without one are flagged as bots (excluded from CR/cost). */
+export const BROWSER_HEADERS = {
+  "User-Agent":
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36",
+};

@@ -3,6 +3,7 @@ import { entityBelongsTo } from "../db/entities";
 import {
   createPostback,
   deletePostback,
+  listPostbackDeliveries,
   listPostbacks,
   MAX_POSTBACKS_PER_OWNER,
   updatePostback,
@@ -48,6 +49,21 @@ postbacks.get("/", async (c) => {
   });
   if (owner === null) return c.json({ error: "Filter by one owner at most" }, 400);
   return c.json({ postbacks: await listPostbacks(c.env.DB, session.account_id, owner) });
+});
+
+/** Recent delivery attempts (status code / error) of one outgoing postback. */
+postbacks.get("/:id/deliveries", async (c) => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const limit = Number(c.req.query("limit") ?? 20);
+  const deliveries = await listPostbackDeliveries(
+    c.env.DB,
+    c.req.param("id"),
+    session.account_id,
+    Number.isFinite(limit) ? Math.trunc(limit) : 20,
+  );
+  if (!deliveries) return c.json({ error: "Not found" }, 404);
+  return c.json({ deliveries });
 });
 
 postbacks.post("/", async (c) => {

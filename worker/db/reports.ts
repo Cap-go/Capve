@@ -1,5 +1,12 @@
 import type { Program } from "../types";
-import { approvedStatusSql, computeMetrics, type ReportFilters } from "../lib/metrics";
+import {
+  approvedStatusSql,
+  computeEventMetrics,
+  computeMetrics,
+  primaryCurrency,
+  type EventMetrics,
+  type ReportFilters,
+} from "../lib/metrics";
 
 export type CampaignReportRow = Program & {
   group_name: string | null;
@@ -8,6 +15,9 @@ export type CampaignReportRow = Program & {
   default_cost_cents: number;
   metrics: ReturnType<typeof computeMetrics>;
   events: EventCounts;
+  event_metrics: Record<string, EventMetrics>;
+  currency: string;
+  revenue_by_currency: Record<string, number>;
 };
 
 /** Approved conversions per event (registration, ftd, ...). Plain conversions are not listed. */
@@ -30,7 +40,12 @@ type ProgramRow = Program & {
   default_cost_cents: number | null;
 };
 
-function programWhere(userId: string, filters: ReportFilters, alias = "p") {
+/**
+ * Campaign filter. Without a `status` filter, archived (deleted) campaigns are hidden:
+ * "all" means active + paused; `status=archived` shows them. `includeArchived` is used
+ * when one campaign is requested by id.
+ */
+function programWhere(userId: string, filters: ReportFilters, alias = "p", includeArchived = false) {
   const clauses = [`${alias}.user_id = ?`];
   const binds: Array<string | number> = [userId];
 
@@ -45,6 +60,8 @@ function programWhere(userId: string, filters: ReportFilters, alias = "p") {
   if (filters.status) {
     clauses.push(`${alias}.status = ?`);
     binds.push(filters.status);
+  } else if (!includeArchived) {
+    clauses.push(`${alias}.status != 'archived'`);
   }
 
   return { sql: clauses.join(" AND "), binds };
@@ -134,15 +151,23 @@ type DimensionSql = {
 /** Conversions are attributed to their click's time (Binom); click-less ones use their own time. */
 const CONV_TIME = "COALESCE(c.created_at, cv.created_at)";
 
-function dimensionSql(by: GroupDimension): DimensionSql {
+/** strftime modifier shifting UTC to the account timezone (see worker/lib/timezone.ts). */
+function tzModifier(offsetMinutes: number | undefined): string {
+  const minutes = Math.trunc(Number(offsetMinutes) || 0);
+  return minutes ? `, '${minutes > 0 ? "+" : "-"}${Math.abs(minutes)} minutes'` : "";
+}
+
+function dimensionSql(by: GroupDimension, tzOffsetMinutes?: number): DimensionSql {
   switch (by) {
     case "campaign":
       return { click: "p.id", conv: "p.id", label: "p.name" };
-    case "date":
+    case "date": {
+      const tz = tzModifier(tzOffsetMinutes);
       return {
-        click: "strftime('%Y-%m-%d', c.created_at / 1000, 'unixepoch')",
-        conv: `strftime('%Y-%m-%d', ${CONV_TIME} / 1000, 'unixepoch')`,
+        click: `strftime('%Y-%m-%d', c.created_at / 1000, 'unixepoch'${tz})`,
+        conv: `strftime('%Y-%m-%d', ${CONV_TIME} / 1000, 'unixepoch'${tz})`,
       };
+    }
     case "offer":
       return {
         click: "c.offer_id",
@@ -168,7 +193,15 @@ function dimensionSql(by: GroupDimension): DimensionSql {
         convJoin: "LEFT JOIN paths pa ON pa.id = c.path_id",
       };
     case "traffic_source":
-      return { click: "p.traffic_source_id", conv: "p.traffic_source_id", label: "ts.name" };
+      // Source stored on the click at click time; click-less conversions use the campaign's.
+      return {
+        click: "c.traffic_source_id",
+        conv: "COALESCE(c.traffic_source_id, p.traffic_source_id)",
+        label: "tsd.name",
+        clickJoin: "LEFT JOIN traffic_sources tsd ON tsd.id = c.traffic_source_id",
+        convJoin:
+          "LEFT JOIN traffic_sources tsd ON tsd.id = COALESCE(c.traffic_source_id, p.traffic_source_id)",
+      };
     case "affiliate":
       return {
         click: "c.affiliate_id",
@@ -190,14 +223,46 @@ export type GroupedReportRow = {
   bot_clicks: number;
   metrics: ReturnType<typeof computeMetrics>;
   events: EventCounts;
+  event_metrics: Record<string, EventMetrics>;
+  /** Currency of `metrics.revenue_cents` (most used currency in the report). */
+  currency: string;
+  /** Approved revenue per currency (cents); currencies are never summed together. */
+  revenue_by_currency: Record<string, number>;
 };
 
-export type GroupedReportOptions = ReportFilters & { campaign_id?: string };
+export type GroupedReportOptions = ReportFilters & {
+  campaign_id?: string;
+  /** Account timezone offset (minutes east of UTC) for `date` buckets. */
+  tz_offset_minutes?: number;
+  /**
+   * Extra dimensions (drilldown): rows are then grouped by every dimension and `key`/`label`
+   * are JSON arrays with one entry per dimension. See worker/db/drilldown.ts.
+   */
+  then_by?: GroupDimension[];
+};
+
+/** One composite dimension over several (JSON array keys/labels). */
+function combinedDimensionSql(dims: DimensionSql[]): DimensionSql {
+  return {
+    click: `json_array(${dims.map((d) => d.click).join(", ")})`,
+    conv: `json_array(${dims.map((d) => d.conv).join(", ")})`,
+    label: `json_array(${dims.map((d) => d.label ?? "NULL").join(", ")})`,
+    clickJoin: dims.map((d) => d.clickJoin ?? "").join(" "),
+    convJoin: dims.map((d) => d.convJoin ?? "").join(" "),
+  };
+}
+
+/** Approved conversion exists for click `c` (conversions follow their click's time). */
+const CLICK_CONVERTED = `EXISTS(SELECT 1 FROM conversions cv WHERE cv.click_id = c.id AND ${approvedStatusSql("cv")})`;
 
 /**
  * Report grouped by one dimension using two GROUP BY queries (clicks, conversions).
- * Cost = per-click `cost_cents` when present, else the traffic source model
- * (CPC per click, CPM per 1000 clicks, CPA per approved conversion).
+ * Conversions = distinct converted clicks + click-less conversions, so a click with
+ * registration + FTD is one conversion (per-event counts are in `events`).
+ * Cost uses values stored on the click at click time: `cost_cents` (CPC/CPM or `cost`
+ * URL param) plus `cpa_cost_cents` once per converted click. Click-less conversions are
+ * charged the campaign's current CPA rate. Bot clicks (`is_bot`) are counted in `clicks`
+ * and `bot_clicks` but carry no cost and are left out of CR / EPC / CPC denominators.
  */
 export async function getGroupedReport(
   db: D1Database,
@@ -205,12 +270,21 @@ export async function getGroupedReport(
   by: GroupDimension,
   options: GroupedReportOptions,
 ): Promise<GroupedReportRow[]> {
-  const dim = dimensionSql(by);
-  const where = programWhere(userId, options);
+  const dims = [by, ...(options.then_by ?? [])].map((d) =>
+    dimensionSql(d, options.tz_offset_minutes),
+  );
+  const dim = dims.length === 1 ? dims[0] : combinedDimensionSql(dims);
+  const where = programWhere(userId, options, "p", Boolean(options.campaign_id));
   const campaignSql = options.campaign_id ? " AND p.id = ?" : "";
   const campaignBinds = options.campaign_id ? [options.campaign_id] : [];
   const clickTime = clickTimeClause(options, "c");
   const convTime = timeClause(options, CONV_TIME);
+  // A conversion never precedes its click, so `cv.created_at >= from` is implied by the
+  // click-time window: an index-friendly prefilter (idx_conversions_program_created).
+  const convFloor =
+    options.from != null
+      ? { sql: " AND cv.created_at >= ?", binds: [options.from] }
+      : { sql: "", binds: [] as number[] };
   const label = dim.label ?? "NULL";
 
   const [clickRows, convRows] = await Promise.all([
@@ -220,15 +294,13 @@ export async function getGroupedReport(
           COUNT(*) AS clicks,
           COALESCE(SUM(c.is_unique), 0) AS unique_clicks,
           COALESCE(SUM(c.is_bot), 0) AS bot_clicks,
-          SUM(CASE WHEN c.lp_clicked_at IS NOT NULL THEN 1 ELSE 0 END) AS lp_clicks,
-          COALESCE(SUM(CASE
-            WHEN c.cost_cents IS NOT NULL THEN c.cost_cents
-            WHEN ts.cost_type = 'cpm' THEN ts.default_cost_cents / 1000.0
-            WHEN ts.cost_type = 'cpc' THEN ts.default_cost_cents
-            ELSE 0 END), 0) AS cost
+          SUM(CASE WHEN c.lp_clicked_at IS NOT NULL AND c.is_bot = 0 THEN 1 ELSE 0 END) AS lp_clicks,
+          SUM(CASE WHEN ${CLICK_CONVERTED} THEN 1 ELSE 0 END) AS converted_clicks,
+          COALESCE(SUM(CASE WHEN c.is_bot = 0 THEN c.cost_cents END), 0)
+            + COALESCE(SUM(CASE WHEN c.is_bot = 0 AND c.cpa_cost_cents IS NOT NULL AND ${CLICK_CONVERTED}
+                THEN c.cpa_cost_cents ELSE 0 END), 0) AS cost
          FROM clicks c
          JOIN programs p ON p.id = c.program_id
-         LEFT JOIN traffic_sources ts ON ts.id = p.traffic_source_id
          ${dim.clickJoin ?? ""}
          WHERE ${where.sql}${campaignSql}${clickTime.sql}
          GROUP BY k`,
@@ -241,30 +313,34 @@ export async function getGroupedReport(
         unique_clicks: number;
         bot_clicks: number;
         lp_clicks: number;
+        converted_clicks: number;
         cost: number;
       }>(),
     db
       .prepare(
-        `SELECT ${dim.conv} AS k, cv.event AS ev, MAX(${label}) AS label,
-          COUNT(*) AS leads,
+        `SELECT ${dim.conv} AS k, cv.event AS ev, UPPER(cv.currency) AS cur, MAX(${label}) AS label,
+          COUNT(DISTINCT COALESCE(cv.click_id, cv.id)) AS units,
+          SUM(CASE WHEN cv.click_id IS NULL THEN 1 ELSE 0 END) AS clickless,
           COALESCE(SUM(cv.amount_cents), 0) AS revenue,
           COALESCE(SUM(CASE
-            WHEN ts.cost_type = 'cpa' AND c.cost_cents IS NULL THEN ts.default_cost_cents
+            WHEN cv.click_id IS NULL AND ts.cost_type = 'cpa' THEN ts.default_cost_cents
             ELSE 0 END), 0) AS cpa_cost
          FROM conversions cv
          JOIN programs p ON p.id = cv.program_id
          LEFT JOIN clicks c ON c.id = cv.click_id
          LEFT JOIN traffic_sources ts ON ts.id = p.traffic_source_id
          ${dim.convJoin ?? ""}
-         WHERE ${where.sql}${campaignSql} AND ${approvedStatusSql("cv")}${convTime.sql}
-         GROUP BY k, ev`,
+         WHERE ${where.sql}${campaignSql} AND ${approvedStatusSql("cv")}${convTime.sql}${convFloor.sql}
+         GROUP BY k, ev, cur`,
       )
-      .bind(...where.binds, ...campaignBinds, ...convTime.binds)
+      .bind(...where.binds, ...campaignBinds, ...convTime.binds, ...convFloor.binds)
       .all<{
         k: string | null;
         ev: string | null;
+        cur: string | null;
         label: string | null;
-        leads: number;
+        units: number;
+        clickless: number;
         revenue: number;
         cpa_cost: number;
       }>(),
@@ -278,9 +354,9 @@ export async function getGroupedReport(
     bot_clicks: number;
     lp_clicks: number;
     leads: number;
-    revenue_cents: number;
     cost: number;
-    events: EventCounts;
+    revenue_by_currency: Record<string, number>;
+    events: Record<string, { count: number; revenue_by_currency: Record<string, number> }>;
   };
   const groups = new Map<string, Acc>();
   const get = (key: string | null, labelValue: string | null) => {
@@ -295,8 +371,8 @@ export async function getGroupedReport(
         bot_clicks: 0,
         lp_clicks: 0,
         leads: 0,
-        revenue_cents: 0,
         cost: 0,
+        revenue_by_currency: {},
         events: {},
       };
       groups.set(mapKey, acc);
@@ -311,30 +387,55 @@ export async function getGroupedReport(
     acc.unique_clicks += row.unique_clicks;
     acc.bot_clicks += row.bot_clicks;
     acc.lp_clicks += row.lp_clicks;
+    acc.leads += row.converted_clicks;
     acc.cost += row.cost;
   }
+  const currencyCounts = new Map<string, number>();
   for (const row of convRows.results ?? []) {
     const acc = get(row.k, row.label);
-    acc.leads += row.leads;
-    acc.revenue_cents += row.revenue;
+    const cur = row.cur || "USD";
+    acc.leads += row.clickless;
     acc.cost += row.cpa_cost;
-    if (row.ev) acc.events[row.ev] = (acc.events[row.ev] ?? 0) + row.leads;
+    acc.revenue_by_currency[cur] = (acc.revenue_by_currency[cur] ?? 0) + row.revenue;
+    currencyCounts.set(cur, (currencyCounts.get(cur) ?? 0) + row.units);
+    if (row.ev) {
+      const ev = (acc.events[row.ev] ??= { count: 0, revenue_by_currency: {} });
+      ev.count += row.units;
+      ev.revenue_by_currency[cur] = (ev.revenue_by_currency[cur] ?? 0) + row.revenue;
+    }
   }
+  const currency = primaryCurrency(currencyCounts);
 
-  const rows = [...groups.values()].map((acc) => ({
-    key: acc.key,
-    label: acc.label ?? acc.key ?? "(none)",
-    unique_clicks: acc.unique_clicks,
-    bot_clicks: acc.bot_clicks,
-    metrics: computeMetrics({
-      clicks: acc.clicks,
-      lp_clicks: acc.lp_clicks,
-      leads: acc.leads,
-      revenue_cents: acc.revenue_cents,
-      cost_cents: Math.round(acc.cost),
-    }),
-    events: acc.events,
-  }));
+  const rows = [...groups.values()].map((acc) => {
+    const cost_cents = Math.round(acc.cost);
+    return {
+      key: acc.key,
+      label: acc.label ?? acc.key ?? "(none)",
+      unique_clicks: acc.unique_clicks,
+      bot_clicks: acc.bot_clicks,
+      metrics: computeMetrics({
+        clicks: acc.clicks,
+        bot_clicks: acc.bot_clicks,
+        lp_clicks: acc.lp_clicks,
+        leads: acc.leads,
+        revenue_cents: acc.revenue_by_currency[currency] ?? 0,
+        cost_cents,
+      }),
+      events: Object.fromEntries(Object.entries(acc.events).map(([ev, e]) => [ev, e.count])),
+      event_metrics: computeEventMetrics(
+        Object.fromEntries(
+          Object.entries(acc.events).map(([ev, e]) => [
+            ev,
+            { count: e.count, revenue_cents: e.revenue_by_currency[currency] ?? 0 },
+          ]),
+        ),
+        acc.clicks - acc.bot_clicks,
+        cost_cents,
+      ),
+      currency,
+      revenue_by_currency: acc.revenue_by_currency,
+    };
+  });
 
   if (by === "date") {
     return rows.sort((a, b) => (a.key ?? "").localeCompare(b.key ?? ""));
@@ -383,6 +484,7 @@ export async function listCampaignReports(
 
   const byCampaign = new Map(grouped.map((row) => [row.key, row]));
   const empty = computeMetrics({ clicks: 0, lp_clicks: 0, leads: 0, revenue_cents: 0, cost_cents: 0 });
+  const currency = grouped[0]?.currency ?? "USD";
 
   return (results ?? []).map((program) => ({
     ...program,
@@ -392,6 +494,9 @@ export async function listCampaignReports(
     default_cost_cents: program.default_cost_cents ?? 0,
     metrics: byCampaign.get(program.id)?.metrics ?? empty,
     events: byCampaign.get(program.id)?.events ?? {},
+    event_metrics: byCampaign.get(program.id)?.event_metrics ?? {},
+    currency,
+    revenue_by_currency: byCampaign.get(program.id)?.revenue_by_currency ?? {},
   }));
 }
 
@@ -399,12 +504,13 @@ export async function getCampaignTrends(
   db: D1Database,
   programId: string,
   userId: string,
-  filters: ReportFilters,
+  filters: ReportFilters & { tz_offset_minutes?: number },
 ): Promise<TrendPoint[]> {
   const rows = await getGroupedReport(db, userId, "date", {
     from: filters.from,
     to: filters.to,
     campaign_id: programId,
+    tz_offset_minutes: filters.tz_offset_minutes,
   });
   return rows
     .filter((row) => row.key)
@@ -419,103 +525,158 @@ export async function getCampaignTrends(
     }));
 }
 
-export async function exportClickLogCsv(
-  db: D1Database,
-  programId: string,
-  userId: string,
-  filters: ReportFilters,
-): Promise<Array<Array<string | number>>> {
+/** Hard cap on rows per CSV export; exports are streamed in keyset-paginated pages. */
+export const EXPORT_MAX_ROWS = 100_000;
+const EXPORT_PAGE_SIZE = 2_000;
+
+export type ExportOptions = { maxRows?: number; pageSize?: number };
+
+type CsvRow = Array<string | number>;
+
+async function ownsProgram(db: D1Database, programId: string, userId: string) {
   const program = await db
     .prepare("SELECT id FROM programs WHERE id = ? AND user_id = ?")
     .bind(programId, userId)
     .first();
-  if (!program) return [];
-
-  const clickTime = clickTimeClause(filters, "c");
-  const { results } = await db
-    .prepare(
-      `SELECT
-        c.id, c.created_at, a.code AS affiliate_code, a.name AS affiliate_name,
-        c.ip, c.lander_id, c.offer_id, c.path_id,
-        EXISTS(SELECT 1 FROM conversions cv WHERE cv.click_id = c.id) AS converted
-       FROM clicks c
-       JOIN affiliates a ON a.id = c.affiliate_id
-       WHERE c.program_id = ?${clickTime.sql}
-       ORDER BY c.created_at DESC`,
-    )
-    .bind(programId, ...clickTime.binds)
-    .all<{
-      id: string;
-      created_at: number;
-      affiliate_code: string;
-      affiliate_name: string;
-      ip: string | null;
-      lander_id: string | null;
-      offer_id: string | null;
-      path_id: string | null;
-      converted: number;
-    }>();
-
-  return (results ?? []).map((row) => [
-    row.id,
-    new Date(row.created_at).toISOString(),
-    row.affiliate_code,
-    row.affiliate_name,
-    row.ip ?? "",
-    row.lander_id ?? "",
-    row.offer_id ?? "",
-    row.path_id ?? "",
-    row.converted ? "yes" : "no",
-  ]);
+  return Boolean(program);
 }
 
-export async function exportConversionsCsv(
+/**
+ * Pages of `(created_at DESC, id DESC)` rows; each page resumes after the last row of
+ * the previous one, so memory stays bounded and no OFFSET scan is needed.
+ */
+async function* keysetPages<T extends { created_at: number; row_key: string }>(
+  fetchPage: (
+    after: { created_at: number; row_key: string } | null,
+    limit: number,
+  ) => Promise<T[]>,
+  options: ExportOptions,
+): AsyncGenerator<T[]> {
+  const maxRows = options.maxRows ?? EXPORT_MAX_ROWS;
+  const pageSize = options.pageSize ?? EXPORT_PAGE_SIZE;
+  let sent = 0;
+  let after: { created_at: number; row_key: string } | null = null;
+  while (sent < maxRows) {
+    const limit = Math.min(pageSize, maxRows - sent);
+    const rows = await fetchPage(after, limit);
+    if (rows.length > 0) {
+      sent += rows.length;
+      yield rows;
+    }
+    if (rows.length < limit) return;
+    const last = rows[rows.length - 1]!;
+    after = { created_at: last.created_at, row_key: last.row_key };
+  }
+}
+
+export async function* exportClickLogCsv(
   db: D1Database,
   programId: string,
   userId: string,
   filters: ReportFilters,
-): Promise<Array<Array<string | number>>> {
-  const program = await db
-    .prepare("SELECT id FROM programs WHERE id = ? AND user_id = ?")
-    .bind(programId, userId)
-    .first();
-  if (!program) return [];
+  options: ExportOptions = {},
+): AsyncGenerator<CsvRow[]> {
+  if (!(await ownsProgram(db, programId, userId))) return;
+
+  const clickTime = clickTimeClause(filters, "c");
+  const pages = keysetPages(async (after, limit) => {
+    const cursorSql = after ? " AND (c.created_at < ? OR (c.created_at = ? AND c.id < ?))" : "";
+    const cursorBinds = after ? [after.created_at, after.created_at, after.row_key] : [];
+    const { results } = await db
+      .prepare(
+        `SELECT
+          c.id AS row_key, c.created_at, a.code AS affiliate_code, a.name AS affiliate_name,
+          c.ip, c.lander_id, c.offer_id, c.path_id,
+          EXISTS(SELECT 1 FROM conversions cv WHERE cv.click_id = c.id) AS converted
+         FROM clicks c
+         JOIN affiliates a ON a.id = c.affiliate_id
+         WHERE c.program_id = ?${clickTime.sql}${cursorSql}
+         ORDER BY c.created_at DESC, c.id DESC
+         LIMIT ?`,
+      )
+      .bind(programId, ...clickTime.binds, ...cursorBinds, limit)
+      .all<{
+        row_key: string;
+        created_at: number;
+        affiliate_code: string;
+        affiliate_name: string;
+        ip: string | null;
+        lander_id: string | null;
+        offer_id: string | null;
+        path_id: string | null;
+        converted: number;
+      }>();
+    return results ?? [];
+  }, options);
+
+  for await (const rows of pages) {
+    yield rows.map((row) => [
+      row.row_key,
+      new Date(row.created_at).toISOString(),
+      row.affiliate_code,
+      row.affiliate_name,
+      row.ip ?? "",
+      row.lander_id ?? "",
+      row.offer_id ?? "",
+      row.path_id ?? "",
+      row.converted ? "yes" : "no",
+    ]);
+  }
+}
+
+export async function* exportConversionsCsv(
+  db: D1Database,
+  programId: string,
+  userId: string,
+  filters: ReportFilters,
+  options: ExportOptions = {},
+): AsyncGenerator<CsvRow[]> {
+  if (!(await ownsProgram(db, programId, userId))) return;
 
   const convTime = conversionTimeClause(filters, "cv");
-  const { results } = await db
-    .prepare(
-      `SELECT
-        cv.order_id, cv.click_id, cv.created_at, cv.amount_cents, cv.status, cv.status2,
-        cv.event, cv.currency, a.code AS affiliate_code, a.name AS affiliate_name
-       FROM conversions cv
-       JOIN affiliates a ON a.id = cv.affiliate_id
-       WHERE cv.program_id = ?${convTime.sql}
-       ORDER BY cv.created_at DESC`,
-    )
-    .bind(programId, ...convTime.binds)
-    .all<{
-      order_id: string;
-      click_id: string | null;
-      created_at: number;
-      amount_cents: number;
-      status: string;
-      status2: string | null;
-      event: string | null;
-      currency: string;
-      affiliate_code: string;
-      affiliate_name: string;
-    }>();
+  const pages = keysetPages(async (after, limit) => {
+    const cursorSql = after ? " AND (cv.created_at < ? OR (cv.created_at = ? AND cv.id < ?))" : "";
+    const cursorBinds = after ? [after.created_at, after.created_at, after.row_key] : [];
+    const { results } = await db
+      .prepare(
+        `SELECT
+          cv.id AS row_key, cv.order_id, cv.click_id, cv.created_at, cv.amount_cents, cv.status,
+          cv.status2, cv.event, cv.currency, a.code AS affiliate_code, a.name AS affiliate_name
+         FROM conversions cv
+         JOIN affiliates a ON a.id = cv.affiliate_id
+         WHERE cv.program_id = ?${convTime.sql}${cursorSql}
+         ORDER BY cv.created_at DESC, cv.id DESC
+         LIMIT ?`,
+      )
+      .bind(programId, ...convTime.binds, ...cursorBinds, limit)
+      .all<{
+        row_key: string;
+        order_id: string;
+        click_id: string | null;
+        created_at: number;
+        amount_cents: number;
+        status: string;
+        status2: string | null;
+        event: string | null;
+        currency: string;
+        affiliate_code: string;
+        affiliate_name: string;
+      }>();
+    return results ?? [];
+  }, options);
 
-  return (results ?? []).map((row) => [
-    row.order_id,
-    row.click_id ?? "",
-    new Date(row.created_at).toISOString(),
-    (row.amount_cents / 100).toFixed(2),
-    row.status,
-    row.status2 ?? "",
-    row.event ?? "",
-    row.currency,
-    row.affiliate_code,
-    row.affiliate_name,
-  ]);
+  for await (const rows of pages) {
+    yield rows.map((row) => [
+      row.order_id,
+      row.click_id ?? "",
+      new Date(row.created_at).toISOString(),
+      (row.amount_cents / 100).toFixed(2),
+      row.status,
+      row.status2 ?? "",
+      row.event ?? "",
+      row.currency,
+      row.affiliate_code,
+      row.affiliate_name,
+    ]);
+  }
 }

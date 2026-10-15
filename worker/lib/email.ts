@@ -11,11 +11,31 @@ function emailFrom(env: Env): string {
   return env.EMAIL_FROM ?? "noreply@capve.app";
 }
 
+/** Local dev install (APP_URL on localhost): safe to print emails, which carry auth links. */
+export function isLocalDev(env: Env): boolean {
+  try {
+    const host = new URL(env.APP_URL).hostname;
+    return (
+      host === "localhost" ||
+      host.endsWith(".localhost") ||
+      host === "127.0.0.1" ||
+      host === "[::1]"
+    );
+  } catch {
+    return false;
+  }
+}
+
 export async function sendEmail(env: Env, input: SendEmailInput): Promise<void> {
   const from = emailFrom(env);
 
   if (!env.EMAIL) {
-    console.log(`[email] To: ${input.to} | From: ${from} | ${input.subject}\n${input.text}`);
+    // Bodies contain reset/verify links: only print them on a local dev install.
+    if (isLocalDev(env)) {
+      console.log(`[email] To: ${input.to} | From: ${from} | ${input.subject}\n${input.text}`);
+    } else {
+      console.warn(`[email] No EMAIL binding; not sent: ${input.subject}`);
+    }
     return;
   }
 
@@ -28,20 +48,20 @@ export async function sendEmail(env: Env, input: SendEmailInput): Promise<void> 
   });
 }
 
-export function welcomeEmail(name: string | null, appUrl: string) {
-  const greeting = name ? `Hi ${name}` : "Hi there";
-  return {
-    subject: "Welcome to Capve",
-    text: `${greeting},\n\nYour Capve account is ready. Open your dashboard: ${appUrl}/app\n\n— Capve`,
-    html: `<p>${greeting},</p><p>Your Capve account is ready. <a href="${appUrl}/app">Open your dashboard</a>.</p><p>— Capve</p>`,
-  };
-}
-
 export function resetPasswordEmail(appUrl: string, token: string) {
   const link = `${appUrl}/reset-password?token=${encodeURIComponent(token)}`;
   return {
     subject: "Reset your Capve password",
     text: `Reset your password: ${link}\n\nThis link expires in 1 hour. If you did not request this, ignore this email.\n\n— Capve`,
     html: `<p><a href="${link}">Reset your password</a></p><p>This link expires in 1 hour. If you did not request this, ignore this email.</p><p>— Capve</p>`,
+  };
+}
+
+export function verifyEmailEmail(appUrl: string, token: string) {
+  const link = `${appUrl}/verify-email?token=${encodeURIComponent(token)}`;
+  return {
+    subject: "Verify your Capve email",
+    text: `Confirm your email address: ${link}\n\nThis link expires in 24 hours. If you did not create a Capve account, ignore this email.\n\n— Capve`,
+    html: `<p><a href="${link}">Confirm your email address</a></p><p>This link expires in 24 hours. If you did not create a Capve account, ignore this email.</p><p>— Capve</p>`,
   };
 }

@@ -20,6 +20,26 @@ migrations_dir = "migrations"
 [[send_email]]
 name = "EMAIL"
 
+# Rate limits for /api/auth (login, register, forgot/reset password, verify email).
+# namespace_id is any account-unique integer string; the Worker no-ops if a binding is missing.
+[[ratelimits]]
+name = "AUTH_IP_LIMITER"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }
+
+[[ratelimits]]
+name = "AUTH_EMAIL_LIMITER"
+namespace_id = "1002"
+simple = { limit = 5, period = 60 }
+
+# Scheduled jobs, dispatched by worker/cron/index.ts (CRON_JOBS keys must match).
+# Every 15 min ("*/15 * * * *"): automation rules (zone blacklist, ROI/spend alerts).
+# Hourly ("17 * * * *"): pull traffic source spend (Adcash, ...) into click costs.
+# Daily ("17 3 * * *"): data retention — prunes the postback delivery log (30 days) and,
+# only when RAW_CLICK_RETENTION_DAYS is set, raw clicks without conversions.
+[triggers]
+crons = ["*/15 * * * *", "17 * * * *", "17 3 * * *"]
+
 [vars]
 APP_URL = "http://localhost:5173"
 AUTH_SECRET = "capve-local-dev-auth-secret-change-in-prod"
@@ -34,6 +54,19 @@ vars = { APP_URL = "https://capve.app", EMAIL_FROM = "noreply@capve.app", PLATFO
 
 [[env.production.send_email]]
 name = "EMAIL"
+
+[[env.production.ratelimits]]
+name = "AUTH_IP_LIMITER"
+namespace_id = "1001"
+simple = { limit = 20, period = 60 }
+
+[[env.production.ratelimits]]
+name = "AUTH_EMAIL_LIMITER"
+namespace_id = "1002"
+simple = { limit = 5, period = 60 }
+
+[env.production.triggers]
+crons = ["*/15 * * * *", "17 * * * *", "17 3 * * *"]
 
 # Custom domains for production.
 # [env.production] are copied into dist/velo/wrangler.json only when the build

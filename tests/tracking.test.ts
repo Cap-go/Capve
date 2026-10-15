@@ -1,6 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
-import { registerTestUser } from "./helpers";
+import { BROWSER_HEADERS, registerTestUser } from "./helpers";
 import { initSql } from "./schema";
 
 const MERCHANT_DESTINATION = "https://merchant.example.com/pricing";
@@ -88,7 +88,7 @@ describe("affiliate tracking flow", () => {
     expect(tracking_url).toBe(`http://localhost:5173/r/${affiliate.code}`);
     expect(tracking_url).not.toContain("example.com");
 
-    const clickRes = await SELF.fetch(tracking_url, { redirect: "manual" });
+    const clickRes = await SELF.fetch(tracking_url, { redirect: "manual", headers: BROWSER_HEADERS });
     expect(clickRes.status).toBe(302);
     const refCookie = cookieFrom(clickRes, "_velo_ref");
     expect(refCookie).toBe(affiliate.code);
@@ -157,7 +157,8 @@ describe("affiliate tracking flow", () => {
     expect(stats.totals.clicks).toBe(1);
     expect(stats.totals.conversions).toBe(2);
     expect(stats.totals.revenue_cents).toBe(19900);
-    expect(stats.totals.conversion_rate).toBe(200);
+    // Click-less conversions can't be matched to a click: CR is capped at 100%.
+    expect(stats.totals.conversion_rate).toBe(100);
     expect(stats.affiliates[0]?.code).toBe(affiliate.code);
     expect(stats.affiliates[0]?.clicks).toBe(1);
     expect(stats.affiliates[0]?.conversions).toBe(2);

@@ -1,10 +1,23 @@
 import type { PathWithEntities, ResolvedDestination, Rotation, RoutingContext } from "../types-routing";
 import {
-  countProgramClicks,
   getVisitorAssignment,
+  nextRotationIndex,
   setVisitorAssignment,
 } from "../db/routing";
+import type { Defer } from "./background";
 import { parseHttpUrl, withQueryParam } from "./urls";
+import { weightedItem } from "./rules";
+
+/** Weighted lander/offer of a path; falls back to the single legacy lander_id / offer_id. */
+function pickItem(
+  items: PathWithEntities["landers"],
+  legacyId: string | null,
+  legacyUrl: string | null,
+): { id: string; url: string } | null {
+  const picked = weightedItem(items);
+  if (picked) return picked;
+  return legacyId && legacyUrl ? { id: legacyId, url: legacyUrl } : null;
+}
 
 const VISITOR_COOKIE = "_capve_vid";
 
@@ -42,14 +55,15 @@ function enabledPaths(paths: PathWithEntities[]): PathWithEntities[] {
   return paths.filter((p) => p.enabled);
 }
 
+/** Weighted random pick; paths with weight 0 never receive traffic. */
 function weightedPick(paths: PathWithEntities[]): PathWithEntities | null {
-  const pool = enabledPaths(paths);
+  const pool = enabledPaths(paths).filter((p) => p.weight > 0);
   if (pool.length === 0) return null;
-  const total = pool.reduce((sum, p) => sum + Math.max(p.weight, 1), 0);
+  const total = pool.reduce((sum, p) => sum + p.weight, 0);
   let roll = Math.random() * total;
   for (const path of pool) {
-    roll -= Math.max(path.weight, 1);
-    if (roll <= 0) return path;
+    roll -= path.weight;
+    if (roll < 0) return path;
   }
   return pool[pool.length - 1] ?? null;
 }
@@ -64,7 +78,7 @@ export async function selectPath(
   db: D1Database,
   rotation: Rotation,
   paths: PathWithEntities[],
-  opts: { programId: string; visitorKey: string | null },
+  opts: { programId: string; visitorKey: string | null; defer?: Defer },
 ): Promise<PathWithEntities | null> {
   const pool = enabledPaths(paths);
   if (pool.length === 0) return null;
@@ -78,8 +92,8 @@ export async function selectPath(
   }
 
   if (rotation.mode === "top_to_bottom") {
-    const clicks = await countProgramClicks(db, opts.programId);
-    return topToBottomPick(paths, clicks);
+    const index = await nextRotationIndex(db, rotation.id);
+    return topToBottomPick(paths, index);
   }
 
   if (rotation.mode === "smart" || rotation.mode === "normal") {
@@ -95,7 +109,10 @@ export async function selectPath(
     if (!picked) return null;
 
     if (opts.visitorKey && rotation.mode === "smart") {
-      await setVisitorAssignment(db, opts.programId, opts.visitorKey, picked.id);
+      const write = setVisitorAssignment(db, opts.programId, opts.visitorKey, picked.id);
+      // Sticky assignment only matters for the visitor's next click: do not block this one.
+      if (opts.defer) opts.defer(write);
+      else await write;
     }
     return picked;
   }
@@ -135,23 +152,32 @@ export function resolvePathDestination(
   let landerId: string | null = null;
   let offerId: string | null = null;
 
+  const lander = () => pickItem(path.landers ?? [], path.lander_id, path.lander_url);
+  const offer = () => pickItem(path.offers ?? [], path.offer_id, path.offer_url);
+
   switch (path.flow_type) {
     case "direct":
       raw = path.direct_url ?? fallbackDestination;
       break;
-    case "lander":
-      raw = path.lander_url;
-      landerId = path.lander_id;
+    case "lander": {
+      const l = lander();
+      raw = l?.url ?? null;
+      landerId = l?.id ?? null;
       break;
-    case "offer":
-      raw = path.offer_url;
-      offerId = path.offer_id;
+    }
+    case "offer": {
+      const o = offer();
+      raw = o?.url ?? null;
+      offerId = o?.id ?? null;
       break;
-    case "lander_offer":
-      raw = path.lander_url;
-      landerId = path.lander_id;
-      offerId = path.offer_id;
+    }
+    case "lander_offer": {
+      const l = lander();
+      raw = l?.url ?? null;
+      landerId = l?.id ?? null;
+      offerId = offer()?.id ?? null;
       break;
+    }
   }
 
   if (!raw) {

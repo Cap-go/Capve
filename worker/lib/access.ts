@@ -7,8 +7,10 @@ import { getUserById } from "../db/queries";
 import { readSessionCookie, verifySession } from "./session";
 
 async function resolveSession(db: D1Database, user: User): Promise<SessionUser> {
-  const is_platform_admin = user.is_platform_admin === 1;
-  const membership = await findTeamMembership(db, user.email);
+  // Email-matched privileges (platform admin, team membership) need a verified email.
+  const verified = user.email_verified === 1;
+  const is_platform_admin = verified && user.is_platform_admin === 1;
+  const membership = verified ? await findTeamMembership(db, user.email) : null;
   if (membership) {
     return {
       id: user.id,
@@ -16,6 +18,7 @@ async function resolveSession(db: D1Database, user: User): Promise<SessionUser> 
       role: membership.role,
       account_id: membership.owner_user_id,
       is_platform_admin,
+      email_verified: verified,
     };
   }
   return {
@@ -24,6 +27,7 @@ async function resolveSession(db: D1Database, user: User): Promise<SessionUser> 
     role: "owner",
     account_id: user.id,
     is_platform_admin,
+    email_verified: verified,
   };
 }
 
@@ -51,6 +55,7 @@ export async function resolveOperator(c: {
 
   const user = await getUserById(c.env.DB, claims.sub);
   if (!user || user.email !== claims.email) return null;
+  if ((user.session_version ?? 0) !== claims.sv) return null;
 
   return resolveSession(c.env.DB, user);
 }
