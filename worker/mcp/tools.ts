@@ -557,6 +557,22 @@ export const TOOLS: McpTool[] = [
     annotations: { readOnlyHint: false, destructiveHint: true },
     call: () => ({ method: "POST", path: "/api/ops/postback-key/rotate" }),
   },
+  {
+    name: "list_postback_deliveries",
+    title: "List postback deliveries",
+    description:
+      "Recent delivery attempts of one outgoing postback (newest first): URL sent, HTTP status, error, attempt (1 = first try, 2 = retry). Use to debug postbacks that do not reach the network or traffic source.",
+    inputSchema: schema(
+      { postback_id: str("Postback id (pb_…)."), limit: int("Max attempts to return (1-100, default 20).") },
+      ["postback_id"],
+    ),
+    annotations: read,
+    call: (a) => ({
+      method: "GET",
+      path: `/api/postbacks/${id(a, "postback_id")}/deliveries`,
+      query: { limit: a.limit as number | undefined },
+    }),
+  },
 
   // Reports
   {

@@ -117,6 +117,19 @@ export type Postback = {
   created_at: number;
 };
 
+/** One outgoing postback attempt (1 = first try, 2 = retry). */
+export type PostbackDelivery = {
+  id: string;
+  postback_id: string;
+  conversion_id: string | null;
+  url: string;
+  status_code: number | null;
+  error: string | null;
+  attempt: number;
+  ok: boolean;
+  created_at: number;
+};
+
 export type PostbackOwner =
   | { campaign_id: string }
   | { traffic_source_id: string }
@@ -459,6 +472,8 @@ export const api = {
     }),
   deletePostback: (postbackId: string) =>
     request<{ ok: boolean }>(`/api/postbacks/${postbackId}`, { method: "DELETE" }),
+  postbackDeliveries: (postbackId: string) =>
+    request<{ deliveries: PostbackDelivery[] }>(`/api/postbacks/${postbackId}/deliveries?limit=10`),
   groups: () => request<{ groups: Group[] }>("/api/entities/groups"),
   createGroup: (name: string) =>
     request<{ group: Group }>("/api/entities/groups", {

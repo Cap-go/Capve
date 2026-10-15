@@ -1,9 +1,10 @@
 import type { PathWithEntities, ResolvedDestination, Rotation, RoutingContext } from "../types-routing";
 import {
-  countProgramClicks,
   getVisitorAssignment,
+  nextRotationIndex,
   setVisitorAssignment,
 } from "../db/routing";
+import type { Defer } from "./background";
 import { parseHttpUrl, withQueryParam } from "./urls";
 
 const VISITOR_COOKIE = "_capve_vid";
@@ -65,7 +66,7 @@ export async function selectPath(
   db: D1Database,
   rotation: Rotation,
   paths: PathWithEntities[],
-  opts: { programId: string; visitorKey: string | null },
+  opts: { programId: string; visitorKey: string | null; defer?: Defer },
 ): Promise<PathWithEntities | null> {
   const pool = enabledPaths(paths);
   if (pool.length === 0) return null;
@@ -79,8 +80,8 @@ export async function selectPath(
   }
 
   if (rotation.mode === "top_to_bottom") {
-    const clicks = await countProgramClicks(db, opts.programId);
-    return topToBottomPick(paths, clicks);
+    const index = await nextRotationIndex(db, rotation.id);
+    return topToBottomPick(paths, index);
   }
 
   if (rotation.mode === "smart" || rotation.mode === "normal") {
@@ -96,7 +97,10 @@ export async function selectPath(
     if (!picked) return null;
 
     if (opts.visitorKey && rotation.mode === "smart") {
-      await setVisitorAssignment(db, opts.programId, opts.visitorKey, picked.id);
+      const write = setVisitorAssignment(db, opts.programId, opts.visitorKey, picked.id);
+      // Sticky assignment only matters for the visitor's next click: do not block this one.
+      if (opts.defer) opts.defer(write);
+      else await write;
     }
     return picked;
   }

@@ -1,10 +1,45 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, Fragment, useEffect, useState } from "react";
 import { ErrorBox } from "./ui";
-import { api, type Postback, type PostbackOwner } from "../lib/api";
+import { api, type Postback, type PostbackDelivery, type PostbackOwner } from "../lib/api";
 
 export const COMMON_EVENTS = ["registration", "ftd", "deposit", "lead", "sale"];
 
 const MACROS = "{click_id} {external_id} {payout} {status} {event} {currency} {order_id}";
+
+/** Last delivery attempts of one postback (status code or error). */
+function DeliveryLog({ postbackId }: { postbackId: string }) {
+  const [deliveries, setDeliveries] = useState<PostbackDelivery[] | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api
+      .postbackDeliveries(postbackId)
+      .then(({ deliveries: rows }) => setDeliveries(rows))
+      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load deliveries"));
+  }, [postbackId]);
+
+  if (error) return <p className="text-xs text-red-700">{error}</p>;
+  if (!deliveries) return <p className="text-xs text-[var(--velo-muted)]">Loading…</p>;
+  if (deliveries.length === 0) {
+    return <p className="text-xs text-[var(--velo-muted)]">No deliveries yet.</p>;
+  }
+  return (
+    <ul className="space-y-1 text-xs">
+      {deliveries.map((d) => (
+        <li key={d.id} className="flex flex-wrap gap-x-3">
+          <span className="whitespace-nowrap text-[var(--velo-muted)]">
+            {new Date(d.created_at).toLocaleString()}
+          </span>
+          <span className={`mono whitespace-nowrap ${d.ok ? "" : "text-red-700"}`}>
+            {d.ok ? `OK ${d.status_code}` : (d.error ?? `HTTP ${d.status_code}`)}
+            {d.attempt > 1 ? " (retry)" : ""}
+          </span>
+          <span className="mono break-all text-[var(--velo-muted)]">{d.url}</span>
+        </li>
+      ))}
+    </ul>
+  );
+}
 
 /** Outgoing postbacks of one campaign, traffic source or network: list, add, edit, delete. */
 export function PostbackList({
@@ -22,6 +57,7 @@ export function PostbackList({
   const [editing, setEditing] = useState<{ id: string; event: string; url: string } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [openLog, setOpenLog] = useState<string | null>(null);
   const ownerKey = JSON.stringify(owner);
 
   useEffect(() => {
@@ -129,37 +165,55 @@ export function PostbackList({
                     </td>
                   </tr>
                 ) : (
-                  <tr key={row.id}>
-                    <td className="whitespace-nowrap">
-                      {row.event ? (
-                        <span className="mono">{row.event}</span>
-                      ) : (
-                        <span className="text-[var(--velo-muted)]">All events</span>
-                      )}
-                    </td>
-                    <td className="mono break-all text-xs">{row.url}</td>
-                    {canWrite && (
-                      <td className="whitespace-nowrap text-right text-sm">
+                  <Fragment key={row.id}>
+                    <tr>
+                      <td className="whitespace-nowrap">
+                        {row.event ? (
+                          <span className="mono">{row.event}</span>
+                        ) : (
+                          <span className="text-[var(--velo-muted)]">All events</span>
+                        )}
+                      </td>
+                      <td className="mono break-all text-xs">
+                        {row.url}
                         <button
-                          className="underline"
-                          onClick={() =>
-                            setEditing({ id: row.id, event: row.event ?? "", url: row.url })
-                          }
+                          className="ml-2 font-sans underline text-[var(--velo-muted)]"
+                          onClick={() => setOpenLog(openLog === row.id ? null : row.id)}
                           type="button"
                         >
-                          Edit
-                        </button>
-                        <button
-                          className="ml-3 underline"
-                          disabled={busy}
-                          onClick={() => onDelete(row.id)}
-                          type="button"
-                        >
-                          Delete
+                          {openLog === row.id ? "Hide deliveries" : "Last deliveries"}
                         </button>
                       </td>
+                      {canWrite && (
+                        <td className="whitespace-nowrap text-right text-sm">
+                          <button
+                            className="underline"
+                            onClick={() =>
+                              setEditing({ id: row.id, event: row.event ?? "", url: row.url })
+                            }
+                            type="button"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className="ml-3 underline"
+                            disabled={busy}
+                            onClick={() => onDelete(row.id)}
+                            type="button"
+                          >
+                            Delete
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                    {openLog === row.id && (
+                      <tr>
+                        <td colSpan={canWrite ? 3 : 2}>
+                          <DeliveryLog postbackId={row.id} />
+                        </td>
+                      </tr>
                     )}
-                  </tr>
+                  </Fragment>
                 ),
               )}
             </tbody>

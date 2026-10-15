@@ -5,7 +5,7 @@ import { sendEmail } from "../worker/lib/email";
 import { csvEscape } from "../worker/lib/metrics";
 import { isRateLimited } from "../worker/lib/rate-limit";
 import type { Env } from "../worker/types";
-import { cookieFrom, registerTestUser } from "./helpers";
+import { cookieFrom, registerTestUser, settle } from "./helpers";
 import { initSql } from "./schema";
 
 const hits: string[] = [];
@@ -265,19 +265,27 @@ describe("security hardening", () => {
 
       hits.length = 0;
       await pb("cnv_status=pending&payout=10");
+      await vi.waitFor(() => expect(hits).toEqual(["/camp?s=pending"]));
+      await settle();
       expect(hits).toEqual(["/camp?s=pending"]);
 
       hits.length = 0;
       await pb("cnv_status=sale&payout=10");
+      await vi.waitFor(() => expect(hits.sort()).toEqual(["/camp?s=sale", "/net?p=10&s=sale"]));
+      await settle();
       expect(hits.sort()).toEqual(["/camp?s=sale", "/net?p=10&s=sale"]);
 
       // Payout update on an approved conversion: campaign postback only.
       hits.length = 0;
       await pb("cnv_status=sale&payout=20");
+      await vi.waitFor(() => expect(hits).toEqual(["/camp?s=sale"]));
+      await settle();
       expect(hits).toEqual(["/camp?s=sale"]);
 
       hits.length = 0;
       await pb("cnv_status=hold&payout=20");
+      await vi.waitFor(() => expect(hits).toEqual(["/camp?s=hold"]));
+      await settle();
       expect(hits).toEqual(["/camp?s=hold"]);
     });
 
@@ -294,6 +302,8 @@ describe("security hardening", () => {
       await SELF.fetch(
         `http://localhost/click?cnv_id=${clickId}&tx_id=${encodeURIComponent("a&admin=1")}`,
       );
+      await vi.waitFor(() => expect(hits).toContain("/trig?o=a%26admin%3D1&s=lead"));
+      await settle();
       expect(hits).toContain("/trig?o=a%26admin%3D1&s=lead");
     });
   });

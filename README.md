@@ -49,7 +49,7 @@ Cursor / VS Code / Windsurf (`mcp.json`):
 { "mcpServers": { "capve": { "url": "https://capve.app/mcp", "headers": { "Authorization": "Bearer capve_YOUR_TOKEN" } } } }
 ```
 
-47 tools cover campaigns, affiliates, paths and rotation, postbacks, traffic sources, networks, offers, landers, groups, reports, triggers, notes and team. Each tool replays the matching `/api` route with the token, so validation and team roles are identical to the dashboard. Full docs: `/docs/mcp`. Code: `worker/mcp/`.
+48 tools cover campaigns, affiliates, paths and rotation, postbacks, traffic sources, networks, offers, landers, groups, reports, triggers, notes and team. Each tool replays the matching `/api` route with the token, so validation and team roles are identical to the dashboard. Full docs: `/docs/mcp`. Code: `worker/mcp/`.
 
 Tokens act as the user who created them, can be revoked from the dashboard, and cannot create more tokens. Only a SHA-256 hash is stored.
 
@@ -64,6 +64,12 @@ Tokens act as the user who created them, can be revoked from the dashboard, and 
 **Platform admin:** Accounts whose email is listed in `PLATFORM_ADMIN_EMAILS` become platform admins once their email is verified (verification link or password reset), so register and verify those accounts immediately after deploying.
 
 **Important:** Do not put Cloudflare Access in front of this Worker. It intercepts `/api/auth/*` and breaks login. If an old Access app exists, run `bun run remove-access`. Also, `/r/*`, `/api/v1/convert`, `/api/v1/snippet`, and `/api/health` must stay public.
+
+**Data retention:** A daily cron (`17 3 * * *`, see `[triggers]` in `wrangler.toml`) prunes the outgoing postback delivery log after 30 days. Raw clicks are kept forever unless you set `RAW_CLICK_RETENTION_DAYS` (Worker var, e.g. `90`): then clicks older than that **without a conversion** are deleted in batches. Converted clicks are always kept. Reports for periods older than the retention window then show fewer clicks (conversions and revenue stay), so pick a window longer than your reporting needs. Off by default.
+
+**Outgoing postbacks** run after the response (`waitUntil`) with a 5 s timeout; non-2xx or network errors are retried once. Every attempt is logged (`GET /api/postbacks/:id/deliveries`, "Last deliveries" in the dashboard, MCP `list_postback_deliveries`).
+
+**CSV exports** (`/api/reports/clicks.csv`, `/api/reports/conversions.csv`) are streamed and capped at 100,000 rows (newest first); narrow `from`/`to` for more.
 
 ## Local development
 

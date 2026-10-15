@@ -14,6 +14,7 @@ import { routing } from "./routes/routing";
 import { tokens } from "./routes/tokens";
 import { readBearerToken, requireUser } from "./lib/access";
 import { handleMcpRequest } from "./mcp/server";
+import { runRetention } from "./lib/retention";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -85,4 +86,10 @@ app.all("*", async (c) => {
   return assets.fetch(c.req.raw);
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  /** Daily cron (wrangler.toml [triggers]): data retention. */
+  scheduled(_controller, env, ctx) {
+    ctx.waitUntil(runRetention(env));
+  },
+} satisfies ExportedHandler<Env>;

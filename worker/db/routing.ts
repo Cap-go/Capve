@@ -96,30 +96,23 @@ function mapPath(row: {
 
 type PathRow = ReturnType<typeof mapPath> extends Path ? Parameters<typeof mapPath>[0] : never;
 
-export async function listPaths(db: D1Database, rotationId: string): Promise<PathWithEntities[]> {
-  const { results } = await db
-    .prepare(
-      `SELECT
+const PATH_SELECT = `SELECT
         p.id, p.rotation_id, p.name, p.flow_type, p.weight, p.sort_order,
         p.direct_url, p.lander_id, p.offer_id, p.enabled, p.created_at,
         l.url AS lander_url, l.name AS lander_name,
         o.url AS offer_url, o.name AS offer_name
        FROM paths p
        LEFT JOIN landers l ON l.id = p.lander_id
-       LEFT JOIN offers o ON o.id = p.offer_id
-       WHERE p.rotation_id = ?
-       ORDER BY p.sort_order ASC, p.created_at ASC`,
-    )
-    .bind(rotationId)
-    .all<
-      PathRow & {
-        lander_url: string | null;
-        lander_name: string | null;
-        offer_url: string | null;
-        offer_name: string | null;
-      }
-    >();
+       LEFT JOIN offers o ON o.id = p.offer_id`;
 
+type PathEntityRow = PathRow & {
+  lander_url: string | null;
+  lander_name: string | null;
+  offer_url: string | null;
+  offer_name: string | null;
+};
+
+function mapPathEntityRows(results: PathEntityRow[] | undefined): PathWithEntities[] {
   return (results ?? []).map((row) => ({
     ...mapPath(row),
     lander_url: row.lander_url ?? null,
@@ -129,13 +122,51 @@ export async function listPaths(db: D1Database, rotationId: string): Promise<Pat
   }));
 }
 
+export async function listPaths(db: D1Database, rotationId: string): Promise<PathWithEntities[]> {
+  const { results } = await db
+    .prepare(`${PATH_SELECT}
+       WHERE p.rotation_id = ?
+       ORDER BY p.sort_order ASC, p.created_at ASC`)
+    .bind(rotationId)
+    .all<PathEntityRow>();
+  return mapPathEntityRows(results);
+}
+
+/** Rotation + paths in one D1 round trip (hot redirect path). */
 export async function getRotationConfig(
   db: D1Database,
   programId: string,
 ): Promise<RotationConfig> {
-  const rotation = await getOrCreateRotation(db, programId);
-  const paths = await listPaths(db, rotation.id);
-  return { rotation, paths };
+  const [rotationRows, pathRows] = await db.batch<Rotation | PathEntityRow>([
+    db
+      .prepare("SELECT id, program_id, mode, fixed_path_id, created_at FROM rotations WHERE program_id = ?")
+      .bind(programId),
+    db
+      .prepare(`${PATH_SELECT}
+       JOIN rotations r ON r.id = p.rotation_id
+       WHERE r.program_id = ?
+       ORDER BY p.sort_order ASC, p.created_at ASC`)
+      .bind(programId),
+  ]);
+  const existing = (rotationRows?.results?.[0] as Rotation | undefined) ?? null;
+  if (!existing) {
+    return { rotation: await getOrCreateRotation(db, programId), paths: [] };
+  }
+  return {
+    rotation: { ...existing, fixed_path_id: existing.fixed_path_id ?? null },
+    paths: mapPathEntityRows(pathRows?.results as PathEntityRow[] | undefined),
+  };
+}
+
+/** Atomically claims the next top_to_bottom slot for a rotation (0, 1, 2, ...). */
+export async function nextRotationIndex(db: D1Database, rotationId: string): Promise<number> {
+  const row = await db
+    .prepare(
+      "UPDATE rotations SET rr_counter = rr_counter + 1 WHERE id = ? RETURNING rr_counter - 1 AS idx",
+    )
+    .bind(rotationId)
+    .first<{ idx: number }>();
+  return row?.idx ?? 0;
 }
 
 export async function getPathById(
@@ -325,14 +356,6 @@ export async function setVisitorAssignment(
     )
     .bind(id("vas"), programId, visitorKey, pathId, Date.now())
     .run();
-}
-
-export async function countProgramClicks(db: D1Database, programId: string): Promise<number> {
-  const row = await db
-    .prepare("SELECT COUNT(*) AS count FROM clicks WHERE program_id = ?")
-    .bind(programId)
-    .first<{ count: number }>();
-  return row?.count ?? 0;
 }
 
 export async function getOrCreateCampaignAffiliate(

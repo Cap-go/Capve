@@ -3,6 +3,7 @@ import { getOfferForUser, getTrackedClick } from "../db/queries";
 import { getPostbackKey, postbackKeyMatches } from "../db/postback-key";
 import { createConversion, resolveAffiliateFromClick } from "../lib/conversion";
 import { normalizeEvent } from "../lib/postback";
+import { backgroundTasks } from "../lib/background";
 import type { Env } from "../types";
 
 const postback = new Hono<{ Bindings: Env }>();
@@ -87,7 +88,7 @@ postback.get("/", async (c) => {
     currency,
     disable_s2s: disableS2s,
     upsert: { status: explicitStatus !== undefined, amount: payout !== undefined },
-  });
+  }, backgroundTasks(c));
 
   return c.json({ ok: true, ...result });
 });

@@ -1,20 +1,8 @@
 import { Hono } from "hono";
-import {
-  getAffiliateByCode,
-  getOfferForUser,
-  getProgramById,
-  getTrackedClick,
-  isUniqueVisitor,
-  markLpClick,
-  recordClick,
-} from "../db/queries";
+import { markLpClick, recordClick } from "../db/queries";
 import { getTriggersForEvent } from "../db/ops";
-import {
-  getOrCreateCampaignAffiliate,
-  getOrCreateRotation,
-  getProgramByCampaignKey,
-  getRotationConfig,
-} from "../db/routing";
+import { getAffiliateLinkTarget, getCampaignLinkTarget, getLpClickTarget } from "../db/redirect";
+import { getOrCreateCampaignAffiliate, getRotationConfig } from "../db/routing";
 import type { Env } from "../types";
 import { affiliateCookie, isSecureRequest } from "../lib/auth";
 import {
@@ -26,6 +14,7 @@ import {
   substituteMacros,
   visitorCookie,
 } from "../lib/routing";
+import { backgroundTasks } from "../lib/background";
 import { fireTriggerWebhooks } from "../lib/triggers";
 import { id } from "../lib/utils";
 import { parseHttpUrl, resolveRedirectTarget, withQueryParam } from "../lib/urls";
@@ -45,9 +34,15 @@ function lpClickUrl(appUrl: string | undefined, requestUrl: string, clickId: str
 
 async function handleClickRedirect(
   c: Context<AppContext>,
-  program: { id: string; destination_url: string | null; campaign_key: string | null },
+  program: {
+    id: string;
+    user_id: string;
+    destination_url: string | null;
+    campaign_key: string | null;
+  },
   affiliate: { id: string; code: string },
 ) {
+  const defer = backgroundTasks(c);
   // Destination is optional: campaigns can route only through paths. The same-host
   // `?url=` override needs a destination to compare against, so it is ignored without one.
   let baseDestination: string | null = null;
@@ -88,6 +83,7 @@ async function handleClickRedirect(
     const path = await selectPath(c.env.DB, config.rotation, config.paths, {
       programId: program.id,
       visitorKey,
+      defer,
     });
     if (path) {
       const pathDest = resolvePathDestination(path, baseDestination, ctx);
@@ -106,6 +102,8 @@ async function handleClickRedirect(
 
   const now = Date.now();
   const { is_bot, ...contextColumns } = clickContext;
+  // Awaited: /lp and conversions look this click up, so it must exist before the redirect.
+  // Uniqueness is computed inside the INSERT (one round trip).
   await recordClick(c.env.DB, {
     ...contextColumns,
     id: clickId,
@@ -114,31 +112,23 @@ async function handleClickRedirect(
     path_id: pathId,
     lander_id: landerId,
     offer_id: offerId,
-    is_unique: await isUniqueVisitor(
-      c.env.DB,
-      program.id,
-      clickContext.visitor_hash,
-      now - UNIQUE_WINDOW_MS,
-    ),
+    unique_since: now - UNIQUE_WINDOW_MS,
     is_bot,
     created_at: now,
   });
 
-  const programFull = await getProgramById(c.env.DB, program.id);
-  if (programFull) {
-    const clickTriggers = await getTriggersForEvent(
-      c.env.DB,
-      programFull.user_id,
-      program.id,
-      "click",
-    );
-    await fireTriggerWebhooks(clickTriggers, {
-      click_id: clickId,
-      velo_ref: affiliate.code,
-      campaign_key: program.campaign_key,
-      program_id: program.id,
-    });
-  }
+  // Click triggers are best-effort and never delay or fail the redirect.
+  defer(
+    (async () => {
+      const clickTriggers = await getTriggersForEvent(c.env.DB, program.user_id, program.id, "click");
+      await fireTriggerWebhooks(clickTriggers, {
+        click_id: clickId,
+        velo_ref: affiliate.code,
+        campaign_key: program.campaign_key,
+        program_id: program.id,
+      });
+    })(),
+  );
 
   const headers = new Headers();
   headers.set("Location", destination.url.toString());
@@ -154,33 +144,32 @@ const redirect = new Hono<AppContext>();
 
 redirect.get("/:code", async (c) => {
   const code = c.req.param("code");
-  const affiliate = await getAffiliateByCode(c.env.DB, code);
-  if (!affiliate) {
+  const target = await getAffiliateLinkTarget(c.env.DB, code);
+  if (!target) {
     return c.text("Affiliate link not found", 404);
   }
-
-  const program = await getProgramById(c.env.DB, affiliate.program_id);
-  if (!program) {
-    return c.text("Program not found", 404);
-  }
-  if (program.status !== "active") {
+  if (target.status !== "active") {
     return c.text("Campaign not found", 404);
   }
 
-  return handleClickRedirect(c, program, affiliate);
+  return handleClickRedirect(c, target, { id: target.affiliate_id, code: target.affiliate_code });
 });
 
 const campaign = new Hono<AppContext>();
 
 campaign.get("/:key", async (c) => {
   const key = c.req.param("key");
-  const program = await getProgramByCampaignKey(c.env.DB, key);
+  const program = await getCampaignLinkTarget(c.env.DB, key);
   if (!program || program.status !== "active") {
     return c.text("Campaign not found", 404);
   }
 
-  const affiliate = await getOrCreateCampaignAffiliate(c.env.DB, program.id, key);
-  await getOrCreateRotation(c.env.DB, program.id);
+  // Campaign affiliate comes with the lookup; created on the first click only.
+  // The rotation is created on demand by getRotationConfig.
+  const affiliate =
+    program.affiliate_id && program.affiliate_code
+      ? { id: program.affiliate_id, code: program.affiliate_code }
+      : await getOrCreateCampaignAffiliate(c.env.DB, program.id, key);
 
   return handleClickRedirect(
     c,
@@ -197,41 +186,38 @@ campaign.get("/:key", async (c) => {
 const lp = new Hono<AppContext>();
 
 lp.get("/:clickId", async (c) => {
-  const click = await getTrackedClick(c.env.DB, c.req.param("clickId"));
+  const click = await getLpClickTarget(c.env.DB, c.req.param("clickId"));
   if (!click?.offer_id) {
     return c.text("Offer not found", 404);
   }
-
-  const program = await getProgramById(c.env.DB, click.program_id);
-  if (!program || program.status !== "active") {
+  if (click.program_status !== "active") {
     return c.text("Campaign not found", 404);
   }
-
-  const offer = await getOfferForUser(c.env.DB, click.offer_id, program.user_id);
-  const affiliate = await c.env.DB.prepare("SELECT code FROM affiliates WHERE id = ?")
-    .bind(click.affiliate_id)
-    .first<{ code: string }>();
-  if (!offer || !affiliate) {
+  if (!click.offer_url || !click.affiliate_code) {
     return c.text("Offer not found", 404);
   }
+  const affiliate = { code: click.affiliate_code };
 
   const ctx: RoutingContext = {
     click_id: click.id,
     velo_ref: affiliate.code,
-    campaign_key: program.campaign_key,
-    campaign_id: program.id,
+    campaign_key: click.campaign_key,
+    campaign_id: click.program_id,
     offer_id: click.offer_id,
     lander_id: click.lander_id,
     country: click.country,
     external_id: click.external_id,
     subs: Object.fromEntries(SUB_KEYS.map((key) => [key, click[key]])),
   };
-  const parsed = parseHttpUrl(substituteMacros(offer.url, ctx));
+  const parsed = parseHttpUrl(substituteMacros(click.offer_url, ctx));
   if (!parsed) {
     return c.text("Invalid offer URL", 503);
   }
 
-  await markLpClick(c.env.DB, click.id, Date.now());
+  // LP click stat is recorded after the response; it never blocks the offer redirect.
+  if (click.lp_clicked_at == null) {
+    backgroundTasks(c)(markLpClick(c.env.DB, click.id, Date.now()));
+  }
 
   let url = withQueryParam(parsed, "velo_ref", affiliate.code);
   url = withQueryParam(url, "click_id", click.id);

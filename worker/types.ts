@@ -20,6 +20,8 @@ export type Env = {
   /** Workers Rate Limiting bindings for /api/auth; missing = no limit (tests, old installs). */
   AUTH_IP_LIMITER?: RateLimit;
   AUTH_EMAIL_LIMITER?: RateLimit;
+  /** Days to keep raw clicks without conversions; unset/0 = keep forever. */
+  RAW_CLICK_RETENTION_DAYS?: string;
 };
 
 export type User = {

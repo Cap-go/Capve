@@ -115,7 +115,7 @@ export function LandingPage() {
           <div className="self-start">
             <CodeBlock>{claudeCodeCommand(appBaseUrl())}</CodeBlock>
             <p className="mt-3 text-sm text-[var(--velo-muted)]">
-              47 tools: campaigns, paths, offers, landers, postbacks, traffic sources, reports, triggers, team.
+              48 tools: campaigns, paths, offers, landers, postbacks, traffic sources, reports, triggers, team.
             </p>
           </div>
         </div>

@@ -310,6 +310,11 @@ export async function recordClick(
     lander_id?: string | null;
     offer_id?: string | null;
     is_unique?: boolean;
+    /**
+     * When set, `is_unique` is computed inside the INSERT (no prior click with the
+     * same visitor_hash on this campaign since this time): one D1 round trip.
+     */
+    unique_since?: number;
     is_bot?: boolean;
     created_at: number;
   } & ClickContextColumns,
@@ -324,6 +329,13 @@ export async function recordClick(
       : "?",
   );
   const explicitCost = contextValues[costIndex];
+  const uniqueInline = click.unique_since != null;
+  const uniqueSql = uniqueInline
+    ? "NOT EXISTS (SELECT 1 FROM clicks WHERE program_id = ? AND visitor_hash = ? AND created_at >= ?)"
+    : "?";
+  const uniqueBinds = uniqueInline
+    ? [click.program_id, click.visitor_hash ?? null, click.unique_since!]
+    : [click.is_unique === false ? 0 : 1];
   await db
     .prepare(
       `INSERT INTO clicks (
@@ -335,7 +347,7 @@ export async function recordClick(
         (SELECT traffic_source_id FROM programs WHERE id = ?),
         CASE WHEN ? IS NULL THEN (SELECT CASE WHEN ts.cost_type = 'cpa' THEN ts.default_cost_cents END
           ${CLICK_SOURCE_SQL}) END,
-        ?, ?, ?)`,
+        ${uniqueSql}, ?, ?)`,
     )
     .bind(
       click.id,
@@ -352,7 +364,7 @@ export async function recordClick(
       click.program_id,
       explicitCost,
       click.program_id,
-      click.is_unique === false ? 0 : 1,
+      ...uniqueBinds,
       click.is_bot ? 1 : 0,
       click.created_at,
     )

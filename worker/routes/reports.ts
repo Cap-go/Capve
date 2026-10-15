@@ -1,5 +1,6 @@
 import { Hono, type Context } from "hono";
 import {
+  EXPORT_MAX_ROWS,
   exportClickLogCsv,
   exportConversionsCsv,
   getCampaignTrends,
@@ -9,12 +10,49 @@ import {
   listCampaignReports,
 } from "../db/reports";
 import type { Env } from "../types";
-import { parseReportFilters, toCsv, type EventMetrics } from "../lib/metrics";
+import { csvEscape, parseReportFilters, toCsv, type EventMetrics } from "../lib/metrics";
 import { requireUser } from "../lib/access";
 
 const reports = new Hono<{ Bindings: Env }>();
 
-/** Event names present in report rows, for CSV columns per event. */
+/** Streams CSV pages so large exports never sit in memory as one string. */
+function streamCsv(
+  headers: string[],
+  pages: AsyncGenerator<Array<Array<string | number>>>,
+  filename: string,
+): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      controller.enqueue(encoder.encode(`${headers.join(",")}\n`));
+    },
+    async pull(controller) {
+      try {
+        const { value, done } = await pages.next();
+        if (done) {
+          controller.close();
+          return;
+        }
+        const lines = value.map((row) => row.map((cell) => csvEscape(cell)).join(","));
+        controller.enqueue(encoder.encode(`${lines.join("\n")}\n`));
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    async cancel() {
+      await pages.return(undefined);
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/csv; charset=utf-8",
+      "Content-Disposition": `attachment; filename="${filename}"`,
+      "X-Export-Row-Limit": String(EXPORT_MAX_ROWS),
+    },
+  });
+}
+
+/** Event names present in report rows, for one CSV column per event. */
 function eventNames(rows: Array<{ events: Record<string, number> }>): string[] {
   return [...new Set(rows.flatMap((row) => Object.keys(row.events)))].sort();
 }
@@ -237,8 +275,7 @@ reports.get("/clicks.csv", async (c) => {
     to: c.req.query("to"),
   });
 
-  const rows = await exportClickLogCsv(c.env.DB, programId, session.account_id, filters);
-  const csv = toCsv(
+  return streamCsv(
     [
       "click_id",
       "time",
@@ -250,15 +287,9 @@ reports.get("/clicks.csv", async (c) => {
       "path_id",
       "converted",
     ],
-    rows,
+    exportClickLogCsv(c.env.DB, programId, session.account_id, filters),
+    "clicklog.csv",
   );
-
-  return new Response(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="clicklog.csv"',
-    },
-  });
 });
 
 reports.get("/conversions.csv", async (c) => {
@@ -273,8 +304,7 @@ reports.get("/conversions.csv", async (c) => {
     to: c.req.query("to"),
   });
 
-  const rows = await exportConversionsCsv(c.env.DB, programId, session.account_id, filters);
-  const csv = toCsv(
+  return streamCsv(
     [
       "order_id",
       "click_id",
@@ -287,15 +317,9 @@ reports.get("/conversions.csv", async (c) => {
       "affiliate_code",
       "affiliate_name",
     ],
-    rows,
+    exportConversionsCsv(c.env.DB, programId, session.account_id, filters),
+    "conversions.csv",
   );
-
-  return new Response(csv, {
-    headers: {
-      "Content-Type": "text/csv; charset=utf-8",
-      "Content-Disposition": 'attachment; filename="conversions.csv"',
-    },
-  });
 });
 
 export { reports };

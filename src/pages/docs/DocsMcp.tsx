@@ -53,6 +53,7 @@ const TOOL_GROUPS: Array<[string, string[]]> = [
       "get_postback_key",
       "set_postback_key_required",
       "rotate_postback_key",
+      "list_postback_deliveries",
     ],
   ],
   ["Reports", ["report_campaigns", "report_grouped", "report_trends"]],

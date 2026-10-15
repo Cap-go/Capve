@@ -11,6 +11,7 @@ import { isPostbackApprovedStatus } from "./metrics";
 import { getTriggersForEvent } from "../db/ops";
 import { postbacksForConversion } from "../db/postbacks";
 import { fireS2SPostback } from "./postback";
+import type { Defer } from "./background";
 import { fireTriggerWebhooks } from "./triggers";
 import { id } from "./utils";
 
@@ -53,6 +54,7 @@ async function fireConversionPostbacks(
   program: { id: string; user_id: string; traffic_source_id?: string | null },
   becameApproved: boolean,
   macros: {
+    conversion_id: string;
     click_id: string | null;
     payout: number;
     status: string;
@@ -110,7 +112,9 @@ async function fireConversionPostbacks(
         if (!becameApproved) return false;
         return pb.traffic_source_id ? sourceSampled : true;
       })
-      .map((pb) => fireS2SPostback(pb.url, values)),
+      .map((pb) =>
+        fireS2SPostback(pb.url, values, { db, postbackId: pb.id, conversionId: macros.conversion_id }),
+      ),
   );
 }
 
@@ -123,6 +127,11 @@ export async function createConversion(
   },
   affiliate: { id: string; code: string },
   params: CreateConversionParams,
+  /**
+   * Runs outgoing postbacks and triggers after the response (ctx.waitUntil).
+   * Omitted = awaited inline.
+   */
+  defer?: Defer,
 ): Promise<{
   status: ConversionRecordStatus;
   conversion: {
@@ -165,13 +174,14 @@ export async function createConversion(
   const stored = recorded.conversion;
   const payout = stored.amount_cents / 100;
 
-  if (recorded.status !== "duplicate" && !params.disable_s2s) {
-    // Source/network postbacks fire on the not-approved → approved transition only,
-    // never again on later payout or status updates of an approved conversion.
-    const becameApproved =
-      isPostbackApprovedStatus(stored.status) &&
-      (recorded.status === "created" || !isPostbackApprovedStatus(recorded.previous_status));
+  // Source/network postbacks fire on the not-approved → approved transition only,
+  // never again on later payout or status updates of an approved conversion.
+  const becameApproved =
+    isPostbackApprovedStatus(stored.status) &&
+    (recorded.status === "created" || !isPostbackApprovedStatus(recorded.previous_status));
+  const sideEffects = async () => {
     await fireConversionPostbacks(db, program, becameApproved, {
+      conversion_id: stored.id,
       click_id: stored.click_id,
       payout,
       status: stored.status,
@@ -192,6 +202,11 @@ export async function createConversion(
       affiliate_code: affiliate.code,
       program_id: program.id,
     });
+  };
+
+  if (recorded.status !== "duplicate" && !params.disable_s2s) {
+    if (defer) defer(sideEffects());
+    else await sideEffects();
   }
 
   return {
