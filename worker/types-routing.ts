@@ -22,6 +22,16 @@ export type Path = {
   offer_id: string | null;
   enabled: boolean;
   created_at: number;
+  /** null = default pool; otherwise the routing rule this path belongs to. */
+  rule_id: string | null;
+};
+
+/** One weighted lander or offer inside a path. */
+export type PathItem = {
+  id: string;
+  weight: number;
+  url: string;
+  name: string;
 };
 
 export type PathWithEntities = Path & {
@@ -29,11 +39,64 @@ export type PathWithEntities = Path & {
   lander_name: string | null;
   offer_url: string | null;
   offer_name: string | null;
+  landers: PathItem[];
+  offers: PathItem[];
 };
+
+export type RuleOperator = "in" | "not_in";
+
+export type RuleField =
+  | "country"
+  | "region"
+  | "city"
+  | "device_type"
+  | "os"
+  | "browser"
+  | "isp"
+  | "asn"
+  | "language"
+  | "connection"
+  | "bot"
+  | "referrer_domain"
+  | "ip"
+  | "weekday"
+  | "hour"
+  | "sub1"
+  | "sub2"
+  | "sub3"
+  | "sub4"
+  | "sub5"
+  | "sub6"
+  | "sub7"
+  | "sub8"
+  | "sub9"
+  | "sub10";
+
+export type RuleCondition = {
+  field: RuleField;
+  op: RuleOperator;
+  values: string[];
+};
+
+export type RoutingRule = {
+  id: string;
+  program_id: string;
+  name: string;
+  sort_order: number;
+  conditions: RuleCondition[];
+  timezone: string;
+  enabled: boolean;
+  created_at: number;
+};
+
+export type RoutingRuleWithPaths = RoutingRule & { paths: PathWithEntities[] };
 
 export type RotationConfig = {
   rotation: Rotation;
+  /** Default pool (paths without a rule). */
   paths: PathWithEntities[];
+  /** Ordered rules; first match wins, else `paths`. */
+  rules: RoutingRuleWithPaths[];
 };
 
 export type RoutingContext = {

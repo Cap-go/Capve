@@ -15,6 +15,7 @@ import { DocsConvertApi } from "./pages/docs/DocsConvertApi";
 import { DocsMcp } from "./pages/docs/DocsMcp";
 import { DocsOverview } from "./pages/docs/DocsOverview";
 import { DocsPostback } from "./pages/docs/DocsPostback";
+import { DocsRouting } from "./pages/docs/DocsRouting";
 import { DocsServerConversions } from "./pages/docs/DocsServerConversions";
 import { DocsTrackingLinks } from "./pages/docs/DocsTrackingLinks";
 import { DocsTrafficSources } from "./pages/docs/DocsTrafficSources";
@@ -37,6 +38,7 @@ export function App() {
             <Route path="postback" element={<DocsPostback />} />
             <Route path="tracking-links" element={<DocsTrackingLinks />} />
             <Route path="traffic-sources" element={<DocsTrafficSources />} />
+            <Route path="routing" element={<DocsRouting />} />
             <Route path="browser-attribution" element={<DocsBrowserAttribution />} />
             <Route path="server-conversions" element={<DocsServerConversions />} />
             <Route path="api/convert" element={<DocsConvertApi />} />

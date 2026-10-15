@@ -218,6 +218,51 @@ export type Path = {
   lander_name: string | null;
   offer_url: string | null;
   offer_name: string | null;
+  rule_id?: string | null;
+  landers?: PathItem[];
+  offers?: PathItem[];
+};
+
+export type PathItem = { id: string; weight: number; url: string; name: string };
+
+export type RuleOperator = "in" | "not_in";
+
+export type RuleCondition = { field: string; op: RuleOperator; values: string[] };
+
+export type RoutingRule = {
+  id: string;
+  program_id: string;
+  name: string;
+  sort_order: number;
+  conditions: RuleCondition[];
+  timezone: string;
+  enabled: boolean;
+  created_at: number;
+  paths: Path[];
+};
+
+export type TrafficFilter = {
+  program_id: string;
+  bot_action: "route" | "safe_page";
+  safe_page_url: string | null;
+  block_datacenter: boolean;
+};
+
+export type BlocklistKind = "ip" | "asn" | "ua";
+
+export type BlocklistEntry = { id: string; kind: BlocklistKind; value: string; created_at: number };
+
+export type PathInput = {
+  name: string;
+  flow_type: FlowType;
+  weight?: number;
+  sort_order?: number;
+  direct_url?: string | null;
+  lander_id?: string | null;
+  offer_id?: string | null;
+  rule_id?: string | null;
+  landers?: { lander_id: string; weight: number }[];
+  offers?: { offer_id: string; weight: number }[];
 };
 
 export type Rotation = {
@@ -231,6 +276,7 @@ export type Rotation = {
 export type RotationConfig = {
   rotation: Rotation;
   paths: Path[];
+  rules?: RoutingRule[];
 };
 
 export type CampaignMetrics = {
@@ -525,6 +571,54 @@ export const api = {
     request<{ ok: boolean }>(`/api/programs/${programId}/paths/${pathId}`, {
       method: "DELETE",
     }),
+  createPathWithItems: (programId: string, data: PathInput) =>
+    request<{ path: Path }>(`/api/programs/${programId}/paths`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  rules: (programId: string) =>
+    request<{ rules: RoutingRule[] }>(`/api/programs/${programId}/rules`),
+  createRule: (
+    programId: string,
+    data: { name: string; conditions: RuleCondition[]; timezone?: string },
+  ) =>
+    request<{ rule: RoutingRule }>(`/api/programs/${programId}/rules`, {
+      method: "POST",
+      body: JSON.stringify(data),
+    }),
+  updateRule: (
+    programId: string,
+    ruleId: string,
+    data: Partial<{
+      name: string;
+      conditions: RuleCondition[];
+      timezone: string;
+      sort_order: number;
+      enabled: boolean;
+    }>,
+  ) =>
+    request<{ rule: RoutingRule }>(`/api/programs/${programId}/rules/${ruleId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteRule: (programId: string, ruleId: string) =>
+    request<{ ok: boolean }>(`/api/programs/${programId}/rules/${ruleId}`, { method: "DELETE" }),
+  trafficFilter: (programId: string) =>
+    request<{ filter: TrafficFilter }>(`/api/programs/${programId}/traffic-filter`),
+  updateTrafficFilter: (programId: string, data: Partial<Omit<TrafficFilter, "program_id">>) =>
+    request<{ filter: TrafficFilter }>(`/api/programs/${programId}/traffic-filter`, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    }),
+  blocklist: () =>
+    request<{ entries: BlocklistEntry[]; datacenter_asns: number[] }>("/api/antifraud/blocklist"),
+  addToBlocklist: (kind: BlocklistKind, values: string[]) =>
+    request<{ entries: BlocklistEntry[] }>("/api/antifraud/blocklist", {
+      method: "POST",
+      body: JSON.stringify({ kind, values }),
+    }),
+  removeFromBlocklist: (entryId: string) =>
+    request<{ ok: boolean }>(`/api/antifraud/blocklist/${entryId}`, { method: "DELETE" }),
   campaignReports: (filters: ReportFilters = {}) => {
     const params = new URLSearchParams();
     if (filters.from != null) params.set("from", String(filters.from));

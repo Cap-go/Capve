@@ -5,6 +5,8 @@ import { CampaignReportPanel } from "../components/CampaignReport";
 import { EntityPanel } from "../components/EntityPanel";
 import { PathEditor } from "../components/PathEditor";
 import { PostbackList } from "../components/PostbackList";
+import { RoutingRules } from "../components/RoutingRules";
+import { TrafficFilterPanel } from "../components/TrafficFilterPanel";
 import { McpPanel } from "../components/McpPanel";
 import { OpsPanel, NotesPanel } from "../components/OpsPanel";
 import { CodeBlock } from "../components/CodeBlock";
@@ -573,6 +575,8 @@ function OverviewPanel({
       <CampaignSourcePanel programId={selectedId} canWrite={canWrite} />
 
       <PathEditor programId={selectedId} />
+      <RoutingRules programId={selectedId} canWrite={canWrite} />
+      <TrafficFilterPanel programId={selectedId} canWrite={canWrite} />
 
       <NotesPanel canWrite={canWrite} entityId={selectedId} entityType="program" />
 

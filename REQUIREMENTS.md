@@ -24,6 +24,9 @@ A Capve instance lets a user:
 | Teams | Owner invites by email; invite applies only after the invitee accepts |
 | Click redirect | `/r/:code`, `/c/:key` → path target; appends `click_id` + `velo_ref`; paused campaigns 404 |
 | Click context | country/region/city/ISP from `request.cf`, device/OS/browser from UA, `sub1`–`sub10`, external `clickid`, per-click `cost`, unique + bot flags |
+| Routing rules | Ordered per-campaign rules (`worker/lib/rules.ts`): AND-ed `in`/`not_in` conditions on geo, device, OS, browser, ISP/ASN, language, connection, bot, referrer, IP/CIDR, weekday/hour (rule timezone), sub1–sub10; first match uses its own paths, else default pool |
+| Weighted landers/offers | A path holds several weighted landers and offers (`path_landers`, `path_offers`); the chosen ones are stored on the click |
+| Anti-fraud | Account blocklist (IP/CIDR, ASN, UA substring), optional datacenter-ASN flag, per-campaign `bot_action` (`route` or configured `safe_page_url`); flagged clicks get `is_bot = 1` |
 | URL macros | `{clickid}`/`{click_id}`, `{campaign_id}`, `{offer_id}`, `{lander_id}`, `{country}`, `{external_id}`, `{sub1}`–`{sub10}`, `{lp_click_url}` |
 | LP click | `/lp/:clickId` marks the LP click and redirects to the click's offer |
 | Postback | `GET /click?cnv_id=&payout=&cnv_status=&tx_id=&event=&key=`; repeat for same click (and event) updates status/payout; no payout → offer payout (events: 0); per-account postback key: without a valid key payout is capped to the offer payout, and with enforcement on keyless postbacks get 403 |

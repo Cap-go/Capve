@@ -161,7 +161,8 @@ CREATE TABLE IF NOT EXISTS paths (
   lander_id TEXT,
   offer_id TEXT,
   enabled INTEGER NOT NULL DEFAULT 1,
-  created_at INTEGER NOT NULL
+  created_at INTEGER NOT NULL,
+  rule_id TEXT
 );
 
 CREATE TABLE IF NOT EXISTS visitor_assignments (
@@ -294,4 +295,48 @@ CREATE TABLE IF NOT EXISTS cost_updates (
 );
 
 CREATE INDEX IF NOT EXISTS idx_cost_updates_program ON cost_updates(program_id, created_at);
+
+CREATE TABLE IF NOT EXISTS routing_rules (
+  id TEXT PRIMARY KEY,
+  program_id TEXT NOT NULL REFERENCES programs(id),
+  name TEXT NOT NULL,
+  sort_order INTEGER NOT NULL DEFAULT 0,
+  conditions TEXT NOT NULL DEFAULT '[]',
+  timezone TEXT NOT NULL DEFAULT 'UTC',
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS path_landers (
+  id TEXT PRIMARY KEY,
+  path_id TEXT NOT NULL REFERENCES paths(id) ON DELETE CASCADE,
+  lander_id TEXT NOT NULL REFERENCES landers(id),
+  weight INTEGER NOT NULL DEFAULT 100,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS path_offers (
+  id TEXT PRIMARY KEY,
+  path_id TEXT NOT NULL REFERENCES paths(id) ON DELETE CASCADE,
+  offer_id TEXT NOT NULL REFERENCES offers(id),
+  weight INTEGER NOT NULL DEFAULT 100,
+  created_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS blocklist_entries (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  kind TEXT NOT NULL,
+  value TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(user_id, kind, value)
+);
+
+CREATE TABLE IF NOT EXISTS campaign_traffic_filters (
+  program_id TEXT PRIMARY KEY REFERENCES programs(id),
+  bot_action TEXT NOT NULL DEFAULT 'route',
+  safe_page_url TEXT,
+  block_datacenter INTEGER NOT NULL DEFAULT 0,
+  updated_at INTEGER NOT NULL
+);
 `;

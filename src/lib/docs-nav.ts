@@ -31,6 +31,11 @@ export const DOC_PAGES: DocPage[] = [
     description: "Affiliate links, redirects, and click counting",
   },
   {
+    slug: "routing",
+    title: "Routing rules & anti-fraud",
+    description: "Rules by geo, device, time and more; weighted landers/offers; bots and safe page",
+  },
+  {
     slug: "browser-attribution",
     title: "Browser attribution",
     description: "Snippet, velo_ref parameter, and passing data to checkout",
