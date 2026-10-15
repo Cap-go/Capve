@@ -485,12 +485,28 @@ export async function recordConversion(
   return { status: "updated", conversion: next, previous_status: existing.status };
 }
 
+export type LogPage = { limit?: number; offset?: number; from?: number; to?: number };
+
+function logWindow(alias: string, programId: string, page: LogPage) {
+  const clauses = [`${alias}.program_id = ?`];
+  const params: Array<string | number> = [programId];
+  if (page.from !== undefined) {
+    clauses.push(`${alias}.created_at >= ?`);
+    params.push(page.from);
+  }
+  if (page.to !== undefined) {
+    clauses.push(`${alias}.created_at <= ?`);
+    params.push(page.to);
+  }
+  return { where: clauses.join(" AND "), params };
+}
+
 export async function listClickLog(
   db: D1Database,
   programId: string,
-  limit = 50,
-  offset = 0,
+  page: LogPage = {},
 ): Promise<ClickLogRow[]> {
+  const { where, params } = logWindow("c", programId, page);
   const { results } = await db
     .prepare(
       `SELECT
@@ -499,11 +515,11 @@ export async function listClickLog(
         EXISTS(SELECT 1 FROM conversions cv WHERE cv.click_id = c.id) AS converted
       FROM clicks c
       JOIN affiliates a ON a.id = c.affiliate_id
-      WHERE c.program_id = ?
+      WHERE ${where}
       ORDER BY c.created_at DESC
       LIMIT ? OFFSET ?`,
     )
-    .bind(programId, limit, offset)
+    .bind(...params, page.limit ?? 50, page.offset ?? 0)
     .all<{
       id: string;
       program_id: string;
@@ -532,9 +548,9 @@ export async function listClickLog(
 export async function listConversionLog(
   db: D1Database,
   programId: string,
-  limit = 50,
-  offset = 0,
+  page: LogPage = {},
 ): Promise<ConversionLogRow[]> {
+  const { where, params } = logWindow("cv", programId, page);
   const { results } = await db
     .prepare(
       `SELECT
@@ -543,11 +559,11 @@ export async function listConversionLog(
         a.name AS affiliate_name, a.code AS affiliate_code
       FROM conversions cv
       JOIN affiliates a ON a.id = cv.affiliate_id
-      WHERE cv.program_id = ?
+      WHERE ${where}
       ORDER BY cv.created_at DESC
       LIMIT ? OFFSET ?`,
     )
-    .bind(programId, limit, offset)
+    .bind(...params, page.limit ?? 50, page.offset ?? 0)
     .all<ConversionLogRow>();
   return results ?? [];
 }

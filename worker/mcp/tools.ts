@@ -98,8 +98,8 @@ const pathFields = {
   weight: int("Rotation weight (default 100)."),
   sort_order: int("Order for top_to_bottom rotation."),
   direct_url: nullableStr("Destination for flow_type=direct (http/https)."),
-  lander_id: nullableStr("Lander id (lnd_…)."),
-  offer_id: nullableStr("Offer id (ofr_…)."),
+  lander_id: nullableStr("Lander id (lp_…)."),
+  offer_id: nullableStr("Offer id (off_…)."),
   enabled: bool("Whether the path receives traffic."),
 };
 
@@ -148,7 +148,8 @@ export const TOOLS: McpTool[] = [
       {
         name: str("Campaign name."),
         destination_url: str("Optional default destination (http/https). Omit to route only through paths."),
-        traffic_source_id: str("Optional traffic source id (ts_…)."),
+        traffic_source_id: str("Optional traffic source id (src_…)."),
+        group_id: str("Optional group id (grp_…)."),
       },
       ["name"],
     ),
@@ -156,18 +157,22 @@ export const TOOLS: McpTool[] = [
     call: (a) => ({
       method: "POST",
       path: "/api/programs",
-      body: pick(a, ["name", "destination_url", "traffic_source_id"]),
+      body: pick(a, ["name", "destination_url", "traffic_source_id", "group_id"]),
     }),
   },
   {
     name: "update_campaign",
     title: "Update campaign",
-    description: "Rename a campaign or change its default destination. Postbacks: see create_postback.",
+    description:
+      "Rename a campaign, change its default destination, traffic source or group, or pause/resume it. Postbacks: see create_postback.",
     inputSchema: schema(
       {
         campaign_id: campaignId,
         name: str("New name."),
         destination_url: nullableStr("New default destination (http/https); null to clear."),
+        traffic_source_id: nullableStr("Traffic source id; null to clear."),
+        group_id: nullableStr("Group id; null to clear."),
+        status: enumOf(["active", "paused"], "active = links redirect; paused = links return 404."),
       },
       ["campaign_id"],
     ),
@@ -175,8 +180,17 @@ export const TOOLS: McpTool[] = [
     call: (a) => ({
       method: "PATCH",
       path: `/api/programs/${id(a, "campaign_id")}`,
-      body: pick(a, ["name", "destination_url"]),
+      body: pick(a, ["name", "destination_url", "traffic_source_id", "group_id", "status"]),
     }),
+  },
+  {
+    name: "delete_campaign",
+    title: "Delete campaign",
+    description:
+      "Delete (archive) a campaign: its links stop redirecting and it leaves list_campaigns. Clicks and conversions stay in reports (status=archived).",
+    inputSchema: schema({ campaign_id: campaignId }, ["campaign_id"]),
+    annotations: destroy,
+    call: (a) => ({ method: "DELETE", path: `/api/programs/${id(a, "campaign_id")}` }),
   },
   {
     name: "bulk_update_campaigns",
@@ -239,14 +253,25 @@ export const TOOLS: McpTool[] = [
     title: "Click log",
     description: "Recent clicks for a campaign with geo, device, subs and bot flag.",
     inputSchema: schema(
-      { campaign_id: campaignId, limit: int("Max rows (1-200, default 50)."), offset: int("Skip rows.") },
+      {
+        campaign_id: campaignId,
+        limit: int("Max rows (1-200, default 50)."),
+        offset: int("Skip rows."),
+        from: dateArg("Start"),
+        to: dateArg("End"),
+      },
       ["campaign_id"],
     ),
     annotations: read,
     call: (a) => ({
       method: "GET",
       path: `/api/programs/${id(a, "campaign_id")}/clicks`,
-      query: { limit: a.limit as number | undefined, offset: a.offset as number | undefined },
+      query: {
+        limit: a.limit as number | undefined,
+        offset: a.offset as number | undefined,
+        from: toMs(a.from),
+        to: toMs(a.to),
+      },
     }),
   },
   {
@@ -254,14 +279,25 @@ export const TOOLS: McpTool[] = [
     title: "Conversion log",
     description: "Recent conversions for a campaign (event, status, payout, click id).",
     inputSchema: schema(
-      { campaign_id: campaignId, limit: int("Max rows (1-200, default 50)."), offset: int("Skip rows.") },
+      {
+        campaign_id: campaignId,
+        limit: int("Max rows (1-200, default 50)."),
+        offset: int("Skip rows."),
+        from: dateArg("Start"),
+        to: dateArg("End"),
+      },
       ["campaign_id"],
     ),
     annotations: read,
     call: (a) => ({
       method: "GET",
       path: `/api/programs/${id(a, "campaign_id")}/conversions`,
-      query: { limit: a.limit as number | undefined, offset: a.offset as number | undefined },
+      query: {
+        limit: a.limit as number | undefined,
+        offset: a.offset as number | undefined,
+        from: toMs(a.from),
+        to: toMs(a.to),
+      },
     }),
   },
 
@@ -456,6 +492,95 @@ export const TOOLS: McpTool[] = [
     call: (a) => ({
       method: "POST",
       path: "/api/entities/offers",
+      body: pick(a, ["name", "url", "network_id", "payout_cents"]),
+    }),
+  },
+
+  ...(
+    [
+      ["traffic_source", "traffic-sources", "traffic source", "Traffic source id (src_…).", "Fails with 409 while campaigns use it. Its postbacks are deleted."],
+      ["network", "networks", "affiliate network", "Network id (net_…).", "Fails with 409 while offers use it. Its postbacks are deleted."],
+      ["lander", "landers", "lander", "Lander id (lp_…).", "Fails with 409 while paths use it or it has tracked clicks."],
+      ["offer", "offers", "offer", "Offer id (off_…).", "Fails with 409 while paths use it or it has tracked clicks."],
+    ] as const
+  ).map(
+    ([name, route, label, idHelp, note]): McpTool => ({
+      name: `delete_${name}`,
+      title: `Delete ${label}`,
+      description: `Delete a ${label}. ${note}`,
+      inputSchema: schema({ [`${name}_id`]: str(idHelp) }, [`${name}_id`]),
+      annotations: destroy,
+      call: (a) => ({ method: "DELETE", path: `/api/entities/${route}/${id(a, `${name}_id`)}` }),
+    }),
+  ),
+  {
+    name: "update_traffic_source",
+    title: "Update traffic source",
+    description: "Change a traffic source's name, cost model or postback share.",
+    inputSchema: schema(
+      {
+        traffic_source_id: str("Traffic source id (src_…)."),
+        name: str("New name."),
+        cost_type: enumOf(["cpc", "cpm", "cpa"], "Cost model."),
+        default_cost_cents: int("Default cost in cents."),
+        postback_percent: int("Share of conversions reported back to the source (0-100)."),
+      },
+      ["traffic_source_id"],
+    ),
+    annotations: write,
+    call: (a) => ({
+      method: "PATCH",
+      path: `/api/entities/traffic-sources/${id(a, "traffic_source_id")}`,
+      body: pick(a, ["name", "cost_type", "default_cost_cents", "postback_percent"]),
+    }),
+  },
+  {
+    name: "update_network",
+    title: "Update affiliate network",
+    description: "Rename an affiliate network.",
+    inputSchema: schema({ network_id: str("Network id (net_…)."), name: str("New name.") }, [
+      "network_id",
+    ]),
+    annotations: write,
+    call: (a) => ({
+      method: "PATCH",
+      path: `/api/entities/networks/${id(a, "network_id")}`,
+      body: pick(a, ["name"]),
+    }),
+  },
+  {
+    name: "update_lander",
+    title: "Update lander",
+    description: "Change a lander's name or URL.",
+    inputSchema: schema(
+      { lander_id: str("Lander id (lp_…)."), name: str("New name."), url: str("New URL (http/https).") },
+      ["lander_id"],
+    ),
+    annotations: write,
+    call: (a) => ({
+      method: "PATCH",
+      path: `/api/entities/landers/${id(a, "lander_id")}`,
+      body: pick(a, ["name", "url"]),
+    }),
+  },
+  {
+    name: "update_offer",
+    title: "Update offer",
+    description: "Change an offer's name, URL, network or default payout.",
+    inputSchema: schema(
+      {
+        offer_id: str("Offer id (off_…)."),
+        name: str("New name."),
+        url: str("New URL (http/https)."),
+        network_id: nullableStr("Affiliate network id; null to clear."),
+        payout_cents: int("Default payout in cents."),
+      },
+      ["offer_id"],
+    ),
+    annotations: write,
+    call: (a) => ({
+      method: "PATCH",
+      path: `/api/entities/offers/${id(a, "offer_id")}`,
       body: pick(a, ["name", "url", "network_id", "payout_cents"]),
     }),
   },

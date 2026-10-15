@@ -9,6 +9,7 @@ import {
   listConversionLog,
   listPrograms,
   updateProgram,
+  type LogPage,
 } from "../db/queries";
 import type { Env } from "../types";
 import { entityBelongsTo, withUniqueCampaignKey } from "../db/entities";
@@ -23,10 +24,27 @@ import { requireUser, requireWrite } from "../lib/access";
 
 const programs = new Hono<{ Bindings: Env }>();
 
+/** Paging + optional created_at window (Unix ms) for the click and conversion logs. */
+function logPage(query: Record<string, string>): LogPage {
+  const int = (value: string | undefined) => {
+    const n = Number(value);
+    return value !== undefined && value !== "" && Number.isFinite(n) ? Math.trunc(n) : undefined;
+  };
+  return {
+    limit: Math.min(Math.max(int(query.limit) ?? 50, 1), 200),
+    offset: Math.max(int(query.offset) ?? 0, 0),
+    from: int(query.from),
+    to: int(query.to),
+  };
+}
+
 programs.get("/", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
-  const items = await listPrograms(c.env.DB, session.account_id);
+  // Deleted campaigns are archived (kept for reports) and hidden from the list.
+  const items = (await listPrograms(c.env.DB, session.account_id)).filter(
+    (program) => program.status !== "archived",
+  );
   return c.json({ programs: items });
 });
 
@@ -38,10 +56,11 @@ programs.post("/", async (c) => {
     name?: string;
     destination_url?: string;
     traffic_source_id?: string;
+    group_id?: string;
   }>();
   const name = body.name?.trim();
   const destinationRaw = body.destination_url?.trim();
-  if (!name) return c.json({ error: "Program name required" }, 400);
+  if (!name) return c.json({ error: "Campaign name required" }, 400);
 
   // Optional: a campaign can route only through paths (offers/landers).
   const destination = destinationRaw ? parseHttpUrl(destinationRaw) : null;
@@ -56,6 +75,10 @@ programs.post("/", async (c) => {
   ) {
     return c.json({ error: "Invalid traffic_source_id" }, 400);
   }
+  const groupId = body.group_id?.trim() || null;
+  if (groupId && !(await entityBelongsTo(c.env.DB, "group", groupId, session.account_id))) {
+    return c.json({ error: "Invalid group_id" }, 400);
+  }
 
   const secret = convertSecret();
   const base = {
@@ -66,7 +89,7 @@ programs.post("/", async (c) => {
     api_key: apiKey(),
     destination_url: destination?.toString() ?? null,
     convert_secret: secret,
-    group_id: null,
+    group_id: groupId,
     traffic_source_id: trafficSourceId,
     tags: null,
     status: "active",
@@ -88,12 +111,21 @@ programs.patch("/:id", async (c) => {
   const body = await c.req.json<{
     name?: string;
     destination_url?: string | null;
+    traffic_source_id?: string | null;
+    group_id?: string | null;
+    status?: string;
   }>();
-  const updates: { name?: string; destination_url?: string | null } = {};
+  const updates: {
+    name?: string;
+    destination_url?: string | null;
+    traffic_source_id?: string | null;
+    group_id?: string | null;
+    status?: string;
+  } = {};
 
   if (body.name !== undefined) {
     const name = body.name.trim();
-    if (!name) return c.json({ error: "Program name cannot be empty" }, 400);
+    if (!name) return c.json({ error: "Campaign name cannot be empty" }, 400);
     updates.name = name;
   }
 
@@ -106,9 +138,49 @@ programs.patch("/:id", async (c) => {
     updates.destination_url = destination?.toString() ?? null;
   }
 
+  if (body.traffic_source_id !== undefined) {
+    const sourceId = body.traffic_source_id?.trim() || null;
+    if (
+      sourceId &&
+      !(await entityBelongsTo(c.env.DB, "traffic_source", sourceId, session.account_id))
+    ) {
+      return c.json({ error: "Invalid traffic_source_id" }, 400);
+    }
+    updates.traffic_source_id = sourceId;
+  }
+
+  if (body.group_id !== undefined) {
+    const groupId = body.group_id?.trim() || null;
+    if (groupId && !(await entityBelongsTo(c.env.DB, "group", groupId, session.account_id))) {
+      return c.json({ error: "Invalid group_id" }, 400);
+    }
+    updates.group_id = groupId;
+  }
+
+  if (body.status !== undefined) {
+    if (body.status !== "active" && body.status !== "paused") {
+      return c.json({ error: "status must be active or paused" }, 400);
+    }
+    updates.status = body.status;
+  }
+
   const program = await updateProgram(c.env.DB, c.req.param("id"), session.account_id, updates);
   if (!program) return c.json({ error: "Not found" }, 404);
   return c.json({ program });
+});
+
+/**
+ * Deletes a campaign by archiving it: links stop redirecting and it leaves the campaign
+ * list, while its clicks and conversions stay in reports.
+ */
+programs.delete("/:id", async (c) => {
+  const session = await requireWrite(c);
+  if (session instanceof Response) return session;
+
+  const existing = await getProgram(c.env.DB, c.req.param("id"), session.account_id);
+  if (!existing || existing.status === "archived") return c.json({ error: "Not found" }, 404);
+  await updateProgram(c.env.DB, existing.id, session.account_id, { status: "archived" });
+  return c.json({ ok: true });
 });
 
 programs.get("/:id", async (c) => {
@@ -187,9 +259,7 @@ programs.get("/:id/clicks", async (c) => {
   const program = await getProgram(c.env.DB, c.req.param("id"), session.account_id);
   if (!program) return c.json({ error: "Not found" }, 404);
 
-  const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
-  const offset = Number(c.req.query("offset") ?? 0);
-  const clicks = await listClickLog(c.env.DB, program.id, limit, offset);
+  const clicks = await listClickLog(c.env.DB, program.id, logPage(c.req.query()));
   return c.json({ clicks });
 });
 
@@ -200,9 +270,7 @@ programs.get("/:id/conversions", async (c) => {
   const program = await getProgram(c.env.DB, c.req.param("id"), session.account_id);
   if (!program) return c.json({ error: "Not found" }, 404);
 
-  const limit = Math.min(Number(c.req.query("limit") ?? 50), 200);
-  const offset = Number(c.req.query("offset") ?? 0);
-  const conversions = await listConversionLog(c.env.DB, program.id, limit, offset);
+  const conversions = await listConversionLog(c.env.DB, program.id, logPage(c.req.query()));
   return c.json({ conversions });
 });
 
