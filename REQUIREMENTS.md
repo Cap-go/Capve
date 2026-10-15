@@ -30,6 +30,10 @@ A Capve instance lets a user:
 | Outgoing postbacks | Many per campaign (all statuses), traffic source (approved, `postback_percent`) and network (approved, offer's network); each optionally limited to one event |
 | Convert API | `POST /api/v1/convert` with `X-Program-Secret`; CORS enabled; idempotent by `(program_id, order_id)` |
 | Reports | `/api/reports/*` incl. `/grouped?by=` (country, device, OS, browser, ISP, offer, lander, path, traffic source, sub1–sub10, date…); rejected statuses excluded from revenue |
+| Drilldown | `/api/reports/drilldown?by=campaign,sub1,country,offer` (1–4 levels) → nested rows with grouped-report metrics |
+| Timezone | Account timezone (`/api/settings`, default UTC); date buckets use the offset at range start; `YYYY-MM-DD` ranges are calendar days in that timezone |
+| Automation | `/api/automation/*`: zone blacklist rules (≥ N clicks, 0 conversions/event in H hours), ROI/spend alerts via email + webhook; `zone_blacklist` exported as TXT/CSV; cron `*/15` (`worker/cron/`) |
+| Tracking domains | `/api/tracking-domains`; campaigns can pick one; those hosts serve only `/r`, `/c`, `/lp`, `/click`; unknown hosts 404. Hostnames are added as Worker custom domains manually in Cloudflare |
 | MCP | `POST /mcp` (Streamable HTTP, stateless JSON-RPC) in `worker/mcp/`; each tool replays an `/api` route with the bearer token; tokens in `api_tokens` (hash only), managed at `/api/tokens` with a session cookie only |
 | Redirect safety | Only configured destinations/offers/landers; `?url=` same host only; postback/webhook URLs must be http(s) |
 
@@ -37,7 +41,7 @@ A Capve instance lets a user:
 
 **Public** (no session): `/`, `/docs/*`, `/login`, `/register`, `/r/:code`, `/c/:key`, `/lp/:clickId`, `/click`, `POST /api/v1/convert` + OPTIONS, `GET /api/v1/snippet`, `GET /api/health`, `/api/auth/*`.
 
-**Session or API token** (`Authorization: Bearer capve_…`): `/app`, `/api/programs*`, `/api/campaigns*`, `/api/entities*`, `/api/reports*`, `/api/ops*`, `/api/admin*`, `/mcp`.
+**Session or API token** (`Authorization: Bearer capve_…`): `/app`, `/api/programs*`, `/api/campaigns*`, `/api/entities*`, `/api/reports*`, `/api/ops*`, `/api/admin*`, `/api/settings*`, `/api/automation*`, `/api/tracking-domains*`, `/mcp`.
 
 **Session cookie only**: `/api/tokens*` (a token cannot mint tokens).
 

@@ -26,6 +26,10 @@ AUTH_SECRET = "capve-local-dev-auth-secret-change-in-prod"
 EMAIL_FROM = "noreply@capve.app"
 PLATFORM_ADMIN_EMAILS = "martindonadieu@gmail.com"
 
+# Scheduled jobs (worker/cron/index.ts): automation rules (zone blacklist, alerts).
+[triggers]
+crons = ["*/15 * * * *"]
+
 [env.production]
 # Keep worker name "velo" (wrangler defaults to velo-production otherwise).
 name = "velo"
@@ -53,3 +57,6 @@ binding = "DB"
 database_name = "velo-db"
 database_id = "eb916c67-6e45-4798-a6d9-c0e47f99cb8d"
 migrations_dir = "migrations"
+
+[env.production.triggers]
+crons = ["*/15 * * * *"]

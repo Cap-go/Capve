@@ -176,6 +176,8 @@ export type ProgramTracking = {
   campaign_url: string | null;
   offer_url_macro: string;
   redirect_params: string[];
+  /** Custom tracking domain used for this campaign's links, if any. */
+  tracking_domain?: { id: string; hostname: string } | null;
 };
 
 export type RotationMode = "normal" | "smart" | "fix_on" | "top_to_bottom";
@@ -290,7 +292,7 @@ export type ProgramStats = {
   affiliates: AffiliateStats[];
 };
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     credentials: "include",
     headers: {

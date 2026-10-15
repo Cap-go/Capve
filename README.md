@@ -49,7 +49,7 @@ Cursor / VS Code / Windsurf (`mcp.json`):
 { "mcpServers": { "capve": { "url": "https://capve.app/mcp", "headers": { "Authorization": "Bearer capve_YOUR_TOKEN" } } } }
 ```
 
-44 tools cover campaigns, affiliates, paths and rotation, postbacks, traffic sources, networks, offers, landers, groups, reports, triggers, notes and team. Each tool replays the matching `/api` route with the token, so validation and team roles are identical to the dashboard. Full docs: `/docs/mcp`. Code: `worker/mcp/`.
+59 tools cover campaigns, affiliates, paths and rotation, postbacks, traffic sources, networks, offers, landers, groups, reports (incl. drilldown), triggers, zone blacklist rules and alerts, settings, tracking domains, notes and team. Each tool replays the matching `/api` route with the token, so validation and team roles are identical to the dashboard. Full docs: `/docs/mcp`. Code: `worker/mcp/`.
 
 Tokens act as the user who created them, can be revoked from the dashboard, and cannot create more tokens. Only a SHA-256 hash is stored.
 
@@ -62,6 +62,14 @@ Tokens act as the user who created them, can be revoked from the dashboard, and 
 **Auth:** The dashboard uses email/password sessions (`/register`, `/login`). In production, set `AUTH_SECRET` (random, at least 32 characters) as a Worker secret — never in `wrangler.toml`: `bunx wrangler secret put AUTH_SECRET --env production`. The Worker refuses to sign sessions without it. Configure the `EMAIL` send binding in `wrangler.toml` for password-reset emails.
 
 **Platform admin:** Accounts whose email is listed in `PLATFORM_ADMIN_EMAILS` become platform admins at registration, so register those accounts immediately after deploying.
+
+**Host gating:** the Worker serves the full app only on `APP_URL`'s host, `capve.app`, `localhost` and `*.workers.dev`. Set `APP_URL` to your own hostname when you use a custom domain, otherwise requests on it get 404.
+
+**Custom tracking domains:** add the hostname in Dashboard → Settings → Tracking domains (or `POST /api/tracking-domains`), then attach it to the Worker in Cloudflare yourself: Workers & Pages → the Capve Worker → Settings → Domains & Routes → Add → Custom Domain (`track.example.com`). Do not commit these hostnames to `wrangler.toml`. A tracking domain only serves `/r`, `/c`, `/lp` and `/click`; campaigns that pick it show their links on it.
+
+**Report timezone:** Settings → Report timezone (IANA, default UTC). D1 has no timezone support, so date buckets use the UTC offset at the start of the report range; a range crossing a DST change is off by one hour after the switch. `from`/`to` given as `YYYY-MM-DD` are exact calendar days in that timezone.
+
+**Automation:** per-campaign zone blacklist rules (≥ N clicks and 0 conversions / 0 of an event such as `ftd` in the last H hours → blacklist the `sub1` zone; export as TXT/CSV to paste into Adcash) and ROI/spend alerts by email (`EMAIL` binding) or webhook. A cron trigger (`*/15 * * * *`, `worker/cron/`) evaluates them.
 
 **Important:** Do not put Cloudflare Access in front of this Worker. It intercepts `/api/auth/*` and breaks login. If an old Access app exists, run `bun run remove-access`. Also, `/r/*`, `/api/v1/convert`, `/api/v1/snippet`, and `/api/health` must stay public.
 

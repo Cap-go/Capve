@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS programs (
   traffic_source_id TEXT,
   tags TEXT,
   status TEXT NOT NULL DEFAULT 'active',
+  tracking_domain_id TEXT,
   created_at INTEGER NOT NULL
 );
 
@@ -242,4 +243,56 @@ CREATE TABLE IF NOT EXISTS postbacks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_postbacks_user ON postbacks(user_id);
+
+CREATE TABLE IF NOT EXISTS account_settings (
+  user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  timezone TEXT NOT NULL DEFAULT 'UTC',
+  updated_at INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS automation_rules (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  program_id TEXT NOT NULL REFERENCES programs(id) ON DELETE CASCADE,
+  name TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  dimension TEXT,
+  min_clicks INTEGER,
+  event TEXT,
+  roi_below REAL,
+  spend_above_cents INTEGER,
+  window_hours INTEGER NOT NULL DEFAULT 24,
+  notify_email TEXT,
+  webhook_url TEXT,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  last_run_at INTEGER,
+  last_fired_at INTEGER,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_automation_rules_user ON automation_rules(user_id);
+CREATE INDEX IF NOT EXISTS idx_automation_rules_program ON automation_rules(program_id);
+
+CREATE TABLE IF NOT EXISTS zone_blacklist (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  program_id TEXT NOT NULL REFERENCES programs(id) ON DELETE CASCADE,
+  dimension TEXT NOT NULL,
+  value TEXT NOT NULL,
+  rule_id TEXT,
+  reason TEXT,
+  created_at INTEGER NOT NULL,
+  UNIQUE(program_id, dimension, value)
+);
+
+CREATE INDEX IF NOT EXISTS idx_zone_blacklist_user ON zone_blacklist(user_id);
+
+CREATE TABLE IF NOT EXISTS tracking_domains (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  hostname TEXT NOT NULL UNIQUE,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_tracking_domains_user ON tracking_domains(user_id);
 `;

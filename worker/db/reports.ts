@@ -134,15 +134,23 @@ type DimensionSql = {
 /** Conversions are attributed to their click's time (Binom); click-less ones use their own time. */
 const CONV_TIME = "COALESCE(c.created_at, cv.created_at)";
 
-function dimensionSql(by: GroupDimension): DimensionSql {
+/** strftime modifier shifting UTC to the account timezone (see worker/lib/timezone.ts). */
+function tzModifier(offsetMinutes: number | undefined): string {
+  const minutes = Math.trunc(Number(offsetMinutes) || 0);
+  return minutes ? `, '${minutes > 0 ? "+" : "-"}${Math.abs(minutes)} minutes'` : "";
+}
+
+function dimensionSql(by: GroupDimension, tzOffsetMinutes?: number): DimensionSql {
   switch (by) {
     case "campaign":
       return { click: "p.id", conv: "p.id", label: "p.name" };
-    case "date":
+    case "date": {
+      const tz = tzModifier(tzOffsetMinutes);
       return {
-        click: "strftime('%Y-%m-%d', c.created_at / 1000, 'unixepoch')",
-        conv: `strftime('%Y-%m-%d', ${CONV_TIME} / 1000, 'unixepoch')`,
+        click: `strftime('%Y-%m-%d', c.created_at / 1000, 'unixepoch'${tz})`,
+        conv: `strftime('%Y-%m-%d', ${CONV_TIME} / 1000, 'unixepoch'${tz})`,
       };
+    }
     case "offer":
       return {
         click: "c.offer_id",
@@ -192,7 +200,27 @@ export type GroupedReportRow = {
   events: EventCounts;
 };
 
-export type GroupedReportOptions = ReportFilters & { campaign_id?: string };
+export type GroupedReportOptions = ReportFilters & {
+  campaign_id?: string;
+  /** Account timezone offset (minutes east of UTC) for `date` buckets. */
+  tz_offset_minutes?: number;
+  /**
+   * Extra dimensions (drilldown): rows are then grouped by every dimension and `key`/`label`
+   * are JSON arrays with one entry per dimension. See worker/db/drilldown.ts.
+   */
+  then_by?: GroupDimension[];
+};
+
+/** One composite dimension over several (JSON array keys/labels). */
+function combinedDimensionSql(dims: DimensionSql[]): DimensionSql {
+  return {
+    click: `json_array(${dims.map((d) => d.click).join(", ")})`,
+    conv: `json_array(${dims.map((d) => d.conv).join(", ")})`,
+    label: `json_array(${dims.map((d) => d.label ?? "NULL").join(", ")})`,
+    clickJoin: dims.map((d) => d.clickJoin ?? "").join(" "),
+    convJoin: dims.map((d) => d.convJoin ?? "").join(" "),
+  };
+}
 
 /**
  * Report grouped by one dimension using two GROUP BY queries (clicks, conversions).
@@ -205,7 +233,10 @@ export async function getGroupedReport(
   by: GroupDimension,
   options: GroupedReportOptions,
 ): Promise<GroupedReportRow[]> {
-  const dim = dimensionSql(by);
+  const dims = [by, ...(options.then_by ?? [])].map((d) =>
+    dimensionSql(d, options.tz_offset_minutes),
+  );
+  const dim = dims.length === 1 ? dims[0] : combinedDimensionSql(dims);
   const where = programWhere(userId, options);
   const campaignSql = options.campaign_id ? " AND p.id = ?" : "";
   const campaignBinds = options.campaign_id ? [options.campaign_id] : [];
@@ -399,12 +430,13 @@ export async function getCampaignTrends(
   db: D1Database,
   programId: string,
   userId: string,
-  filters: ReportFilters,
+  filters: ReportFilters & { tz_offset_minutes?: number },
 ): Promise<TrendPoint[]> {
   const rows = await getGroupedReport(db, userId, "date", {
     from: filters.from,
     to: filters.to,
     campaign_id: programId,
+    tz_offset_minutes: filters.tz_offset_minutes,
   });
   return rows
     .filter((row) => row.key)

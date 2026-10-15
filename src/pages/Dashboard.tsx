@@ -1,6 +1,8 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AdminPanel } from "../components/AdminPanel";
+import { AccountSettingsPanel, TrackingDomainPicker } from "../components/AccountSettingsPanel";
+import { AutomationPanel } from "../components/AutomationPanel";
 import { CampaignReportPanel } from "../components/CampaignReport";
 import { EntityPanel } from "../components/EntityPanel";
 import { PathEditor } from "../components/PathEditor";
@@ -338,7 +340,10 @@ export function DashboardPage() {
           ) : entity === "reports" ? (
             <CampaignReportPanel canWrite={user.role !== "viewer"} />
           ) : entity === "settings" ? (
-            <OpsPanel role={user.role ?? "owner"} />
+            <div className="space-y-6">
+              <AccountSettingsPanel canWrite={(user.role ?? "owner") !== "viewer"} />
+              <OpsPanel role={user.role ?? "owner"} />
+            </div>
           ) : entity === "mcp" ? (
             <McpPanel />
           ) : (
@@ -416,6 +421,9 @@ export function DashboardPage() {
                 onCreateAffiliate={createAffiliate}
                 onSaveSettings={saveProgramSettings}
                 onClone={cloneSelectedProgram}
+                onTrackingChanged={() =>
+                  api.tracking(selectedId).then(({ tracking: t }) => setTracking(t))
+                }
               />
             )}
           </section>
@@ -444,6 +452,7 @@ function OverviewPanel({
   onCreateAffiliate,
   onSaveSettings,
   onClone,
+  onTrackingChanged,
 }: {
   busy: boolean;
   canWrite: boolean;
@@ -462,6 +471,7 @@ function OverviewPanel({
   onCreateAffiliate: (e: FormEvent) => void;
   onSaveSettings: (e: FormEvent) => void;
   onClone: () => void;
+  onTrackingChanged: () => void;
 }) {
   const base = appBaseUrl();
   const eventNames = sortEvents(Object.keys(visibleStats?.totals.events ?? {}));
@@ -501,6 +511,12 @@ function OverviewPanel({
 
         {tracking && (
           <div className="mt-4 space-y-3">
+            <TrackingDomainPicker
+              campaignId={selectedId}
+              currentId={tracking.tracking_domain?.id ?? null}
+              canWrite={canWrite}
+              onChanged={onTrackingChanged}
+            />
             <p className="text-sm text-[var(--velo-muted)]">
               Incoming postback URL (configure in affiliate network):
             </p>
@@ -555,6 +571,8 @@ function OverviewPanel({
           />
         </div>
       </div>
+
+      <AutomationPanel campaignId={selectedId} canWrite={canWrite} />
 
       <PathEditor programId={selectedId} />
 

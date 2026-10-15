@@ -10,6 +10,7 @@ import {
   type TrendPoint,
 } from "../lib/api";
 import { ErrorBox } from "./ui";
+import { DrilldownPanel } from "./Drilldown";
 import { eventLabel, sortEvents } from "../lib/events";
 
 /** Event names present in rows, one report column each. */
@@ -352,6 +353,8 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
           <GroupedTable rows={groupedRows} />
         </div>
       )}
+
+      <DrilldownPanel campaignId={selectedId || undefined} from={filters.from} to={filters.to} />
     </div>
   );
 }

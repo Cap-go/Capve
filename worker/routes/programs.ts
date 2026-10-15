@@ -20,6 +20,7 @@ import {
   parseHttpUrl,
 } from "../lib/urls";
 import { requireUser, requireWrite } from "../lib/access";
+import { campaignTrackingBaseUrl, getCampaignTrackingDomain } from "../db/tracking-domains";
 
 const programs = new Hono<{ Bindings: Env }>();
 
@@ -157,7 +158,8 @@ programs.post("/:id/affiliates", async (c) => {
     name,
   });
 
-  const trackingUrl = buildTrackingUrl(c.env.APP_URL, affiliate.code);
+  const base = await campaignTrackingBaseUrl(c.env.DB, c.env.APP_URL, program.id);
+  const trackingUrl = buildTrackingUrl(base, affiliate.code);
   return c.json({ affiliate, tracking_url: trackingUrl }, 201);
 });
 
@@ -168,12 +170,14 @@ programs.get("/:id/tracking", async (c) => {
   const program = await getProgram(c.env.DB, c.req.param("id"), session.account_id);
   if (!program) return c.json({ error: "Not found" }, 404);
 
+  // Campaign links use the campaign's custom tracking domain when one is set.
+  const domain = await getCampaignTrackingDomain(c.env.DB, program.id);
+  const base = domain ? `https://${domain.hostname}` : c.env.APP_URL;
   return c.json({
     tracking: {
-      postback_url: buildPostbackUrl(c.env.APP_URL),
-      campaign_url: program.campaign_key
-        ? buildCampaignUrl(c.env.APP_URL, program.campaign_key)
-        : null,
+      postback_url: buildPostbackUrl(base),
+      campaign_url: program.campaign_key ? buildCampaignUrl(base, program.campaign_key) : null,
+      tracking_domain: domain ? { id: domain.id, hostname: domain.hostname } : null,
       offer_url_macro: "{click_id}",
       redirect_params: ["velo_ref", "click_id"],
     },

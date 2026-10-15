@@ -62,12 +62,13 @@ function id(args: Args, key: string): string {
   return encodeURIComponent(value.trim());
 }
 
-/** Accepts ISO dates or Unix ms; the API expects Unix ms. */
+/** Accepts ISO dates or Unix ms; YYYY-MM-DD is passed through (API resolves it in the account timezone). */
 function toMs(value: unknown): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   if (typeof value === "number") return String(value);
   const text = String(value).trim();
   if (/^\d+$/.test(text)) return text;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
   const ms = Date.parse(text);
   if (Number.isNaN(ms)) throw new ToolInputError(`Invalid date: ${text}`);
   return String(ms);
@@ -603,6 +604,233 @@ export const TOOLS: McpTool[] = [
     inputSchema: schema({ trigger_id: str("Trigger id.") }, ["trigger_id"]),
     annotations: destroy,
     call: (a) => ({ method: "DELETE", path: `/api/ops/triggers/${id(a, "trigger_id")}` }),
+  },
+
+  // Drilldown, timezone, zone automation, tracking domains
+  {
+    name: "report_drilldown",
+    title: "Drilldown report",
+    description:
+      "Nested report over 1-4 dimensions (e.g. campaign,sub1,country,offer). Each row has the grouped-report metrics and children for the next level. Money in cents.",
+    inputSchema: schema(
+      {
+        by: str(`Comma-separated dimensions, 1 to 4 of: ${GROUP_DIMENSIONS.join(", ")}.`),
+        campaign_id: str("Only this campaign."),
+        limit: int("Max children per row (default 50, max 200)."),
+        ...reportFilters,
+      },
+      ["by"],
+    ),
+    annotations: read,
+    call: (a) => ({
+      method: "GET",
+      path: "/api/reports/drilldown",
+      query: {
+        by: a.by as string,
+        campaign_id: a.campaign_id as string | undefined,
+        limit: a.limit as number | undefined,
+        ...filters(a),
+      },
+    }),
+  },
+  {
+    name: "get_settings",
+    title: "Account settings",
+    description: "Account settings, including the report timezone (IANA).",
+    inputSchema: schema({}),
+    annotations: read,
+    call: () => ({ method: "GET", path: "/api/settings" }),
+  },
+  {
+    name: "update_settings",
+    title: "Update account settings",
+    description:
+      "Set the report timezone (IANA name, e.g. Europe/Paris). Date grouping and YYYY-MM-DD report ranges use it.",
+    inputSchema: schema({ timezone: str("IANA timezone, e.g. UTC or Europe/Paris.") }, ["timezone"]),
+    annotations: write,
+    call: (a) => ({ method: "PUT", path: "/api/settings", body: pick(a, ["timezone"]) }),
+  },
+  {
+    name: "list_automation_rules",
+    title: "List automation rules",
+    description: "Zone blacklist rules and ROI/spend alerts, optionally for one campaign.",
+    inputSchema: schema({ campaign_id: str("Only rules of this campaign.") }),
+    annotations: read,
+    call: (a) => ({
+      method: "GET",
+      path: "/api/automation/rules",
+      query: { campaign_id: a.campaign_id as string | undefined },
+    }),
+  },
+  {
+    name: "create_automation_rule",
+    title: "Create automation rule",
+    description:
+      "kind=zone_blacklist: zones (dimension, e.g. sub1) with >= min_clicks and 0 conversions (or 0 of `event`) in the last window_hours are blacklisted. kind=alert: notify when ROI < roi_below and/or cost > spend_above_cents over window_hours. Evaluated every 15 minutes; notifications by email and/or webhook (POST JSON).",
+    inputSchema: schema(
+      {
+        campaign_id: campaignId,
+        kind: enumOf(["zone_blacklist", "alert"], "Rule type."),
+        name: str("Rule name (optional)."),
+        dimension: enumOf(
+          GROUP_DIMENSIONS.filter((d) => !["campaign", "date", "traffic_source"].includes(d)),
+          "zone_blacklist: dimension holding the zone (default sub1).",
+        ),
+        min_clicks: int("zone_blacklist: minimum clicks."),
+        event: nullableStr(
+          "zone_blacklist: event that counts (registration, ftd…); omit = any conversion.",
+        ),
+        roi_below: { type: "number", description: "alert: fire when ROI % is below this." },
+        spend_above_cents: int("alert: fire when cost in cents is above this."),
+        window_hours: int("Look-back window in hours (1-720, default 24)."),
+        notify_email: str("Email to notify."),
+        webhook_url: str("Webhook URL (http/https) receiving a JSON POST."),
+        enabled: bool("Enabled (default true)."),
+      },
+      ["campaign_id", "kind"],
+    ),
+    annotations: write,
+    call: (a) => ({
+      method: "POST",
+      path: "/api/automation/rules",
+      body: pick(a, [
+        "campaign_id",
+        "kind",
+        "name",
+        "dimension",
+        "min_clicks",
+        "event",
+        "roi_below",
+        "spend_above_cents",
+        "window_hours",
+        "notify_email",
+        "webhook_url",
+        "enabled",
+      ]),
+    }),
+  },
+  {
+    name: "set_automation_rule_enabled",
+    title: "Enable/disable automation rule",
+    description: "Enable or disable an automation rule.",
+    inputSchema: schema({ rule_id: str("Rule id."), enabled: bool("Enabled.") }, [
+      "rule_id",
+      "enabled",
+    ]),
+    annotations: write,
+    call: (a) => ({
+      method: "PATCH",
+      path: `/api/automation/rules/${id(a, "rule_id")}`,
+      body: { enabled: a.enabled },
+    }),
+  },
+  {
+    name: "run_automation_rule",
+    title: "Run automation rule now",
+    description:
+      "Evaluate a rule immediately; returns newly blacklisted zones or whether the alert fired.",
+    inputSchema: schema({ rule_id: str("Rule id.") }, ["rule_id"]),
+    annotations: write,
+    call: (a) => ({ method: "POST", path: `/api/automation/rules/${id(a, "rule_id")}/run` }),
+  },
+  {
+    name: "delete_automation_rule",
+    title: "Delete automation rule",
+    description: "Delete an automation rule (blacklisted zones stay).",
+    inputSchema: schema({ rule_id: str("Rule id.") }, ["rule_id"]),
+    annotations: destroy,
+    call: (a) => ({ method: "DELETE", path: `/api/automation/rules/${id(a, "rule_id")}` }),
+  },
+  {
+    name: "list_zone_blacklist",
+    title: "List blacklisted zones",
+    description:
+      "Blacklisted zones of a campaign. format=txt returns one zone per line, ready to paste into the traffic source (e.g. Adcash).",
+    inputSchema: schema(
+      {
+        campaign_id: campaignId,
+        dimension: str("Only this dimension (e.g. sub1)."),
+        format: enumOf(["json", "txt", "csv"], "Output format (default json)."),
+      },
+      ["campaign_id"],
+    ),
+    annotations: read,
+    call: (a) => ({
+      method: "GET",
+      path: "/api/automation/blacklist",
+      query: {
+        campaign_id: a.campaign_id as string,
+        dimension: a.dimension as string | undefined,
+        format: a.format === "json" ? undefined : (a.format as string | undefined),
+      },
+    }),
+  },
+  {
+    name: "add_zones_to_blacklist",
+    title: "Blacklist zones",
+    description: "Manually blacklist zones of a campaign.",
+    inputSchema: schema(
+      {
+        campaign_id: campaignId,
+        dimension: str("Dimension (default sub1)."),
+        values: { type: "array", items: { type: "string" }, description: "Zone values." },
+      },
+      ["campaign_id", "values"],
+    ),
+    annotations: write,
+    call: (a) => ({
+      method: "POST",
+      path: "/api/automation/blacklist",
+      body: pick(a, ["campaign_id", "dimension", "values"]),
+    }),
+  },
+  {
+    name: "remove_blacklisted_zone",
+    title: "Remove blacklisted zone",
+    description: "Remove one entry from the zone blacklist.",
+    inputSchema: schema({ entry_id: str("Blacklist entry id (zbl_…).") }, ["entry_id"]),
+    annotations: destroy,
+    call: (a) => ({ method: "DELETE", path: `/api/automation/blacklist/${id(a, "entry_id")}` }),
+  },
+  {
+    name: "list_tracking_domains",
+    title: "List tracking domains",
+    description: "Custom tracking hostnames of the account.",
+    inputSchema: schema({}),
+    annotations: read,
+    call: () => ({ method: "GET", path: "/api/tracking-domains" }),
+  },
+  {
+    name: "add_tracking_domain",
+    title: "Add tracking domain",
+    description:
+      "Register a custom tracking hostname (track.example.com). It must also be added as a Custom Domain of the Worker in Cloudflare; it serves only /r, /c, /lp and /click.",
+    inputSchema: schema({ hostname: str("Hostname, e.g. track.example.com.") }, ["hostname"]),
+    annotations: write,
+    call: (a) => ({ method: "POST", path: "/api/tracking-domains", body: pick(a, ["hostname"]) }),
+  },
+  {
+    name: "delete_tracking_domain",
+    title: "Delete tracking domain",
+    description: "Remove a tracking domain; campaigns using it fall back to the app URL.",
+    inputSchema: schema({ domain_id: str("Tracking domain id (dom_…).") }, ["domain_id"]),
+    annotations: destroy,
+    call: (a) => ({ method: "DELETE", path: `/api/tracking-domains/${id(a, "domain_id")}` }),
+  },
+  {
+    name: "set_campaign_tracking_domain",
+    title: "Set campaign tracking domain",
+    description: "Use a tracking domain for a campaign's links (null = app URL).",
+    inputSchema: schema(
+      { campaign_id: campaignId, tracking_domain_id: nullableStr("Tracking domain id, or null.") },
+      ["campaign_id"],
+    ),
+    annotations: write,
+    call: (a) => ({
+      method: "PUT",
+      path: `/api/tracking-domains/campaigns/${id(a, "campaign_id")}`,
+      body: { tracking_domain_id: a.tracking_domain_id ?? null },
+    }),
   },
 
   // Notes
