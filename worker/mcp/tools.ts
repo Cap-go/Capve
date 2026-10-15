@@ -1,4 +1,5 @@
 import { GROUP_DIMENSIONS } from "../db/reports";
+import { SOURCE_TOOLS } from "./tools-sources";
 
 /** Internal API request an MCP tool call maps to. Runs with the caller's bearer token. */
 export type ApiCall = {
@@ -678,6 +679,9 @@ export const TOOLS: McpTool[] = [
     annotations: destroy,
     call: (a) => ({ method: "DELETE", path: `/api/ops/team/${id(a, "member_id")}` }),
   },
+
+  // Traffic source templates, tokens and cost (worker/mcp/tools-sources.ts)
+  ...SOURCE_TOOLS,
 ];
 
 export const TOOLS_BY_NAME = new Map(TOOLS.map((tool) => [tool.name, tool]));

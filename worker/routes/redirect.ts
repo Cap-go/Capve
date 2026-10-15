@@ -30,6 +30,8 @@ import { fireTriggerWebhooks } from "../lib/triggers";
 import { id } from "../lib/utils";
 import { parseHttpUrl, resolveRedirectTarget, withQueryParam } from "../lib/urls";
 import { buildClickContext, SUB_KEYS } from "../lib/click-context";
+import { applySourceTokens } from "../lib/source-templates";
+import { getSourceTokens } from "../db/sources";
 import type { RoutingContext } from "../types-routing";
 
 import type { Context } from "hono";
@@ -45,7 +47,12 @@ function lpClickUrl(appUrl: string | undefined, requestUrl: string, clickId: str
 
 async function handleClickRedirect(
   c: Context<AppContext>,
-  program: { id: string; destination_url: string | null; campaign_key: string | null },
+  program: {
+    id: string;
+    destination_url: string | null;
+    campaign_key: string | null;
+    traffic_source_id?: string | null;
+  },
   affiliate: { id: string; code: string },
 ) {
   // Destination is optional: campaigns can route only through paths. The same-host
@@ -66,7 +73,15 @@ async function handleClickRedirect(
   const setVisitorCookie = !visitorKey;
   if (!visitorKey) visitorKey = newVisitorKey();
 
-  const clickContext = await buildClickContext(c.req.raw);
+  // Named source tokens (e.g. Adcash zoneid → sub1) are mapped before anything reads the subs.
+  const rawContext = await buildClickContext(c.req.raw);
+  const clickContext = program.traffic_source_id
+    ? applySourceTokens(
+        new URL(c.req.url),
+        await getSourceTokens(c.env.DB, program.traffic_source_id),
+        rawContext,
+      )
+    : rawContext;
   const ctx: RoutingContext = {
     click_id: clickId,
     velo_ref: affiliate.code,

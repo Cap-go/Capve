@@ -1,6 +1,7 @@
 import { FormEvent, Fragment, useEffect, useState } from "react";
 import { ErrorBox, Field } from "../components/ui";
 import { PostbackList } from "./PostbackList";
+import { NetworkTemplatePicker, SourceSettingsPanel, SourceTemplatePicker } from "./SourceTemplates";
 import {
   api,
   formatMoney,
@@ -113,6 +114,8 @@ export function EntityPanel({ kind, canWrite = true }: { kind: EntityKind; canWr
 
   return (
     <div className="space-y-6">
+      {kind === "sources" && canWrite && <SourceTemplatePicker onCreated={() => void reload()} />}
+      {kind === "networks" && canWrite && <NetworkTemplatePicker onCreated={() => void reload()} />}
       <div className="card p-5">
         <h2 className="font-semibold">Create {titles[kind].slice(0, -1)}</h2>
         <ErrorBox message={error} />
@@ -301,6 +304,7 @@ export function EntityPanel({ kind, canWrite = true }: { kind: EntityKind; canWr
           </table>
         </div>
       </div>
+      {kind === "sources" && <SourceSettingsPanel sources={sources} canWrite={canWrite} />}
     </div>
   );
 }

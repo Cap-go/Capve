@@ -11,6 +11,7 @@ import {
 } from "../lib/api";
 import { ErrorBox } from "./ui";
 import { eventLabel, sortEvents } from "../lib/events";
+import { useSubLabels, withSubLabels } from "../lib/sources-api";
 
 /** Event names present in rows, one report column each. */
 function eventColumns(rows: Array<{ events: Record<string, number> }>): string[] {
@@ -65,6 +66,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
   const [sourceId, setSourceId] = useState("");
   const [status, setStatus] = useState("");
   const [selectedId, setSelectedId] = useState("");
+  const subLabels = useSubLabels(selectedId);
   const [checked, setChecked] = useState<Set<string>>(new Set());
   const [trends, setTrends] = useState<TrendPoint[]>([]);
   const [groupBy, setGroupBy] = useState("country");
@@ -340,7 +342,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
         <div className="card p-5">
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div className="w-56">
-              <FilterSelect label="Group by" value={groupBy} onChange={setGroupBy} options={GROUP_BY_OPTIONS} />
+              <FilterSelect label="Group by" value={groupBy} onChange={setGroupBy} options={withSubLabels(GROUP_BY_OPTIONS, subLabels)} />
             </div>
             <a
               className="btn btn-secondary text-sm"

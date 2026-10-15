@@ -11,9 +11,11 @@ import { ops } from "./routes/ops";
 import { reports } from "./routes/reports";
 import { campaign, lp, redirect } from "./routes/redirect";
 import { routing } from "./routes/routing";
+import { campaignCosts, sources } from "./routes/sources";
 import { tokens } from "./routes/tokens";
 import { readBearerToken, requireUser } from "./lib/access";
 import { handleMcpRequest } from "./mcp/server";
+import { runScheduled } from "./cron";
 
 const app = new Hono<{ Bindings: Env }>();
 
@@ -31,6 +33,9 @@ app.route("/api/programs", programs);
 app.route("/api/programs", routing);
 app.route("/api/campaigns", programs);
 app.route("/api/campaigns", routing);
+app.route("/api/programs", campaignCosts);
+app.route("/api/campaigns", campaignCosts);
+app.route("/api/sources", sources);
 app.route("/api/v1/convert", convert);
 app.route("/api/ops", ops);
 app.route("/api/reports", reports);
@@ -85,4 +90,7 @@ app.all("*", async (c) => {
   return assets.fetch(c.req.raw);
 });
 
-export default app;
+export default {
+  fetch: app.fetch,
+  scheduled: runScheduled,
+} satisfies ExportedHandler<Env>;

@@ -20,6 +20,11 @@ migrations_dir = "migrations"
 [[send_email]]
 name = "EMAIL"
 
+# Scheduled jobs (worker/cron/index.ts). Inherited by [env.production].
+# Hourly: pull traffic source spend (Adcash, ...) into click costs.
+[triggers]
+crons = ["17 * * * *"]
+
 [vars]
 APP_URL = "http://localhost:5173"
 AUTH_SECRET = "capve-local-dev-auth-secret-change-in-prod"

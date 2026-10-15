@@ -28,6 +28,8 @@ A Capve instance lets a user:
 | Postback | `GET /click?cnv_id=&payout=&cnv_status=&tx_id=&event=`; repeat for same click (and event) updates status/payout; no payout → offer payout (events: 0) |
 | Conversion events | `event=registration`, `event=ftd`, … each recorded as its own conversion; per-event counts in stats, reports and CSV |
 | Outgoing postbacks | Many per campaign (all statuses), traffic source (approved, `postback_percent`) and network (approved, offer's network); each optionally limited to one event |
+| Source templates & tokens | Built-in traffic source / network templates (`worker/lib/source-templates.ts`); per-source named tokens map URL params to `sub1`–`sub10` / `external_id` / `cost` on click and label subs in reports |
+| Cost updates | `POST /api/campaigns/:id/costs` spreads a total evenly over matching clicks' `cost_cents` (date range, optional token filter); hourly cron (`worker/cron/`) pulls spend from cost APIs (Adcash) with an encrypted API key |
 | Convert API | `POST /api/v1/convert` with `X-Program-Secret`; CORS enabled; idempotent by `(program_id, order_id)` |
 | Reports | `/api/reports/*` incl. `/grouped?by=` (country, device, OS, browser, ISP, offer, lander, path, traffic source, sub1–sub10, date…); rejected statuses excluded from revenue |
 | MCP | `POST /mcp` (Streamable HTTP, stateless JSON-RPC) in `worker/mcp/`; each tool replays an `/api` route with the bearer token; tokens in `api_tokens` (hash only), managed at `/api/tokens` with a session cookie only |
@@ -37,7 +39,7 @@ A Capve instance lets a user:
 
 **Public** (no session): `/`, `/docs/*`, `/login`, `/register`, `/r/:code`, `/c/:key`, `/lp/:clickId`, `/click`, `POST /api/v1/convert` + OPTIONS, `GET /api/v1/snippet`, `GET /api/health`, `/api/auth/*`.
 
-**Session or API token** (`Authorization: Bearer capve_…`): `/app`, `/api/programs*`, `/api/campaigns*`, `/api/entities*`, `/api/reports*`, `/api/ops*`, `/api/admin*`, `/mcp`.
+**Session or API token** (`Authorization: Bearer capve_…`): `/app`, `/api/programs*`, `/api/campaigns*`, `/api/entities*`, `/api/reports*`, `/api/ops*`, `/api/sources*`, `/api/admin*`, `/mcp`.
 
 **Session cookie only**: `/api/tokens*` (a token cannot mint tokens).
 
