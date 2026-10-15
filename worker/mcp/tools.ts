@@ -101,6 +101,45 @@ const pathFields = {
   lander_id: nullableStr("Lander id (lnd_…)."),
   offer_id: nullableStr("Offer id (ofr_…)."),
   enabled: bool("Whether the path receives traffic."),
+  landers: {
+    type: "array",
+    description: "Weighted landers; replaces the list. Overrides lander_id.",
+    items: {
+      type: "object",
+      properties: { lander_id: str("Lander id."), weight: int("Weight (default 100).") },
+      required: ["lander_id"],
+    },
+  },
+  offers: {
+    type: "array",
+    description: "Weighted offers; replaces the list. Overrides offer_id.",
+    items: {
+      type: "object",
+      properties: { offer_id: str("Offer id."), weight: int("Weight (default 100).") },
+      required: ["offer_id"],
+    },
+  },
+};
+
+const ruleFields = {
+  name: str("Rule name."),
+  conditions: {
+    type: "array",
+    description:
+      "AND-ed conditions. field: country, region, city, device_type, os, browser, isp, asn, language, connection (datacenter|residential), bot (yes|no), referrer_domain, ip (IP or CIDR), weekday (mon..sun), hour (9 or 9-17), sub1..sub10. op: in | not_in.",
+    items: {
+      type: "object",
+      properties: {
+        field: str("Click field."),
+        op: enumOf(["in", "not_in"], "Operator."),
+        values: { type: "array", items: { type: "string" }, description: "Values (any match)." },
+      },
+      required: ["field", "values"],
+    },
+  },
+  timezone: str("IANA timezone for weekday/hour conditions (default UTC)."),
+  sort_order: int("Evaluation order (lower first)."),
+  enabled: bool("Whether the rule is evaluated."),
 };
 
 const postbackOwner = {
@@ -322,17 +361,21 @@ export const TOOLS: McpTool[] = [
   {
     name: "create_path",
     title: "Create path",
-    description: "Add a traffic path (direct URL, lander, offer, or lander then offer) to a campaign.",
-    inputSchema: schema({ campaign_id: campaignId, ...pathFields }, [
-      "campaign_id",
-      "name",
-      "flow_type",
-    ]),
+    description:
+      "Add a traffic path (direct URL, lander, offer, or lander then offer) to a campaign. Pass rule_id to add it to a routing rule instead of the default pool.",
+    inputSchema: schema(
+      {
+        campaign_id: campaignId,
+        ...pathFields,
+        rule_id: nullableStr("Routing rule id (rul_…); omit for the default pool."),
+      },
+      ["campaign_id", "name", "flow_type"],
+    ),
     annotations: write,
     call: (a) => ({
       method: "POST",
       path: `/api/programs/${id(a, "campaign_id")}/paths`,
-      body: pick(a, Object.keys(pathFields)),
+      body: pick(a, [...Object.keys(pathFields), "rule_id"]),
     }),
   },
   {
@@ -363,6 +406,117 @@ export const TOOLS: McpTool[] = [
       method: "DELETE",
       path: `/api/programs/${id(a, "campaign_id")}/paths/${id(a, "path_id")}`,
     }),
+  },
+  {
+    name: "list_rules",
+    title: "List routing rules",
+    description: "List a campaign's routing rules in evaluation order, with their paths.",
+    inputSchema: schema({ campaign_id: campaignId }, ["campaign_id"]),
+    annotations: read,
+    call: (a) => ({ method: "GET", path: `/api/programs/${id(a, "campaign_id")}/rules` }),
+  },
+  {
+    name: "create_rule",
+    title: "Create routing rule",
+    description:
+      "Add a routing rule (e.g. country in DE,AT and device_type in mobile). First matching rule wins; then add paths with create_path rule_id. Unmatched clicks use the default paths.",
+    inputSchema: schema({ campaign_id: campaignId, ...ruleFields }, ["campaign_id", "name"]),
+    annotations: write,
+    call: (a) => ({
+      method: "POST",
+      path: `/api/programs/${id(a, "campaign_id")}/rules`,
+      body: pick(a, Object.keys(ruleFields)),
+    }),
+  },
+  {
+    name: "update_rule",
+    title: "Update routing rule",
+    description: "Change a rule's name, conditions, timezone, order or enabled flag.",
+    inputSchema: schema(
+      { campaign_id: campaignId, rule_id: str("Rule id (rul_…)."), ...ruleFields },
+      ["campaign_id", "rule_id"],
+    ),
+    annotations: write,
+    call: (a) => ({
+      method: "PATCH",
+      path: `/api/programs/${id(a, "campaign_id")}/rules/${id(a, "rule_id")}`,
+      body: pick(a, Object.keys(ruleFields)),
+    }),
+  },
+  {
+    name: "delete_rule",
+    title: "Delete routing rule",
+    description: "Delete a routing rule and its paths.",
+    inputSchema: schema({ campaign_id: campaignId, rule_id: str("Rule id (rul_…).") }, [
+      "campaign_id",
+      "rule_id",
+    ]),
+    annotations: destroy,
+    call: (a) => ({
+      method: "DELETE",
+      path: `/api/programs/${id(a, "campaign_id")}/rules/${id(a, "rule_id")}`,
+    }),
+  },
+
+  // Anti-fraud
+  {
+    name: "get_traffic_filter",
+    title: "Get bot handling",
+    description: "Get how a campaign handles bot / blocklisted / datacenter traffic.",
+    inputSchema: schema({ campaign_id: campaignId }, ["campaign_id"]),
+    annotations: read,
+    call: (a) => ({ method: "GET", path: `/api/programs/${id(a, "campaign_id")}/traffic-filter` }),
+  },
+  {
+    name: "set_traffic_filter",
+    title: "Set bot handling",
+    description:
+      "Set a campaign's bot handling: bot_action route (count as bot, route normally) or safe_page (redirect flagged clicks to safe_page_url). block_datacenter flags cloud/hosting ASNs as bots.",
+    inputSchema: schema(
+      {
+        campaign_id: campaignId,
+        bot_action: enumOf(["route", "safe_page"], "Action for flagged traffic."),
+        safe_page_url: nullableStr("Safe page URL (http/https)."),
+        block_datacenter: bool("Flag datacenter / cloud ASNs as bots."),
+      },
+      ["campaign_id"],
+    ),
+    annotations: write,
+    call: (a) => ({
+      method: "PUT",
+      path: `/api/programs/${id(a, "campaign_id")}/traffic-filter`,
+      body: pick(a, ["bot_action", "safe_page_url", "block_datacenter"]),
+    }),
+  },
+  {
+    name: "list_blocklist",
+    title: "List blocklist",
+    description: "List the account blocklist (IP/CIDR, ASN, user-agent substrings) and built-in datacenter ASNs.",
+    inputSchema: schema({}),
+    annotations: read,
+    call: () => ({ method: "GET", path: "/api/antifraud/blocklist" }),
+  },
+  {
+    name: "add_to_blocklist",
+    title: "Add to blocklist",
+    description: "Block IPs/CIDRs, ASNs or user-agent substrings account-wide. Matching clicks are flagged as bots.",
+    inputSchema: schema(
+      {
+        kind: enumOf(["ip", "asn", "ua"], "Entry type."),
+        values: { type: "array", items: { type: "string" }, description: "Values to block." },
+      },
+      ["kind", "values"],
+    ),
+    annotations: write,
+    call: (a) => ({ method: "POST", path: "/api/antifraud/blocklist", body: pick(a, ["kind", "values"]) }),
+  },
+  {
+    name: "remove_from_blocklist",
+    title: "Remove from blocklist",
+    description: "Delete a blocklist entry.",
+    inputSchema: schema({ entry_id: str("Blocklist entry id (blk_…).") }, ["entry_id"]),
+    annotations: destroy,
+    call: (a) => ({ method: "DELETE", path: `/api/antifraud/blocklist/${id(a, "entry_id")}` }),
   },
 
   // Entities

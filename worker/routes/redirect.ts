@@ -30,6 +30,8 @@ import { fireTriggerWebhooks } from "../lib/triggers";
 import { id } from "../lib/utils";
 import { parseHttpUrl, resolveRedirectTarget, withQueryParam } from "../lib/urls";
 import { buildClickContext, SUB_KEYS } from "../lib/click-context";
+import { evaluateTraffic } from "../lib/click-filter";
+import { selectRulePaths } from "../lib/rules";
 import type { RoutingContext } from "../types-routing";
 
 import type { Context } from "hono";
@@ -84,8 +86,15 @@ async function handleClickRedirect(
   let landerId: string | null = null;
   let offerId: string | null = null;
 
-  if (config.paths.length > 0) {
-    const path = await selectPath(c.env.DB, config.rotation, config.paths, {
+  // Anti-fraud verdict + routing rules: flagged traffic may go to the campaign's configured
+  // safe page; otherwise the first matching rule's paths replace the default pool.
+  const traffic = await evaluateTraffic(c.env.DB, program.id, c.req.raw, clickContext);
+  const pool = selectRulePaths(config.rules, config.paths, traffic.rule_context).paths;
+
+  if (traffic.safe_page) {
+    destination = { url: traffic.safe_page, path_id: null, lander_id: null, offer_id: null };
+  } else if (pool.length > 0) {
+    const path = await selectPath(c.env.DB, config.rotation, pool, {
       programId: program.id,
       visitorKey,
     });
@@ -105,7 +114,8 @@ async function handleClickRedirect(
   }
 
   const now = Date.now();
-  const { is_bot, ...contextColumns } = clickContext;
+  const { is_bot: _uaBot, ...contextColumns } = clickContext;
+  const is_bot = traffic.is_bot;
   await recordClick(c.env.DB, {
     ...contextColumns,
     id: clickId,

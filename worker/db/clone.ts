@@ -1,5 +1,7 @@
 import { getProgram, listPrograms, updateProgram } from "../db/queries";
-import { createPath, getOrCreateRotation, getRotationConfig } from "../db/routing";
+import { createPath, createRule, getOrCreateRotation, getRotationConfig } from "../db/routing";
+import type { PathWithEntities } from "../types-routing";
+import { getTrafficFilter, saveTrafficFilter } from "./antifraud";
 import { withUniqueCampaignKey } from "./entities";
 import { copyCampaignPostbacks } from "./postbacks";
 import type { Program } from "../types";
@@ -57,11 +59,13 @@ export async function cloneProgram(
   });
 
   await copyCampaignPostbacks(db, source.id, program.id);
+  const filter = await getTrafficFilter(db, source.id);
+  await saveTrafficFilter(db, { ...filter, program_id: program.id });
 
   const config = await getRotationConfig(db, source.id);
-  if (config.paths.length > 0) {
+  if (config.paths.length > 0 || config.rules.length > 0) {
     const pathIdMap = new Map<string, string>();
-    for (const path of config.paths) {
+    const copyPath = async (path: PathWithEntities, ruleId: string | null) => {
       const created = await createPath(db, program.id, {
         name: path.name,
         flow_type: path.flow_type,
@@ -70,9 +74,23 @@ export async function cloneProgram(
         direct_url: path.direct_url,
         lander_id: path.lander_id,
         offer_id: path.offer_id,
+        landers: path.landers.length > 0 ? path.landers : undefined,
+        offers: path.offers.length > 0 ? path.offers : undefined,
         enabled: path.enabled,
+        rule_id: ruleId,
       });
       pathIdMap.set(path.id, created.id);
+    };
+    for (const path of config.paths) await copyPath(path, null);
+    for (const rule of config.rules) {
+      const created = await createRule(db, program.id, {
+        name: rule.name,
+        conditions: rule.conditions,
+        timezone: rule.timezone,
+        sort_order: rule.sort_order,
+        enabled: rule.enabled,
+      });
+      for (const path of rule.paths) await copyPath(path, created.id);
     }
     const fixedPathId = config.rotation.fixed_path_id
       ? (pathIdMap.get(config.rotation.fixed_path_id) ?? null)

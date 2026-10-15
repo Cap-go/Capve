@@ -26,7 +26,30 @@ const TOOL_GROUPS: Array<[string, string[]]> = [
     ],
   ],
   ["Affiliates", ["list_affiliates", "create_affiliate"]],
-  ["Routing", ["get_rotation", "set_rotation", "create_path", "update_path", "delete_path"]],
+  [
+    "Routing",
+    [
+      "get_rotation",
+      "set_rotation",
+      "create_path",
+      "update_path",
+      "delete_path",
+      "list_rules",
+      "create_rule",
+      "update_rule",
+      "delete_rule",
+    ],
+  ],
+  [
+    "Anti-fraud",
+    [
+      "get_traffic_filter",
+      "set_traffic_filter",
+      "list_blocklist",
+      "add_to_blocklist",
+      "remove_from_blocklist",
+    ],
+  ],
   [
     "Entities",
     [

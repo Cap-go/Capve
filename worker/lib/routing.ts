@@ -5,6 +5,18 @@ import {
   setVisitorAssignment,
 } from "../db/routing";
 import { parseHttpUrl, withQueryParam } from "./urls";
+import { weightedItem } from "./rules";
+
+/** Weighted lander/offer of a path; falls back to the single legacy lander_id / offer_id. */
+function pickItem(
+  items: PathWithEntities["landers"],
+  legacyId: string | null,
+  legacyUrl: string | null,
+): { id: string; url: string } | null {
+  const picked = weightedItem(items);
+  if (picked) return picked;
+  return legacyId && legacyUrl ? { id: legacyId, url: legacyUrl } : null;
+}
 
 const VISITOR_COOKIE = "_capve_vid";
 
@@ -135,23 +147,32 @@ export function resolvePathDestination(
   let landerId: string | null = null;
   let offerId: string | null = null;
 
+  const lander = () => pickItem(path.landers ?? [], path.lander_id, path.lander_url);
+  const offer = () => pickItem(path.offers ?? [], path.offer_id, path.offer_url);
+
   switch (path.flow_type) {
     case "direct":
       raw = path.direct_url ?? fallbackDestination;
       break;
-    case "lander":
-      raw = path.lander_url;
-      landerId = path.lander_id;
+    case "lander": {
+      const l = lander();
+      raw = l?.url ?? null;
+      landerId = l?.id ?? null;
       break;
-    case "offer":
-      raw = path.offer_url;
-      offerId = path.offer_id;
+    }
+    case "offer": {
+      const o = offer();
+      raw = o?.url ?? null;
+      offerId = o?.id ?? null;
       break;
-    case "lander_offer":
-      raw = path.lander_url;
-      landerId = path.lander_id;
-      offerId = path.offer_id;
+    }
+    case "lander_offer": {
+      const l = lander();
+      raw = l?.url ?? null;
+      landerId = l?.id ?? null;
+      offerId = offer()?.id ?? null;
       break;
+    }
   }
 
   if (!raw) {
