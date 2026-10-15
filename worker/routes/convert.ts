@@ -7,6 +7,7 @@ import {
   resolveAffiliateFromClick,
 } from "../lib/conversion";
 import { normalizeEvent } from "../lib/postback";
+import { backgroundTasks } from "../lib/background";
 import type { Env } from "../types";
 import { readAffiliateCookie } from "../lib/auth";
 
@@ -93,7 +94,7 @@ convert.post("/", async (c) => {
     event,
     currency: body.currency?.trim() || "USD",
     disable_s2s: body.disable_postback === true,
-  });
+  }, backgroundTasks(c));
 
   return c.json({ ok: true, ...result });
 });

@@ -20,6 +20,11 @@ migrations_dir = "migrations"
 [[send_email]]
 name = "EMAIL"
 
+# Daily data retention: prunes the postback delivery log (30 days) and, only when
+# RAW_CLICK_RETENTION_DAYS is set, raw clicks without conversions.
+[triggers]
+crons = ["17 3 * * *"]
+
 [vars]
 APP_URL = "http://localhost:5173"
 AUTH_SECRET = "capve-local-dev-auth-secret-change-in-prod"
@@ -34,6 +39,9 @@ vars = { APP_URL = "https://capve.app", EMAIL_FROM = "noreply@capve.app", PLATFO
 
 [[env.production.send_email]]
 name = "EMAIL"
+
+[env.production.triggers]
+crons = ["17 3 * * *"]
 
 # Custom domains for production.
 # [env.production] are copied into dist/velo/wrangler.json only when the build

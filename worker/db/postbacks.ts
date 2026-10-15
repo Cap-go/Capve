@@ -160,3 +160,37 @@ export async function postbacksForConversion(
     .all<Postback>();
   return results ?? [];
 }
+
+export type PostbackDeliveryRow = {
+  id: string;
+  postback_id: string;
+  conversion_id: string | null;
+  url: string;
+  status_code: number | null;
+  error: string | null;
+  attempt: number;
+  ok: boolean;
+  created_at: number;
+};
+
+/** Most recent delivery attempts of one postback owned by the account; null when not found. */
+export async function listPostbackDeliveries(
+  db: D1Database,
+  postbackId: string,
+  userId: string,
+  limit = 20,
+): Promise<PostbackDeliveryRow[] | null> {
+  if (!(await getPostback(db, postbackId, userId))) return null;
+  const { results } = await db
+    .prepare(
+      `SELECT id, postback_id, conversion_id, url, status_code, error, attempt, created_at
+       FROM postback_deliveries WHERE postback_id = ?
+       ORDER BY created_at DESC, attempt DESC LIMIT ?`,
+    )
+    .bind(postbackId, Math.min(Math.max(limit, 1), 100))
+    .all<Omit<PostbackDeliveryRow, "ok">>();
+  return (results ?? []).map((row) => ({
+    ...row,
+    ok: row.error == null && row.status_code != null && row.status_code >= 200 && row.status_code < 300,
+  }));
+}

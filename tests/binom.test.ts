@@ -1,6 +1,6 @@
 import { env, fetchMock, SELF } from "cloudflare:test";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { registerTestUser } from "./helpers";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { registerTestUser, settle } from "./helpers";
 import { initSql } from "./schema";
 
 const MERCHANT = "https://merchant.example.com/pricing";
@@ -315,7 +315,8 @@ describe("binom parity", () => {
     const { clickId } = await click(affiliate.code, "?clickid=TS-123");
     tsPostbacks.length = 0;
     await postback(`cnv_id=${clickId}&payout=12.5&cnv_status=sale`);
-    expect(tsPostbacks).toHaveLength(1);
+    // Outgoing postbacks run after the response (waitUntil).
+    await vi.waitFor(() => expect(tsPostbacks).toHaveLength(1));
     const url = new URL(`https://ts.example.com${tsPostbacks[0]}`);
     expect(url.searchParams.get("ext")).toBe("TS-123");
     expect(url.searchParams.get("cid")).toBe(clickId);
@@ -324,6 +325,7 @@ describe("binom parity", () => {
 
     // Rejections are not reported to the traffic source.
     await postback(`cnv_id=${clickId}&cnv_status=rejected`);
+    await settle();
     expect(tsPostbacks).toHaveLength(1);
   });
   it("tracks conversion events with several postbacks each", async () => {
@@ -380,17 +382,22 @@ describe("binom parity", () => {
     expect(reg.status).toBe("created");
     // Events only carry the payout they send (no offer payout fallback).
     expect(reg.conversion.amount_cents).toBe(0);
-    expect(tsPostbacks.sort()).toEqual([
-      "/camp?e=registration&s=lead",
-      `/net-reg?cid=${clickId}&e=registration`,
-    ]);
+    await vi.waitFor(() =>
+      expect(tsPostbacks.sort()).toEqual([
+        "/camp?e=registration&s=lead",
+        `/net-reg?cid=${clickId}&e=registration`,
+      ]),
+    );
 
     tsPostbacks.length = 0;
     expect((await postback(`cnv_id=${clickId}&event=ftd&payout=100`)).status).toBe("created");
-    expect(tsPostbacks.sort()).toEqual(["/camp?e=ftd&s=lead", "/net-ftd?p=100"]);
+    await vi.waitFor(() =>
+      expect(tsPostbacks.sort()).toEqual(["/camp?e=ftd&s=lead", "/net-ftd?p=100"]),
+    );
 
     tsPostbacks.length = 0;
     expect((await postback(`cnv_id=${clickId}&event=ftd&payout=100`)).status).toBe("duplicate");
+    await settle();
     expect(tsPostbacks).toHaveLength(0);
 
     const bad = await SELF.fetch(`http://localhost/click?cnv_id=${clickId}&event=bad%20event`);

@@ -211,6 +211,12 @@ export async function getGroupedReport(
   const campaignBinds = options.campaign_id ? [options.campaign_id] : [];
   const clickTime = clickTimeClause(options, "c");
   const convTime = timeClause(options, CONV_TIME);
+  // A conversion never precedes its click, so `cv.created_at >= from` is implied by the
+  // click-time window: an index-friendly prefilter (idx_conversions_program_created).
+  const convFloor =
+    options.from != null
+      ? { sql: " AND cv.created_at >= ?", binds: [options.from] }
+      : { sql: "", binds: [] as number[] };
   const label = dim.label ?? "NULL";
 
   const [clickRows, convRows] = await Promise.all([
@@ -256,10 +262,10 @@ export async function getGroupedReport(
          LEFT JOIN clicks c ON c.id = cv.click_id
          LEFT JOIN traffic_sources ts ON ts.id = p.traffic_source_id
          ${dim.convJoin ?? ""}
-         WHERE ${where.sql}${campaignSql} AND ${approvedStatusSql("cv")}${convTime.sql}
+         WHERE ${where.sql}${campaignSql} AND ${approvedStatusSql("cv")}${convTime.sql}${convFloor.sql}
          GROUP BY k, ev`,
       )
-      .bind(...where.binds, ...campaignBinds, ...convTime.binds)
+      .bind(...where.binds, ...campaignBinds, ...convTime.binds, ...convFloor.binds)
       .all<{
         k: string | null;
         ev: string | null;
@@ -419,103 +425,158 @@ export async function getCampaignTrends(
     }));
 }
 
-export async function exportClickLogCsv(
-  db: D1Database,
-  programId: string,
-  userId: string,
-  filters: ReportFilters,
-): Promise<Array<Array<string | number>>> {
+/** Hard cap on rows per CSV export; exports are streamed in keyset-paginated pages. */
+export const EXPORT_MAX_ROWS = 100_000;
+const EXPORT_PAGE_SIZE = 2_000;
+
+export type ExportOptions = { maxRows?: number; pageSize?: number };
+
+type CsvRow = Array<string | number>;
+
+async function ownsProgram(db: D1Database, programId: string, userId: string) {
   const program = await db
     .prepare("SELECT id FROM programs WHERE id = ? AND user_id = ?")
     .bind(programId, userId)
     .first();
-  if (!program) return [];
-
-  const clickTime = clickTimeClause(filters, "c");
-  const { results } = await db
-    .prepare(
-      `SELECT
-        c.id, c.created_at, a.code AS affiliate_code, a.name AS affiliate_name,
-        c.ip, c.lander_id, c.offer_id, c.path_id,
-        EXISTS(SELECT 1 FROM conversions cv WHERE cv.click_id = c.id) AS converted
-       FROM clicks c
-       JOIN affiliates a ON a.id = c.affiliate_id
-       WHERE c.program_id = ?${clickTime.sql}
-       ORDER BY c.created_at DESC`,
-    )
-    .bind(programId, ...clickTime.binds)
-    .all<{
-      id: string;
-      created_at: number;
-      affiliate_code: string;
-      affiliate_name: string;
-      ip: string | null;
-      lander_id: string | null;
-      offer_id: string | null;
-      path_id: string | null;
-      converted: number;
-    }>();
-
-  return (results ?? []).map((row) => [
-    row.id,
-    new Date(row.created_at).toISOString(),
-    row.affiliate_code,
-    row.affiliate_name,
-    row.ip ?? "",
-    row.lander_id ?? "",
-    row.offer_id ?? "",
-    row.path_id ?? "",
-    row.converted ? "yes" : "no",
-  ]);
+  return Boolean(program);
 }
 
-export async function exportConversionsCsv(
+/**
+ * Pages of `(created_at DESC, id DESC)` rows; each page resumes after the last row of
+ * the previous one, so memory stays bounded and no OFFSET scan is needed.
+ */
+async function* keysetPages<T extends { created_at: number; row_key: string }>(
+  fetchPage: (
+    after: { created_at: number; row_key: string } | null,
+    limit: number,
+  ) => Promise<T[]>,
+  options: ExportOptions,
+): AsyncGenerator<T[]> {
+  const maxRows = options.maxRows ?? EXPORT_MAX_ROWS;
+  const pageSize = options.pageSize ?? EXPORT_PAGE_SIZE;
+  let sent = 0;
+  let after: { created_at: number; row_key: string } | null = null;
+  while (sent < maxRows) {
+    const limit = Math.min(pageSize, maxRows - sent);
+    const rows = await fetchPage(after, limit);
+    if (rows.length > 0) {
+      sent += rows.length;
+      yield rows;
+    }
+    if (rows.length < limit) return;
+    const last = rows[rows.length - 1]!;
+    after = { created_at: last.created_at, row_key: last.row_key };
+  }
+}
+
+export async function* exportClickLogCsv(
   db: D1Database,
   programId: string,
   userId: string,
   filters: ReportFilters,
-): Promise<Array<Array<string | number>>> {
-  const program = await db
-    .prepare("SELECT id FROM programs WHERE id = ? AND user_id = ?")
-    .bind(programId, userId)
-    .first();
-  if (!program) return [];
+  options: ExportOptions = {},
+): AsyncGenerator<CsvRow[]> {
+  if (!(await ownsProgram(db, programId, userId))) return;
+
+  const clickTime = clickTimeClause(filters, "c");
+  const pages = keysetPages(async (after, limit) => {
+    const cursorSql = after ? " AND (c.created_at < ? OR (c.created_at = ? AND c.id < ?))" : "";
+    const cursorBinds = after ? [after.created_at, after.created_at, after.row_key] : [];
+    const { results } = await db
+      .prepare(
+        `SELECT
+          c.id AS row_key, c.created_at, a.code AS affiliate_code, a.name AS affiliate_name,
+          c.ip, c.lander_id, c.offer_id, c.path_id,
+          EXISTS(SELECT 1 FROM conversions cv WHERE cv.click_id = c.id) AS converted
+         FROM clicks c
+         JOIN affiliates a ON a.id = c.affiliate_id
+         WHERE c.program_id = ?${clickTime.sql}${cursorSql}
+         ORDER BY c.created_at DESC, c.id DESC
+         LIMIT ?`,
+      )
+      .bind(programId, ...clickTime.binds, ...cursorBinds, limit)
+      .all<{
+        row_key: string;
+        created_at: number;
+        affiliate_code: string;
+        affiliate_name: string;
+        ip: string | null;
+        lander_id: string | null;
+        offer_id: string | null;
+        path_id: string | null;
+        converted: number;
+      }>();
+    return results ?? [];
+  }, options);
+
+  for await (const rows of pages) {
+    yield rows.map((row) => [
+      row.row_key,
+      new Date(row.created_at).toISOString(),
+      row.affiliate_code,
+      row.affiliate_name,
+      row.ip ?? "",
+      row.lander_id ?? "",
+      row.offer_id ?? "",
+      row.path_id ?? "",
+      row.converted ? "yes" : "no",
+    ]);
+  }
+}
+
+export async function* exportConversionsCsv(
+  db: D1Database,
+  programId: string,
+  userId: string,
+  filters: ReportFilters,
+  options: ExportOptions = {},
+): AsyncGenerator<CsvRow[]> {
+  if (!(await ownsProgram(db, programId, userId))) return;
 
   const convTime = conversionTimeClause(filters, "cv");
-  const { results } = await db
-    .prepare(
-      `SELECT
-        cv.order_id, cv.click_id, cv.created_at, cv.amount_cents, cv.status, cv.status2,
-        cv.event, cv.currency, a.code AS affiliate_code, a.name AS affiliate_name
-       FROM conversions cv
-       JOIN affiliates a ON a.id = cv.affiliate_id
-       WHERE cv.program_id = ?${convTime.sql}
-       ORDER BY cv.created_at DESC`,
-    )
-    .bind(programId, ...convTime.binds)
-    .all<{
-      order_id: string;
-      click_id: string | null;
-      created_at: number;
-      amount_cents: number;
-      status: string;
-      status2: string | null;
-      event: string | null;
-      currency: string;
-      affiliate_code: string;
-      affiliate_name: string;
-    }>();
+  const pages = keysetPages(async (after, limit) => {
+    const cursorSql = after ? " AND (cv.created_at < ? OR (cv.created_at = ? AND cv.id < ?))" : "";
+    const cursorBinds = after ? [after.created_at, after.created_at, after.row_key] : [];
+    const { results } = await db
+      .prepare(
+        `SELECT
+          cv.id AS row_key, cv.order_id, cv.click_id, cv.created_at, cv.amount_cents, cv.status,
+          cv.status2, cv.event, cv.currency, a.code AS affiliate_code, a.name AS affiliate_name
+         FROM conversions cv
+         JOIN affiliates a ON a.id = cv.affiliate_id
+         WHERE cv.program_id = ?${convTime.sql}${cursorSql}
+         ORDER BY cv.created_at DESC, cv.id DESC
+         LIMIT ?`,
+      )
+      .bind(programId, ...convTime.binds, ...cursorBinds, limit)
+      .all<{
+        row_key: string;
+        order_id: string;
+        click_id: string | null;
+        created_at: number;
+        amount_cents: number;
+        status: string;
+        status2: string | null;
+        event: string | null;
+        currency: string;
+        affiliate_code: string;
+        affiliate_name: string;
+      }>();
+    return results ?? [];
+  }, options);
 
-  return (results ?? []).map((row) => [
-    row.order_id,
-    row.click_id ?? "",
-    new Date(row.created_at).toISOString(),
-    (row.amount_cents / 100).toFixed(2),
-    row.status,
-    row.status2 ?? "",
-    row.event ?? "",
-    row.currency,
-    row.affiliate_code,
-    row.affiliate_name,
-  ]);
+  for await (const rows of pages) {
+    yield rows.map((row) => [
+      row.order_id,
+      row.click_id ?? "",
+      new Date(row.created_at).toISOString(),
+      (row.amount_cents / 100).toFixed(2),
+      row.status,
+      row.status2 ?? "",
+      row.event ?? "",
+      row.currency,
+      row.affiliate_code,
+      row.affiliate_name,
+    ]);
+  }
 }

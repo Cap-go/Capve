@@ -16,6 +16,8 @@ export type Env = {
   EMAIL?: EmailBinding;
   EMAIL_FROM?: string;
   PLATFORM_ADMIN_EMAILS?: string;
+  /** Days to keep raw clicks without conversions; unset/0 = keep forever. */
+  RAW_CLICK_RETENTION_DAYS?: string;
 };
 
 export type User = {

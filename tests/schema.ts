@@ -134,12 +134,14 @@ CREATE TABLE IF NOT EXISTS clicks (
 CREATE INDEX IF NOT EXISTS idx_clicks_affiliate ON clicks(affiliate_id);
 CREATE INDEX IF NOT EXISTS idx_clicks_program_created ON clicks(program_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_clicks_program_visitor ON clicks(program_id, visitor_hash, created_at);
+CREATE INDEX IF NOT EXISTS idx_clicks_program_affiliate ON clicks(program_id, affiliate_id);
 
 CREATE TABLE IF NOT EXISTS rotations (
   id TEXT PRIMARY KEY,
   program_id TEXT NOT NULL UNIQUE REFERENCES programs(id),
   mode TEXT NOT NULL DEFAULT 'normal',
   fixed_path_id TEXT,
+  rr_counter INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 );
 
@@ -183,7 +185,7 @@ CREATE TABLE IF NOT EXISTS conversions (
 );
 
 CREATE INDEX IF NOT EXISTS idx_conversions_affiliate ON conversions(affiliate_id);
-CREATE INDEX IF NOT EXISTS idx_conversions_program ON conversions(program_id);
+CREATE INDEX IF NOT EXISTS idx_conversions_program_created ON conversions(program_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_conversions_click ON conversions(click_id);
 
 CREATE TABLE IF NOT EXISTS team_members (
@@ -242,4 +244,18 @@ CREATE TABLE IF NOT EXISTS postbacks (
 );
 
 CREATE INDEX IF NOT EXISTS idx_postbacks_user ON postbacks(user_id);
+
+CREATE TABLE IF NOT EXISTS postback_deliveries (
+  id TEXT PRIMARY KEY,
+  postback_id TEXT NOT NULL REFERENCES postbacks(id) ON DELETE CASCADE,
+  conversion_id TEXT,
+  url TEXT NOT NULL,
+  status_code INTEGER,
+  error TEXT,
+  attempt INTEGER NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_postback_deliveries_postback ON postback_deliveries(postback_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_postback_deliveries_created ON postback_deliveries(created_at);
 `;

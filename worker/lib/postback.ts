@@ -53,15 +53,89 @@ export function applyPostbackMacros(template: string, macros: PostbackMacros): s
   return url;
 }
 
+export const POSTBACK_TIMEOUT_MS = 5000;
+export const POSTBACK_MAX_ATTEMPTS = 2;
+
+export type PostbackDelivery = {
+  /** Postback row id; when set (with `db`) every attempt is logged in postback_deliveries. */
+  postbackId?: string;
+  conversionId?: string | null;
+  db?: D1Database;
+  timeoutMs?: number;
+};
+
+type AttemptResult = { ok: boolean; status_code: number | null; error: string | null };
+
+async function attemptPostback(url: string, timeoutMs: number): Promise<AttemptResult> {
+  try {
+    const res = await fetch(url, {
+      method: "GET",
+      redirect: "follow",
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    // Drain the body so the connection is released.
+    await res.body?.cancel().catch(() => {});
+    return res.ok
+      ? { ok: true, status_code: res.status, error: null }
+      : { ok: false, status_code: res.status, error: `HTTP ${res.status}` };
+  } catch (error) {
+    const name = error instanceof Error ? error.name : "";
+    const message =
+      name === "TimeoutError" || name === "AbortError"
+        ? `timeout after ${timeoutMs}ms`
+        : error instanceof Error
+          ? error.message
+          : String(error);
+    return { ok: false, status_code: null, error: message.slice(0, 500) };
+  }
+}
+
+async function logDelivery(
+  delivery: PostbackDelivery,
+  url: string,
+  attempt: number,
+  result: AttemptResult,
+): Promise<void> {
+  if (!delivery.db || !delivery.postbackId) return;
+  try {
+    await delivery.db
+      .prepare(
+        `INSERT INTO postback_deliveries
+          (id, postback_id, conversion_id, url, status_code, error, attempt, created_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(
+        `pbd_${crypto.randomUUID().replace(/-/g, "").slice(0, 20)}`,
+        delivery.postbackId,
+        delivery.conversionId ?? null,
+        url.slice(0, 2000),
+        result.status_code,
+        result.error,
+        attempt,
+        Date.now(),
+      )
+      .run();
+  } catch (error) {
+    console.error("postback delivery log failed", error);
+  }
+}
+
+/**
+ * Fires one outgoing S2S postback: 5s timeout, non-2xx = failure, one retry.
+ * Never throws; returns whether a delivery succeeded.
+ */
 export async function fireS2SPostback(
   template: string | null | undefined,
   macros: PostbackMacros,
-): Promise<void> {
-  if (!template?.trim()) return;
+  delivery: PostbackDelivery = {},
+): Promise<boolean> {
+  if (!template?.trim()) return false;
   const url = applyPostbackMacros(template.trim(), macros);
-  try {
-    await fetch(url, { method: "GET", redirect: "follow" });
-  } catch {
-    // Best-effort; do not fail the conversion if S2S is down.
+  const timeoutMs = delivery.timeoutMs ?? POSTBACK_TIMEOUT_MS;
+  for (let attempt = 1; attempt <= POSTBACK_MAX_ATTEMPTS; attempt++) {
+    const result = await attemptPostback(url, timeoutMs);
+    await logDelivery(delivery, url, attempt, result);
+    if (result.ok) return true;
   }
+  return false;
 }

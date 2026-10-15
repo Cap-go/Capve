@@ -43,7 +43,16 @@ const TOOL_GROUPS: Array<[string, string[]]> = [
       "create_offer",
     ],
   ],
-  ["Postbacks", ["list_postbacks", "create_postback", "update_postback", "delete_postback"]],
+  [
+    "Postbacks",
+    [
+      "list_postbacks",
+      "create_postback",
+      "update_postback",
+      "delete_postback",
+      "list_postback_deliveries",
+    ],
+  ],
   ["Reports", ["report_campaigns", "report_grouped", "report_trends"]],
   ["Automation", ["list_triggers", "create_trigger", "delete_trigger", "list_notes", "add_note"]],
   ["Team", ["whoami", "list_team", "invite_team_member", "remove_team_member"]],

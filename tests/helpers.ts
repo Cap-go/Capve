@@ -39,3 +39,8 @@ export async function registerTestUser(email?: string) {
     },
   };
 }
+
+/** Lets deferred (waitUntil) work run before asserting that nothing happened. */
+export function settle(ms = 50): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}

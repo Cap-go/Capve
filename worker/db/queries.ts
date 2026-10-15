@@ -291,18 +291,30 @@ export async function recordClick(
     lander_id?: string | null;
     offer_id?: string | null;
     is_unique?: boolean;
+    /**
+     * When set, `is_unique` is computed inside the INSERT (no prior click with the
+     * same visitor_hash on this campaign since this time): one D1 round trip.
+     */
+    unique_since?: number;
     is_bot?: boolean;
     created_at: number;
   } & ClickContextColumns,
 ) {
   const contextValues = CLICK_CONTEXT_COLUMNS.map((column) => click[column] ?? null);
+  const uniqueInline = click.unique_since != null;
+  const uniqueSql = uniqueInline
+    ? "NOT EXISTS (SELECT 1 FROM clicks WHERE program_id = ? AND visitor_hash = ? AND created_at >= ?)"
+    : "?";
+  const uniqueBinds = uniqueInline
+    ? [click.program_id, click.visitor_hash ?? null, click.unique_since!]
+    : [click.is_unique === false ? 0 : 1];
   await db
     .prepare(
       `INSERT INTO clicks (
         id, program_id, affiliate_id, ip, user_agent,
         path_id, lander_id, offer_id, ${CLICK_CONTEXT_COLUMNS.join(", ")},
         is_unique, is_bot, created_at
-      ) VALUES (${Array.from({ length: 11 + CLICK_CONTEXT_COLUMNS.length }, () => "?").join(", ")})`,
+      ) VALUES (${Array.from({ length: 8 + CLICK_CONTEXT_COLUMNS.length }, () => "?").join(", ")}, ${uniqueSql}, ?, ?)`,
     )
     .bind(
       click.id,
@@ -314,7 +326,7 @@ export async function recordClick(
       click.lander_id ?? null,
       click.offer_id ?? null,
       ...contextValues,
-      click.is_unique === false ? 0 : 1,
+      ...uniqueBinds,
       click.is_bot ? 1 : 0,
       click.created_at,
     )
