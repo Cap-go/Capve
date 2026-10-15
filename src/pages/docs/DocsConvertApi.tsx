@@ -13,7 +13,7 @@ export function DocsConvertApi() {
       </p>
       <h2>Authentication</h2>
       <p>
-        Header <code>X-Program-Secret</code> — program convert secret from the dashboard (shown once
+        Header <code>X-Program-Secret</code> — campaign secret from the dashboard (shown once
         at creation).
       </p>
       <h2>Request body</h2>
@@ -29,7 +29,7 @@ export function DocsConvertApi() {
           <tr>
             <td className="mono">order_id</td>
             <td>Yes</td>
-            <td>Unique order / invoice ID per program (idempotency key)</td>
+            <td>Unique order / invoice ID per campaign (idempotency key)</td>
           </tr>
           <tr>
             <td className="mono">amount</td>
@@ -72,7 +72,7 @@ export function DocsConvertApi() {
       <CodeBlock>{convertResponseExample()}</CodeBlock>
       <p>
         <code>status</code> is <code>created</code> or <code>duplicate</code> when the same{" "}
-        <code>order_id</code> was already recorded for this program.
+        <code>order_id</code> was already recorded for this campaign.
       </p>
     </>
   );

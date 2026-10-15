@@ -8,7 +8,7 @@ import {
   mcpUrl,
 } from "../lib/mcp";
 import { CodeBlock } from "./CodeBlock";
-import { ErrorBox, Field } from "./ui";
+import { ErrorBox, Field, SecretBox, confirmDelete } from "./ui";
 import { Link } from "react-router-dom";
 
 export function McpPanel() {
@@ -38,7 +38,8 @@ export function McpPanel() {
     }
   }
 
-  async function revoke(tokenId: string) {
+  async function revoke(tokenId: string, tokenName: string) {
+    if (!confirmDelete(`token "${tokenName}"`, "Assistants using it lose access immediately.")) return;
     setError("");
     try {
       await api.deleteApiToken(tokenId);
@@ -62,13 +63,13 @@ export function McpPanel() {
             Docs
           </Link>
         </p>
-        <p className="mono mt-4 text-sm">{mcpUrl(base)}</p>
+        <p className="mono mt-4 break-all text-sm">{mcpUrl(base)}</p>
       </div>
 
       <div className="card p-5">
         <h2 className="font-semibold">1. Create a token</h2>
         <form className="mt-4 flex flex-wrap items-end gap-3" onSubmit={create}>
-          <div className="w-64">
+          <div className="w-full sm:w-64">
             <Field label="Token name" value={name} onChange={(e) => setName(e.target.value)} />
           </div>
           <button className="btn btn-primary" disabled={busy} type="submit">
@@ -77,13 +78,11 @@ export function McpPanel() {
         </form>
         <ErrorBox message={error} />
         {created ? (
-          <div className="mt-4 rounded-md border border-[var(--velo-ink)] p-4 text-sm">
-            <p className="font-medium">Copy this token now. It is not shown again.</p>
-            <p className="mono mt-2 break-all">{created}</p>
-          </div>
+          <SecretBox title="Copy this token now. It is not shown again." value={created} />
         ) : null}
         {tokens.length > 0 ? (
-          <table className="table mt-4">
+          <div className="mt-4 overflow-x-auto">
+          <table className="table">
             <thead>
               <tr>
                 <th>Name</th>
@@ -101,7 +100,7 @@ export function McpPanel() {
                   <td>
                     <button
                       className="btn btn-secondary text-xs"
-                      onClick={() => revoke(t.id)}
+                      onClick={() => revoke(t.id, t.name)}
                       type="button"
                     >
                       Revoke
@@ -111,6 +110,7 @@ export function McpPanel() {
               ))}
             </tbody>
           </table>
+          </div>
         ) : null}
       </div>
 

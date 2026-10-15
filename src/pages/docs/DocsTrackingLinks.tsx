@@ -9,7 +9,7 @@ export function DocsTrackingLinks() {
       <h1>Tracking links</h1>
       <p>
         Each affiliate gets a short link. When clicked, Capve records the visit, assigns a click
-        ID, and redirects to your program destination URL.
+        ID, and redirects to your campaign destination URL.
       </p>
       <h2>Link format</h2>
       <CodeBlock>{buildTrackingUrl(base, "{affiliate_code}")}</CodeBlock>
@@ -25,7 +25,7 @@ export function DocsTrackingLinks() {
       </ul>
       <h2>Same-host deep links</h2>
       <p>
-        Optional <code>?url=</code> override is allowed only when the host matches your program
+        Optional <code>?url=</code> override is allowed only when the host matches your campaign
         destination (prevents open redirects).
       </p>
       <CodeBlock>{`${buildTrackingUrl(base, "abc123")}?url=${encodeURIComponent("https://yourapp.com/checkout?plan=pro")}`}</CodeBlock>

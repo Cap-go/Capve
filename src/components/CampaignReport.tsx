@@ -9,7 +9,7 @@ import {
   type TrafficSource,
   type TrendPoint,
 } from "../lib/api";
-import { ErrorBox } from "./ui";
+import { ErrorBox, Field } from "./ui";
 import { eventLabel, sortEvents } from "../lib/events";
 
 /** Event names present in rows, one report column each. */
@@ -17,7 +17,7 @@ function eventColumns(rows: Array<{ events: Record<string, number> }>): string[]
   return sortEvents([...new Set(rows.flatMap((row) => Object.keys(row.events)))]);
 }
 
-type DatePreset = "7d" | "30d" | "all";
+type DatePreset = "7d" | "30d" | "all" | "custom";
 
 const GROUP_BY_OPTIONS = [
   { value: "date", label: "Date" },
@@ -37,8 +37,17 @@ const GROUP_BY_OPTIONS = [
   ...Array.from({ length: 10 }, (_, i) => ({ value: `sub${i + 1}`, label: `Sub ${i + 1}` })),
 ];
 
-function presetRange(preset: DatePreset): { from?: number; to?: number } {
+function presetRange(
+  preset: DatePreset,
+  custom: { from: string; to: string },
+): { from?: number; to?: number } {
   if (preset === "all") return {};
+  if (preset === "custom") {
+    return {
+      from: custom.from ? new Date(`${custom.from}T00:00:00`).getTime() : undefined,
+      to: custom.to ? new Date(`${custom.to}T23:59:59.999`).getTime() : undefined,
+    };
+  }
   const days = preset === "7d" ? 7 : 30;
   const to = Date.now();
   const from = to - days * 24 * 60 * 60 * 1000;
@@ -61,6 +70,8 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [preset, setPreset] = useState<DatePreset>("30d");
+  const [customFrom, setCustomFrom] = useState("");
+  const [customTo, setCustomTo] = useState("");
   const [groupId, setGroupId] = useState("");
   const [sourceId, setSourceId] = useState("");
   const [status, setStatus] = useState("");
@@ -72,7 +83,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
   const campaignEvents = useMemo(() => eventColumns(campaigns), [campaigns]);
 
   const filters = useMemo(() => {
-    const range = presetRange(preset);
+    const range = presetRange(preset, { from: customFrom, to: customTo });
     return {
       from: range.from,
       to: range.to,
@@ -80,7 +91,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
       traffic_source_id: sourceId || undefined,
       status: status || undefined,
     };
-  }, [preset, groupId, sourceId, status]);
+  }, [preset, customFrom, customTo, groupId, sourceId, status]);
 
   useEffect(() => {
     api.groups().then(({ groups: items }) => setGroups(items)).catch(() => {});
@@ -147,13 +158,15 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
     };
   }, [selectedId, groupBy, filters.from, filters.to]);
 
+  const selectedName = campaigns.find((row) => row.id === selectedId)?.name ?? "selected campaign";
   const exportCampaignsUrl = `/api/reports/campaigns.csv${queryString(filters)}`;
 
-  async function bulkPause() {
+  async function bulkSetStatus(next: "active" | "paused") {
     if (checked.size === 0) return;
     setBusy(true);
+    setError("");
     try {
-      await api.bulkUpdatePrograms([...checked], { status: "paused" });
+      await api.bulkUpdatePrograms([...checked], { status: next });
       const { campaigns: rows } = await api.campaignReports(filters);
       setCampaigns(rows);
       setChecked(new Set());
@@ -187,9 +200,24 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
             Export CSV
           </a>
           {canWrite && checked.size > 0 && (
-            <button className="btn btn-secondary text-sm" disabled={busy} onClick={bulkPause} type="button">
-              Pause selected ({checked.size})
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <button
+                className="btn btn-secondary text-sm"
+                disabled={busy}
+                onClick={() => bulkSetStatus("paused")}
+                type="button"
+              >
+                Pause selected ({checked.size})
+              </button>
+              <button
+                className="btn btn-secondary text-sm"
+                disabled={busy}
+                onClick={() => bulkSetStatus("active")}
+                type="button"
+              >
+                Activate selected ({checked.size})
+              </button>
+            </div>
           )}
         </div>
 
@@ -204,8 +232,27 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
               { value: "7d", label: "Last 7 days" },
               { value: "30d", label: "Last 30 days" },
               { value: "all", label: "All time" },
+              { value: "custom", label: "Custom range" },
             ]}
           />
+          {preset === "custom" && (
+            <>
+              <Field
+                label="From"
+                type="date"
+                value={customFrom}
+                max={customTo || undefined}
+                onChange={(e) => setCustomFrom(e.target.value)}
+              />
+              <Field
+                label="To"
+                type="date"
+                value={customTo}
+                min={customFrom || undefined}
+                onChange={(e) => setCustomTo(e.target.value)}
+              />
+            </>
+          )}
           <FilterSelect
             label="Group"
             value={groupId}
@@ -229,6 +276,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
               { value: "", label: "All statuses" },
               { value: "active", label: "Active" },
               { value: "paused", label: "Paused" },
+              { value: "archived", label: "Archived (deleted)" },
             ]}
           />
         </div>
@@ -273,6 +321,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
                     key={row.id}
                     className={selectedId === row.id ? "bg-[var(--velo-accent-soft)]" : undefined}
                     onClick={() => setSelectedId(row.id)}
+                    style={{ cursor: "pointer" }}
                   >
                     {canWrite && (
                       <td onClick={(e) => e.stopPropagation()}>
@@ -285,7 +334,14 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
                     )}
                     <td>
                       <button className="text-left" type="button">
-                        <div className="font-medium">{row.name}</div>
+                        <div className="font-medium">
+                          {row.name}
+                          {row.status !== "active" && (
+                            <span className="ml-2 text-xs font-normal text-[var(--velo-muted)]">
+                              {row.status}
+                            </span>
+                          )}
+                        </div>
                         <div className="mono text-xs text-[var(--velo-muted)]">
                           {row.campaign_key ?? row.slug}
                         </div>
@@ -316,7 +372,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
       {selectedId && (
         <div className="card p-5">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h3 className="font-semibold">Trends</h3>
+            <h3 className="font-semibold">Trends — {selectedName}</h3>
             <div className="flex gap-2">
               <a
                 className="btn btn-secondary text-sm"
@@ -338,7 +394,8 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
 
       {selectedId && (
         <div className="card p-5">
-          <div className="flex flex-wrap items-end justify-between gap-3">
+          <h3 className="font-semibold">Breakdown — {selectedName}</h3>
+          <div className="mt-3 flex flex-wrap items-end justify-between gap-3">
             <div className="w-56">
               <FilterSelect label="Group by" value={groupBy} onChange={setGroupBy} options={GROUP_BY_OPTIONS} />
             </div>
@@ -368,10 +425,10 @@ function FilterSelect({
   options: Array<{ value: string; label: string }>;
 }) {
   return (
-    <label className="block text-sm">
-      <span className="mb-1 block font-medium">{label}</span>
+    <label className="block space-y-2">
+      <span className="text-sm font-medium text-[var(--velo-muted)]">{label}</span>
       <select
-        className="w-full rounded-md border border-[var(--velo-border)] bg-transparent px-3 py-2"
+        className="input"
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >

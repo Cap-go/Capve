@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useState } from "react";
-import { ErrorBox } from "./ui";
+import { ErrorBox, SavedNote, confirmDelete, useSaveState } from "./ui";
 import { api, type Postback, type PostbackOwner } from "../lib/api";
 
 export const COMMON_EVENTS = ["registration", "ftd", "deposit", "lead", "sale"];
@@ -22,6 +22,7 @@ export function PostbackList({
   const [editing, setEditing] = useState<{ id: string; event: string; url: string } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const save = useSaveState();
   const ownerKey = JSON.stringify(owner);
 
   useEffect(() => {
@@ -33,11 +34,11 @@ export function PostbackList({
     // owner is compared by value (ownerKey)
   }, [ownerKey]);
 
-  async function run(action: () => Promise<void>) {
+  async function run(action: () => Promise<void>, flashSaved = true) {
     setBusy(true);
     setError("");
     try {
-      await action();
+      await (flashSaved ? save.run(action) : action());
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed");
     } finally {
@@ -69,10 +70,11 @@ export function PostbackList({
   }
 
   function onDelete(postbackId: string) {
+    if (!confirmDelete("this postback")) return;
     return run(async () => {
       await api.deletePostback(postbackId);
       setPostbacks((prev) => prev.filter((row) => row.id !== postbackId));
-    });
+    }, false);
   }
 
   return (
@@ -116,7 +118,7 @@ export function PostbackList({
                           onChange={(e) => setEditing({ ...editing, url: e.target.value })}
                         />
                         <button className="btn btn-primary text-sm" disabled={busy} type="submit">
-                          Save
+                          {busy ? "Saving…" : "Save"}
                         </button>
                         <button
                           className="btn btn-ghost text-sm"
@@ -187,13 +189,16 @@ export function PostbackList({
             onChange={(e) => setUrl(e.target.value)}
           />
           <button className="btn btn-secondary whitespace-nowrap text-sm" disabled={busy} type="submit">
-            Add postback
+            {busy ? "Saving…" : "Add postback"}
           </button>
         </form>
       )}
+      <SavedNote show={save.saved} />
       <p className="text-xs text-[var(--velo-muted)]">
         Macros: <span className="mono">{MACROS}</span>. Leave event empty to fire on every
-        conversion.
+        conversion. <span className="mono">{"{status}"}</span> is the conversion status:{" "}
+        <span className="mono">lead</span> unless the incoming postback sent{" "}
+        <span className="mono">cnv_status</span>.
       </p>
     </div>
   );

@@ -1,9 +1,10 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { DocsLayout } from "./components/DocsLayout";
 import { AuthProvider } from "./lib/auth";
 import { DashboardPage } from "./pages/Dashboard";
 import { ForgotPasswordPage, LoginPage, RegisterPage, ResetPasswordPage } from "./pages/Auth";
 import { LandingPage } from "./pages/Landing";
+import { NotFoundPage } from "./pages/NotFound";
 import { DocsBrowserAttribution } from "./pages/docs/DocsBrowserAttribution";
 import { DocsConvertApi } from "./pages/docs/DocsConvertApi";
 import { DocsMcp } from "./pages/docs/DocsMcp";
@@ -31,8 +32,9 @@ export function App() {
             <Route path="browser-attribution" element={<DocsBrowserAttribution />} />
             <Route path="server-conversions" element={<DocsServerConversions />} />
             <Route path="api/convert" element={<DocsConvertApi />} />
+            <Route path="*" element={<NotFoundPage embedded />} />
           </Route>
-          <Route path="*" element={<Navigate to="/" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

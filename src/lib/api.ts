@@ -307,6 +307,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return data as T;
 }
 
+/** Paging and created_at window (Unix ms) for click/conversion logs. */
+export type LogPage = { limit?: number; offset?: number; from?: number; to?: number };
+
+function logQuery(page: LogPage): string {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(page)) {
+    if (value != null) params.set(key, String(value));
+  }
+  const qs = params.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export type ApiToken = {
   id: string;
   name: string;
@@ -336,23 +348,44 @@ export const api = {
       body: JSON.stringify({ token, password }),
     }),
   programs: () => request<{ programs: Program[] }>("/api/programs"),
-  createProgram: (name: string, destinationUrl: string) =>
+  createProgram: (data: {
+    name: string;
+    destination_url?: string;
+    traffic_source_id?: string;
+    group_id?: string;
+  }) =>
     request<{ program: Program; convert_secret: string }>("/api/programs", {
       method: "POST",
-      body: JSON.stringify({ name, destination_url: destinationUrl || undefined }),
+      body: JSON.stringify({
+        name: data.name,
+        destination_url: data.destination_url || undefined,
+        traffic_source_id: data.traffic_source_id || undefined,
+        group_id: data.group_id || undefined,
+      }),
     }),
-  updateProgram: (programId: string, data: { name?: string; destination_url?: string | null }) =>
+  updateProgram: (
+    programId: string,
+    data: {
+      name?: string;
+      destination_url?: string | null;
+      traffic_source_id?: string | null;
+      group_id?: string | null;
+      status?: "active" | "paused";
+    },
+  ) =>
     request<{ program: Program }>(`/api/programs/${programId}`, {
       method: "PATCH",
       body: JSON.stringify(data),
     }),
+  deleteProgram: (programId: string) =>
+    request<{ ok: boolean }>(`/api/programs/${programId}`, { method: "DELETE" }),
   tracking: (programId: string) =>
     request<{ tracking: ProgramTracking }>(`/api/programs/${programId}/tracking`),
-  clicks: (programId: string, limit = 50) =>
-    request<{ clicks: ClickLogRow[] }>(`/api/programs/${programId}/clicks?limit=${limit}`),
-  conversions: (programId: string, limit = 50) =>
+  clicks: (programId: string, page: LogPage = {}) =>
+    request<{ clicks: ClickLogRow[] }>(`/api/programs/${programId}/clicks${logQuery(page)}`),
+  conversions: (programId: string, page: LogPage = {}) =>
     request<{ conversions: ConversionLogRow[] }>(
-      `/api/programs/${programId}/conversions?limit=${limit}`,
+      `/api/programs/${programId}/conversions${logQuery(page)}`,
     ),
   stats: (programId: string) => request<ProgramStats>(`/api/programs/${programId}/stats`),
   createAffiliate: (programId: string, name: string) =>
@@ -373,7 +406,24 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  updateTrafficSource: (
+    sourceId: string,
+    data: Partial<Pick<TrafficSource, "name" | "cost_type" | "default_cost_cents" | "postback_percent">>,
+  ) =>
+    request<{ traffic_source: TrafficSource }>(`/api/entities/traffic-sources/${sourceId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteTrafficSource: (sourceId: string) =>
+    request<{ ok: boolean }>(`/api/entities/traffic-sources/${sourceId}`, { method: "DELETE" }),
   networks: () => request<{ networks: AffiliateNetwork[] }>("/api/entities/networks"),
+  updateNetwork: (networkId: string, data: { name?: string }) =>
+    request<{ network: AffiliateNetwork }>(`/api/entities/networks/${networkId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteNetwork: (networkId: string) =>
+    request<{ ok: boolean }>(`/api/entities/networks/${networkId}`, { method: "DELETE" }),
   createNetwork: (data: { name: string }) =>
     request<{ network: AffiliateNetwork }>("/api/entities/networks", {
       method: "POST",
@@ -385,7 +435,24 @@ export const api = {
       method: "POST",
       body: JSON.stringify(data),
     }),
+  updateLander: (landerId: string, data: { name?: string; url?: string }) =>
+    request<{ lander: Lander }>(`/api/entities/landers/${landerId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteLander: (landerId: string) =>
+    request<{ ok: boolean }>(`/api/entities/landers/${landerId}`, { method: "DELETE" }),
   offers: () => request<{ offers: Offer[] }>("/api/entities/offers"),
+  updateOffer: (
+    offerId: string,
+    data: { name?: string; url?: string; network_id?: string | null; payout_cents?: number },
+  ) =>
+    request<{ offer: Offer }>(`/api/entities/offers/${offerId}`, {
+      method: "PATCH",
+      body: JSON.stringify(data),
+    }),
+  deleteOffer: (offerId: string) =>
+    request<{ ok: boolean }>(`/api/entities/offers/${offerId}`, { method: "DELETE" }),
   createOffer: (data: {
     name: string;
     url: string;
@@ -418,6 +485,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ name }),
     }),
+  deleteGroup: (groupId: string) =>
+    request<{ ok: boolean }>(`/api/entities/groups/${groupId}`, { method: "DELETE" }),
   rotation: (programId: string) =>
     request<RotationConfig>(`/api/programs/${programId}/rotation`),
   updateRotation: (programId: string, data: { mode?: RotationMode; fixed_path_id?: string | null }) =>
@@ -540,7 +609,7 @@ export const api = {
     }),
   deleteTrigger: (triggerId: string) =>
     request<{ ok: boolean }>(`/api/ops/triggers/${triggerId}`, { method: "DELETE" }),
-  bulkUpdatePrograms: (programIds: string[], updates: { status?: string }) =>
+  bulkUpdatePrograms: (programIds: string[], updates: { status?: "active" | "paused" }) =>
     request<{ updated: number }>("/api/ops/programs/bulk", {
       method: "POST",
       body: JSON.stringify({ program_ids: programIds, ...updates }),
