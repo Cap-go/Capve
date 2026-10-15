@@ -353,7 +353,7 @@ function RulePaths({
   );
 }
 
-type ItemDraft = { id: string; weight: string };
+export type ItemDraft = { id: string; weight: string };
 
 /** Path form with several weighted landers / offers. */
 export function PathForm({
@@ -454,7 +454,8 @@ export function PathForm({
   );
 }
 
-function ItemList({
+/** Weighted lander / offer picker rows (shared with PathEditor). */
+export function ItemList({
   label,
   options,
   items,

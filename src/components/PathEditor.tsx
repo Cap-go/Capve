@@ -8,7 +8,8 @@ import {
   type RotationConfig,
   type RotationMode,
 } from "../lib/api";
-import { ErrorBox, Field, SavedNote, SelectField, confirmDelete, useSaveState } from "./ui";
+import { ErrorBox, Field, SavedNote, confirmDelete, useSaveState } from "./ui";
+import { ItemList, PathForm, type ItemDraft } from "./RoutingRules";
 
 const ROTATION_MODES: { value: RotationMode; label: string }[] = [
   { value: "normal", label: "Normal (weighted)" },
@@ -29,10 +30,29 @@ const flowLabel = (flow: FlowType) => FLOW_TYPES.find((f) => f.value === flow)?.
 type PathDraft = {
   weight: string;
   direct_url: string;
-  lander_id: string;
-  offer_id: string;
+  landers: ItemDraft[];
+  offers: ItemDraft[];
   enabled: boolean;
 };
+
+const usesLanders = (flow: FlowType) => flow === "lander" || flow === "lander_offer";
+const usesOffers = (flow: FlowType) => flow === "offer" || flow === "lander_offer";
+
+/** Weighted items of a path as editable drafts (falls back to the single lander/offer id). */
+function itemDrafts(items: Path["landers"], fallbackId: string | null): ItemDraft[] {
+  if (items && items.length > 0) return items.map((i) => ({ id: i.id, weight: String(i.weight) }));
+  return [{ id: fallbackId ?? "", weight: "100" }];
+}
+
+function weightedItems(drafts: ItemDraft[]) {
+  return drafts.filter((d) => d.id).map((d) => ({ id: d.id, weight: Math.max(1, Math.round(Number(d.weight)) || 100) }));
+}
+
+/** "Name (weight), ..." for a path's landers or offers. */
+function itemsLabel(items: Path["landers"], fallback: string | null | undefined): string {
+  if (items && items.length > 1) return items.map((i) => `${i.name} (${i.weight})`).join(", ");
+  return items?.[0]?.name ?? fallback ?? "?";
+}
 
 /** Paths and rotation of one campaign. `trackingOrigin` builds the lander CTA link (/lp/{click_id}). */
 export function PathEditor({
@@ -49,12 +69,6 @@ export function PathEditor({
   const [offers, setOffers] = useState<Offer[]>([]);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [pathName, setPathName] = useState("");
-  const [flowType, setFlowType] = useState<FlowType>("direct");
-  const [directUrl, setDirectUrl] = useState("");
-  const [landerId, setLanderId] = useState("");
-  const [offerId, setOfferId] = useState("");
-  const [weight, setWeight] = useState("100");
   const [editing, setEditing] = useState<{ id: string; draft: PathDraft } | null>(null);
   const save = useSaveState();
 
@@ -110,29 +124,17 @@ export function PathEditor({
     }
   }
 
-  async function addPath(e: FormEvent) {
-    e.preventDefault();
+  /** Default-pool path with one or more weighted landers / offers. */
+  async function addPath(input: Parameters<typeof api.createPathWithItems>[1]): Promise<boolean> {
     setBusy(true);
     setError("");
     try {
-      const { path } = await api.createPath(programId, {
-        name: pathName,
-        flow_type: flowType,
-        weight: Number(weight) || 100,
-        direct_url: flowType === "direct" ? directUrl : null,
-        lander_id:
-          flowType === "lander" || flowType === "lander_offer" ? landerId || null : null,
-        offer_id: flowType === "offer" || flowType === "lander_offer" ? offerId || null : null,
-      });
-      setConfig((prev) =>
-        prev ? { ...prev, paths: [...prev.paths, path] } : { rotation: config!.rotation, paths: [path] },
-      );
-      setPathName("");
-      setDirectUrl("");
-      setLanderId("");
-      setOfferId("");
+      const { path } = await api.createPathWithItems(programId, input);
+      setConfig((prev) => (prev ? { ...prev, paths: [...prev.paths, path] } : prev));
+      return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create path");
+      return false;
     } finally {
       setBusy(false);
     }
@@ -151,11 +153,11 @@ export function PathEditor({
           weight: Math.max(1, Math.round(Number(draft.weight)) || 1),
           enabled: draft.enabled,
           ...(path.flow_type === "direct" ? { direct_url: draft.direct_url } : {}),
-          ...(path.flow_type === "lander" || path.flow_type === "lander_offer"
-            ? { lander_id: draft.lander_id || null }
+          ...(usesLanders(path.flow_type)
+            ? { landers: weightedItems(draft.landers).map((i) => ({ lander_id: i.id, weight: i.weight })) }
             : {}),
-          ...(path.flow_type === "offer" || path.flow_type === "lander_offer"
-            ? { offer_id: draft.offer_id || null }
+          ...(usesOffers(path.flow_type)
+            ? { offers: weightedItems(draft.offers).map((i) => ({ offer_id: i.id, weight: i.weight })) }
             : {}),
         });
         setConfig((prev) =>
@@ -277,26 +279,20 @@ export function PathEditor({
                           }
                         />
                       )}
-                      {(path.flow_type === "lander" || path.flow_type === "lander_offer") && (
-                        <SelectField
-                          label="Lander"
-                          value={editing.draft.lander_id}
-                          onChange={(v) => setEditing({ ...editing, draft: { ...editing.draft, lander_id: v } })}
-                          options={[
-                            { value: "", label: "Select lander" },
-                            ...landers.map((l) => ({ value: l.id, label: l.name })),
-                          ]}
+                      {usesLanders(path.flow_type) && (
+                        <ItemList
+                          label="Landers"
+                          options={landers}
+                          items={editing.draft.landers}
+                          onChange={(items) => setEditing({ ...editing, draft: { ...editing.draft, landers: items } })}
                         />
                       )}
-                      {(path.flow_type === "offer" || path.flow_type === "lander_offer") && (
-                        <SelectField
-                          label="Offer"
-                          value={editing.draft.offer_id}
-                          onChange={(v) => setEditing({ ...editing, draft: { ...editing.draft, offer_id: v } })}
-                          options={[
-                            { value: "", label: "Select offer" },
-                            ...offers.map((o) => ({ value: o.id, label: o.name })),
-                          ]}
+                      {usesOffers(path.flow_type) && (
+                        <ItemList
+                          label="Offers"
+                          options={offers}
+                          items={editing.draft.offers}
+                          onChange={(items) => setEditing({ ...editing, draft: { ...editing.draft, offers: items } })}
                         />
                       )}
                       <label className="flex items-center gap-2 text-sm">
@@ -334,8 +330,8 @@ export function PathEditor({
                       draft: {
                         weight: String(path.weight),
                         direct_url: path.direct_url ?? "",
-                        lander_id: path.lander_id ?? "",
-                        offer_id: path.offer_id ?? "",
+                        landers: itemDrafts(path.landers, path.lander_id),
+                        offers: itemDrafts(path.offers, path.offer_id),
                         enabled: path.enabled,
                       },
                     })
@@ -350,63 +346,9 @@ export function PathEditor({
       </div>
 
       {canWrite && (
-        <form className="mt-6 grid gap-3 sm:grid-cols-2" onSubmit={addPath}>
-          <Field
-            label="Path name"
-            placeholder="Main lander"
-            value={pathName}
-            onChange={(e) => setPathName(e.target.value)}
-            required
-          />
-          <SelectField
-            label="Flow type"
-            value={flowType}
-            onChange={(v) => setFlowType(v as FlowType)}
-            options={FLOW_TYPES}
-          />
-          {flowType === "direct" && (
-            <Field
-              label="Direct URL"
-              type="url"
-              placeholder="https://example.com/lp?click={click_id}"
-              value={directUrl}
-              onChange={(e) => setDirectUrl(e.target.value)}
-              required
-            />
-          )}
-          {(flowType === "lander" || flowType === "lander_offer") && (
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-[var(--velo-muted)]">Lander</span>
-              <select className="input" value={landerId} onChange={(e) => setLanderId(e.target.value)} required>
-                <option value="">Select lander</option>
-                {landers.map((l) => (
-                  <option key={l.id} value={l.id}>
-                    {l.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          {(flowType === "offer" || flowType === "lander_offer") && (
-            <label className="block space-y-2">
-              <span className="text-sm font-medium text-[var(--velo-muted)]">Offer</span>
-              <select className="input" value={offerId} onChange={(e) => setOfferId(e.target.value)} required>
-                <option value="">Select offer</option>
-                {offers.map((o) => (
-                  <option key={o.id} value={o.id}>
-                    {o.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-          <Field label="Weight" type="number" min={1} value={weight} onChange={(e) => setWeight(e.target.value)} />
-          <div className="sm:col-span-2">
-            <button className="btn btn-primary" disabled={busy} type="submit">
-              Add path
-            </button>
-          </div>
-        </form>
+        <div className="mt-4">
+          <PathForm landers={landers} offers={offers} busy={busy} onSubmit={addPath} />
+        </div>
       )}
     </div>
   );
@@ -432,14 +374,16 @@ function PathRow({
   onDelete: () => void;
 }) {
   const hasLander = path.flow_type === "lander" || path.flow_type === "lander_offer";
+  const landerLabel = itemsLabel(path.landers, path.lander_name ?? path.lander_url);
+  const offerLabel = itemsLabel(path.offers, path.offer_name ?? path.offer_url);
   const target =
     path.flow_type === "direct"
       ? path.direct_url
       : path.flow_type === "offer"
-        ? (path.offer_name ?? path.offer_url)
+        ? offerLabel
         : path.flow_type === "lander"
-          ? (path.lander_name ?? path.lander_url)
-          : `${path.lander_name ?? path.lander_url ?? "?"} → ${path.offer_name ?? path.offer_url ?? "?"}`;
+          ? landerLabel
+          : `${landerLabel} → ${offerLabel}`;
 
   return (
     <tr className={path.enabled ? undefined : "opacity-60"}>

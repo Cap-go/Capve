@@ -637,6 +637,8 @@ export const api = {
       lander_id: string | null;
       offer_id: string | null;
       enabled: boolean;
+      landers: { lander_id: string; weight: number }[];
+      offers: { offer_id: string; weight: number }[];
     }>,
   ) =>
     request<{ path: Path }>(`/api/programs/${programId}/paths/${pathId}`, {
