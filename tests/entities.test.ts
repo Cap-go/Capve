@@ -49,10 +49,7 @@ describe("phase 2 entities", () => {
     const networkRes = await SELF.fetch("http://localhost/api/entities/networks", {
       method: "POST",
       headers: authHeaders,
-      body: JSON.stringify({
-        name: "Test Network",
-        postback_url_template: "https://net.example/pb?c={click_id}",
-      }),
+      body: JSON.stringify({ name: "Test Network" }),
     });
     expect(networkRes.status).toBe(201);
 

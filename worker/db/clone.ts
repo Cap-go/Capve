@@ -1,6 +1,7 @@
 import { getProgram, listPrograms, updateProgram } from "../db/queries";
 import { createPath, getOrCreateRotation, getRotationConfig } from "../db/routing";
 import { withUniqueCampaignKey } from "./entities";
+import { copyCampaignPostbacks } from "./postbacks";
 import type { Program } from "../types";
 import { apiKey, convertSecret, id, slugify } from "../lib/utils";
 
@@ -42,7 +43,6 @@ export async function cloneProgram(
     api_key: apiKey(),
     destination_url: source.destination_url,
     convert_secret: secret,
-    s2s_postback_url: source.s2s_postback_url,
     group_id: source.group_id,
     traffic_source_id: source.traffic_source_id,
     tags: source.tags,
@@ -55,6 +55,8 @@ export async function cloneProgram(
     await insertClonedProgram(db, candidate);
     return candidate;
   });
+
+  await copyCampaignPostbacks(db, source.id, program.id);
 
   const config = await getRotationConfig(db, source.id);
   if (config.paths.length > 0) {
@@ -95,8 +97,8 @@ async function insertClonedProgram(
     .prepare(
       `INSERT INTO programs (
         id, user_id, name, slug, api_key, destination_url, convert_secret,
-        s2s_postback_url, campaign_key, group_id, traffic_source_id, tags, status, created_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        campaign_key, group_id, traffic_source_id, tags, status, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       program.id,
@@ -106,7 +108,6 @@ async function insertClonedProgram(
       program.api_key,
       program.destination_url,
       program.convert_secret,
-      program.s2s_postback_url,
       program.campaign_key,
       program.group_id,
       program.traffic_source_id,

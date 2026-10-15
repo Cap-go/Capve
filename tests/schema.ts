@@ -29,7 +29,6 @@ CREATE TABLE IF NOT EXISTS programs (
   api_key TEXT NOT NULL,
   destination_url TEXT,
   convert_secret TEXT,
-  s2s_postback_url TEXT,
   campaign_key TEXT,
   group_id TEXT,
   traffic_source_id TEXT,
@@ -57,7 +56,6 @@ CREATE TABLE IF NOT EXISTS traffic_sources (
   cost_type TEXT NOT NULL DEFAULT 'cpc',
   default_cost_cents INTEGER NOT NULL DEFAULT 0,
   postback_percent INTEGER NOT NULL DEFAULT 100,
-  s2s_postback_url TEXT,
   created_at INTEGER NOT NULL
 );
 
@@ -65,7 +63,6 @@ CREATE TABLE IF NOT EXISTS affiliate_networks (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id),
   name TEXT NOT NULL,
-  postback_url_template TEXT,
   created_at INTEGER NOT NULL
 );
 
@@ -179,6 +176,7 @@ CREATE TABLE IF NOT EXISTS conversions (
   status TEXT NOT NULL DEFAULT 'lead',
   status2 TEXT,
   currency TEXT NOT NULL DEFAULT 'USD',
+  event TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER,
   UNIQUE(program_id, order_id)
@@ -231,4 +229,17 @@ CREATE TABLE IF NOT EXISTS api_tokens (
 );
 
 CREATE INDEX IF NOT EXISTS idx_api_tokens_user ON api_tokens(user_id);
+
+CREATE TABLE IF NOT EXISTS postbacks (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  program_id TEXT REFERENCES programs(id) ON DELETE CASCADE,
+  traffic_source_id TEXT REFERENCES traffic_sources(id) ON DELETE CASCADE,
+  network_id TEXT REFERENCES affiliate_networks(id) ON DELETE CASCADE,
+  event TEXT,
+  url TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_postbacks_user ON postbacks(user_id);
 `;

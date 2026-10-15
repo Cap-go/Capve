@@ -25,8 +25,9 @@ A Capve instance lets a user:
 | Click context | country/region/city/ISP from `request.cf`, device/OS/browser from UA, `sub1`–`sub10`, external `clickid`, per-click `cost`, unique + bot flags |
 | URL macros | `{clickid}`/`{click_id}`, `{campaign_id}`, `{offer_id}`, `{lander_id}`, `{country}`, `{external_id}`, `{sub1}`–`{sub10}`, `{lp_click_url}` |
 | LP click | `/lp/:clickId` marks the LP click and redirects to the click's offer |
-| Postback | `GET /click?cnv_id=&payout=&cnv_status=&tx_id=`; repeat for same click updates status/payout; no payout → offer payout |
-| Outgoing postbacks | Campaign S2S URL and traffic-source postback (`postback_percent`) fire on conversion |
+| Postback | `GET /click?cnv_id=&payout=&cnv_status=&tx_id=&event=`; repeat for same click (and event) updates status/payout; no payout → offer payout (events: 0) |
+| Conversion events | `event=registration`, `event=ftd`, … each recorded as its own conversion; per-event counts in stats, reports and CSV |
+| Outgoing postbacks | Many per campaign (all statuses), traffic source (approved, `postback_percent`) and network (approved, offer's network); each optionally limited to one event |
 | Convert API | `POST /api/v1/convert` with `X-Program-Secret`; CORS enabled; idempotent by `(program_id, order_id)` |
 | Reports | `/api/reports/*` incl. `/grouped?by=` (country, device, OS, browser, ISP, offer, lander, path, traffic source, sub1–sub10, date…); rejected statuses excluded from revenue |
 | MCP | `POST /mcp` (Streamable HTTP, stateless JSON-RPC) in `worker/mcp/`; each tool replays an `/api` route with the bearer token; tokens in `api_tokens` (hash only), managed at `/api/tokens` with a session cookie only |
@@ -53,7 +54,7 @@ Tracking and API paths are listed in `assets.run_worker_first` in `wrangler.toml
 
 ### Tests (`bun run test`)
 
-Must pass in CI: tracking flow, redirect security, CORS, session auth, security (invites, ownership, URL validation, campaign keys), Binom parity (status upsert, payout fallback, click context, grouped reports, LP click, traffic-source postback).
+Must pass in CI: tracking flow, redirect security, CORS, session auth, security (invites, ownership, URL validation, campaign keys), Binom parity (status upsert, payout fallback, click context, grouped reports, LP click, traffic-source postback, conversion events with multiple postbacks).
 
 ### CI / deploy
 

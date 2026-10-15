@@ -10,10 +10,23 @@ export type PostbackMacros = {
   payout: string;
   status: string;
   status2?: string;
+  event?: string;
   currency?: string;
   order_id?: string;
   affiliate_code?: string;
 };
+
+const EVENT_PATTERN = /^[a-z0-9][a-z0-9_.-]{0,39}$/;
+
+/**
+ * Normalizes a conversion event name (registration, ftd, deposit, ...).
+ * Returns null when empty, false when invalid.
+ */
+export function normalizeEvent(raw: string | null | undefined): string | null | false {
+  const value = raw?.trim().toLowerCase();
+  if (!value) return null;
+  return EVENT_PATTERN.test(value) ? value : false;
+}
 
 export function applyPostbackMacros(template: string, macros: PostbackMacros): string {
   let url = template;
@@ -27,6 +40,7 @@ export function applyPostbackMacros(template: string, macros: PostbackMacros): s
     cnv_status: macros.status,
     status2: macros.status2 ?? "",
     cnv_status2: macros.status2 ?? "",
+    event: macros.event ?? "",
     currency: macros.currency ?? "USD",
     cnv_currency: macros.currency ?? "USD",
     order_id: macros.order_id ?? "",

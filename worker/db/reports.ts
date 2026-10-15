@@ -7,7 +7,11 @@ export type CampaignReportRow = Program & {
   cost_type: "cpc" | "cpm" | "cpa" | null;
   default_cost_cents: number;
   metrics: ReturnType<typeof computeMetrics>;
+  events: EventCounts;
 };
+
+/** Approved conversions per event (registration, ftd, ...). Plain conversions are not listed. */
+export type EventCounts = Record<string, number>;
 
 export type TrendPoint = {
   date: string;
@@ -16,6 +20,7 @@ export type TrendPoint = {
   leads: number;
   revenue_cents: number;
   cost_cents: number;
+  events: EventCounts;
 };
 
 type ProgramRow = Program & {
@@ -80,7 +85,7 @@ function conversionTimeClause(filters: ReportFilters, alias = "cv") {
 }
 
 const PROGRAM_COLUMNS =
-  "p.id, p.user_id, p.name, p.slug, p.api_key, p.destination_url, p.s2s_postback_url, p.campaign_key, p.group_id, p.traffic_source_id, p.tags, p.status, p.created_at";
+  "p.id, p.user_id, p.name, p.slug, p.api_key, p.destination_url, p.campaign_key, p.group_id, p.traffic_source_id, p.tags, p.status, p.created_at";
 
 export const GROUP_DIMENSIONS = [
   "campaign",
@@ -184,6 +189,7 @@ export type GroupedReportRow = {
   unique_clicks: number;
   bot_clicks: number;
   metrics: ReturnType<typeof computeMetrics>;
+  events: EventCounts;
 };
 
 export type GroupedReportOptions = ReportFilters & { campaign_id?: string };
@@ -239,7 +245,7 @@ export async function getGroupedReport(
       }>(),
     db
       .prepare(
-        `SELECT ${dim.conv} AS k, MAX(${label}) AS label,
+        `SELECT ${dim.conv} AS k, cv.event AS ev, MAX(${label}) AS label,
           COUNT(*) AS leads,
           COALESCE(SUM(cv.amount_cents), 0) AS revenue,
           COALESCE(SUM(CASE
@@ -251,10 +257,17 @@ export async function getGroupedReport(
          LEFT JOIN traffic_sources ts ON ts.id = p.traffic_source_id
          ${dim.convJoin ?? ""}
          WHERE ${where.sql}${campaignSql} AND ${approvedStatusSql("cv")}${convTime.sql}
-         GROUP BY k`,
+         GROUP BY k, ev`,
       )
       .bind(...where.binds, ...campaignBinds, ...convTime.binds)
-      .all<{ k: string | null; label: string | null; leads: number; revenue: number; cpa_cost: number }>(),
+      .all<{
+        k: string | null;
+        ev: string | null;
+        label: string | null;
+        leads: number;
+        revenue: number;
+        cpa_cost: number;
+      }>(),
   ]);
 
   type Acc = {
@@ -267,6 +280,7 @@ export async function getGroupedReport(
     leads: number;
     revenue_cents: number;
     cost: number;
+    events: EventCounts;
   };
   const groups = new Map<string, Acc>();
   const get = (key: string | null, labelValue: string | null) => {
@@ -283,6 +297,7 @@ export async function getGroupedReport(
         leads: 0,
         revenue_cents: 0,
         cost: 0,
+        events: {},
       };
       groups.set(mapKey, acc);
     }
@@ -303,6 +318,7 @@ export async function getGroupedReport(
     acc.leads += row.leads;
     acc.revenue_cents += row.revenue;
     acc.cost += row.cpa_cost;
+    if (row.ev) acc.events[row.ev] = (acc.events[row.ev] ?? 0) + row.leads;
   }
 
   const rows = [...groups.values()].map((acc) => ({
@@ -317,6 +333,7 @@ export async function getGroupedReport(
       revenue_cents: acc.revenue_cents,
       cost_cents: Math.round(acc.cost),
     }),
+    events: acc.events,
   }));
 
   if (by === "date") {
@@ -364,7 +381,7 @@ export async function listCampaignReports(
     getGroupedReport(db, userId, "campaign", filters),
   ]);
 
-  const byCampaign = new Map(grouped.map((row) => [row.key, row.metrics]));
+  const byCampaign = new Map(grouped.map((row) => [row.key, row]));
   const empty = computeMetrics({ clicks: 0, lp_clicks: 0, leads: 0, revenue_cents: 0, cost_cents: 0 });
 
   return (results ?? []).map((program) => ({
@@ -373,7 +390,8 @@ export async function listCampaignReports(
     traffic_source_name: program.traffic_source_name,
     cost_type: program.cost_type,
     default_cost_cents: program.default_cost_cents ?? 0,
-    metrics: byCampaign.get(program.id) ?? empty,
+    metrics: byCampaign.get(program.id)?.metrics ?? empty,
+    events: byCampaign.get(program.id)?.events ?? {},
   }));
 }
 
@@ -397,6 +415,7 @@ export async function getCampaignTrends(
       leads: row.metrics.leads,
       revenue_cents: row.metrics.revenue_cents,
       cost_cents: row.metrics.cost_cents,
+      events: row.events,
     }));
 }
 
@@ -467,7 +486,7 @@ export async function exportConversionsCsv(
     .prepare(
       `SELECT
         cv.order_id, cv.click_id, cv.created_at, cv.amount_cents, cv.status, cv.status2,
-        cv.currency, a.code AS affiliate_code, a.name AS affiliate_name
+        cv.event, cv.currency, a.code AS affiliate_code, a.name AS affiliate_name
        FROM conversions cv
        JOIN affiliates a ON a.id = cv.affiliate_id
        WHERE cv.program_id = ?${convTime.sql}
@@ -481,6 +500,7 @@ export async function exportConversionsCsv(
       amount_cents: number;
       status: string;
       status2: string | null;
+      event: string | null;
       currency: string;
       affiliate_code: string;
       affiliate_name: string;
@@ -493,6 +513,7 @@ export async function exportConversionsCsv(
     (row.amount_cents / 100).toFixed(2),
     row.status,
     row.status2 ?? "",
+    row.event ?? "",
     row.currency,
     row.affiliate_code,
     row.affiliate_name,

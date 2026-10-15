@@ -47,7 +47,7 @@ export function DocsPostback() {
             <td>No</td>
             <td>
               Revenue amount in dollars (e.g. <code>49.99</code>). Defaults to the clicked offer
-              payout.
+              payout, or <code>0</code> when an <code>event</code> is set.
             </td>
           </tr>
           <tr>
@@ -59,13 +59,23 @@ export function DocsPostback() {
           </tr>
           <tr>
             <td>
+              <code>event</code>
+            </td>
+            <td>No</td>
+            <td>
+              Conversion event: <code>registration</code>, <code>ftd</code>, <code>deposit</code>…
+              (a-z, 0-9, <code>_ . -</code>). Each event is a separate conversion. See below.
+            </td>
+          </tr>
+          <tr>
+            <td>
               <code>order_id</code>
             </td>
             <td>No</td>
             <td>
               Transaction ID (also <code>tx_id</code>). Distinct IDs create separate conversions.
-              Without it, repeated postbacks for the same click update status and payout (e.g.{" "}
-              <code>lead</code> → <code>sale</code>); identical repeats are ignored.
+              Without it, repeated postbacks for the same click and event update status and
+              payout (e.g. <code>lead</code> → <code>sale</code>); identical repeats are ignored.
             </td>
           </tr>
         </tbody>
@@ -74,20 +84,58 @@ export function DocsPostback() {
       <h3>Example</h3>
       <CodeBlock>{`${base}/click?cnv_id=clk_a1b2c3d4&payout=99&cnv_status=sale&order_id=txn_123`}</CodeBlock>
 
-      <h2>Outgoing S2S postback (Capve → traffic source)</h2>
+      <h2>Events: registration, FTD, …</h2>
       <p>
-        Set an S2S postback URL on each campaign. When Capve records a conversion, it fires your
-        traffic source postback with macros substituted:
+        One campaign can report several events. Give the network one postback URL per event,
+        each with its own <code>event</code> value:
+      </p>
+      <CodeBlock>{`${postbackUrl}&event=registration
+${postbackUrl}&event=ftd`}</CodeBlock>
+      <p>
+        A registration and an FTD for the same click are two conversions. Reports, campaign stats
+        and CSV exports show one column per event (Registrations, FTD, …) next to the total.
+      </p>
+
+      <h2>Outgoing postbacks (Capve → traffic source)</h2>
+      <p>
+        Add as many outgoing postbacks as you need to a campaign, a traffic source or an affiliate
+        network. Each postback can be limited to one event, so a source can get one pixel for
+        registrations and another for FTDs. Leave the event empty to fire on every conversion.
       </p>
       <CodeBlock>
-        {`https://your-source.com/postback?click={click_id}&payout={payout}&status={status}`}
+        {`https://your-source.com/postback?click={external_id}&payout={payout}&goal={event}`}
       </CodeBlock>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Attached to</th>
+            <th>Fires for</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Campaign</td>
+            <td>Every new or updated conversion of the campaign, including rejections</td>
+          </tr>
+          <tr>
+            <td>Traffic source</td>
+            <td>
+              Approved conversions of campaigns using the source, sampled by its postback %
+            </td>
+          </tr>
+          <tr>
+            <td>Affiliate network</td>
+            <td>Approved conversions of clicks sent to one of the network&apos;s offers</td>
+          </tr>
+        </tbody>
+      </table>
       <p>
-        A traffic source can also have its own postback URL. It fires on every new or updated
-        non-rejected conversion (sampled by the source&apos;s postback %), with{" "}
+        Macros: <code>{"{click_id}"}</code> (also <code>{"{clickid}"}</code>),{" "}
         <code>{"{external_id}"}</code> = the source&apos;s click ID captured from{" "}
-        <code>clickid</code> / <code>external_id</code> on the tracking link, plus{" "}
-        <code>{"{clickid}"}</code>, <code>{"{payout}"}</code> and <code>{"{status}"}</code>.
+        <code>clickid</code> / <code>external_id</code> on the tracking link,{" "}
+        <code>{"{payout}"}</code>, <code>{"{status}"}</code>, <code>{"{status2}"}</code>,{" "}
+        <code>{"{event}"}</code>, <code>{"{currency}"}</code>, <code>{"{order_id}"}</code>,{" "}
+        <code>{"{affiliate_code}"}</code>.
       </p>
       <p>
         Reports count conversions whose status is not <code>rejected</code>,{" "}
@@ -105,7 +153,7 @@ export function DocsPostback() {
         <li>Visitor clicks tracking link → Capve records click, appends <code>click_id</code></li>
         <li>Visitor converts on offer/merchant</li>
         <li>Network sends GET postback to Capve with <code>cnv_id=click_id</code></li>
-        <li>Capve attributes conversion, updates stats, fires outgoing S2S if configured</li>
+        <li>Capve attributes conversion, updates stats, fires matching outgoing postbacks</li>
       </ol>
 
       <p>

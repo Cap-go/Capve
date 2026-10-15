@@ -103,6 +103,15 @@ const pathFields = {
   enabled: bool("Whether the path receives traffic."),
 };
 
+const postbackOwner = {
+  campaign_id: str("Campaign id (prg_…)."),
+  traffic_source_id: str("Traffic source id."),
+  network_id: str("Affiliate network id."),
+};
+const postbackEvent = nullableStr(
+  "Conversion event this postback fires for (registration, ftd, deposit, ...); null = every conversion.",
+);
+
 export const TOOLS: McpTool[] = [
   {
     name: "whoami",
@@ -138,10 +147,10 @@ export const TOOLS: McpTool[] = [
     inputSchema: schema(
       {
         name: str("Campaign name."),
-        destination_url: str("Default destination (http/https)."),
+        destination_url: str("Optional default destination (http/https). Omit to route only through paths."),
         traffic_source_id: str("Optional traffic source id (ts_…)."),
       },
-      ["name", "destination_url"],
+      ["name"],
     ),
     annotations: write,
     call: (a) => ({
@@ -153,13 +162,12 @@ export const TOOLS: McpTool[] = [
   {
     name: "update_campaign",
     title: "Update campaign",
-    description: "Rename a campaign or change its destination or S2S postback URL.",
+    description: "Rename a campaign or change its default destination. Postbacks: see create_postback.",
     inputSchema: schema(
       {
         campaign_id: campaignId,
         name: str("New name."),
-        destination_url: str("New default destination (http/https)."),
-        s2s_postback_url: nullableStr("Postback fired on conversion (http/https); null to clear."),
+        destination_url: nullableStr("New default destination (http/https); null to clear."),
       },
       ["campaign_id"],
     ),
@@ -167,7 +175,7 @@ export const TOOLS: McpTool[] = [
     call: (a) => ({
       method: "PATCH",
       path: `/api/programs/${id(a, "campaign_id")}`,
-      body: pick(a, ["name", "destination_url", "s2s_postback_url"]),
+      body: pick(a, ["name", "destination_url"]),
     }),
   },
   {
@@ -212,7 +220,7 @@ export const TOOLS: McpTool[] = [
     name: "get_campaign_tracking",
     title: "Campaign tracking setup",
     description:
-      "Get the campaign link (/c/{key}), postback URL template and macros to give to traffic sources and networks.",
+      "Get the campaign link (/c/{key}), incoming postback URL template and macros to give to traffic sources and networks. For events add &event=registration (or ftd, ...) to the postback URL.",
     inputSchema: schema({ campaign_id: campaignId }, ["campaign_id"]),
     annotations: read,
     call: (a) => ({ method: "GET", path: `/api/programs/${id(a, "campaign_id")}/tracking` }),
@@ -220,7 +228,8 @@ export const TOOLS: McpTool[] = [
   {
     name: "get_campaign_stats",
     title: "Campaign stats",
-    description: "All-time clicks, conversions and revenue for one campaign, per affiliate.",
+    description:
+      "All-time clicks, conversions, revenue and per-event counts (registration, ftd, ...) for one campaign, per affiliate.",
     inputSchema: schema({ campaign_id: campaignId }, ["campaign_id"]),
     annotations: read,
     call: (a) => ({ method: "GET", path: `/api/programs/${id(a, "campaign_id")}/stats` }),
@@ -243,7 +252,7 @@ export const TOOLS: McpTool[] = [
   {
     name: "list_conversions",
     title: "Conversion log",
-    description: "Recent conversions for a campaign (status, payout, click id).",
+    description: "Recent conversions for a campaign (event, status, payout, click id).",
     inputSchema: schema(
       { campaign_id: campaignId, limit: int("Max rows (1-200, default 50)."), offset: int("Skip rows.") },
       ["campaign_id"],
@@ -360,7 +369,7 @@ export const TOOLS: McpTool[] = [
   ...(
     [
       ["groups", "groups", "campaign groups"],
-      ["traffic_sources", "traffic-sources", "traffic sources (cost model, postback)"],
+      ["traffic_sources", "traffic-sources", "traffic sources (cost model, postback share)"],
       ["networks", "networks", "affiliate networks"],
       ["landers", "landers", "landing pages"],
       ["offers", "offers", "offers (URL, payout, network)"],
@@ -394,14 +403,13 @@ export const TOOLS: McpTool[] = [
   {
     name: "create_traffic_source",
     title: "Create traffic source",
-    description: "Create a traffic source with its cost model and optional S2S postback.",
+    description: "Create a traffic source with its cost model. Add its postbacks with create_postback.",
     inputSchema: schema(
       {
         name: str("Traffic source name."),
         cost_type: enumOf(["cpc", "cpm", "cpa"], "Cost model."),
         default_cost_cents: int("Default cost in cents (per click, per 1000 clicks, or per conversion)."),
         postback_percent: int("Share of conversions reported back to the source (0-100)."),
-        s2s_postback_url: nullableStr("Source postback URL with macros like {external_id}."),
       },
       ["name"],
     ),
@@ -409,23 +417,16 @@ export const TOOLS: McpTool[] = [
     call: (a) => ({
       method: "POST",
       path: "/api/entities/traffic-sources",
-      body: pick(a, ["name", "cost_type", "default_cost_cents", "postback_percent", "s2s_postback_url"]),
+      body: pick(a, ["name", "cost_type", "default_cost_cents", "postback_percent"]),
     }),
   },
   {
     name: "create_network",
     title: "Create affiliate network",
-    description: "Create an affiliate network.",
-    inputSchema: schema(
-      { name: str("Network name."), postback_url_template: nullableStr("Postback URL template.") },
-      ["name"],
-    ),
+    description: "Create an affiliate network. Add its postbacks with create_postback.",
+    inputSchema: schema({ name: str("Network name.") }, ["name"]),
     annotations: write,
-    call: (a) => ({
-      method: "POST",
-      path: "/api/entities/networks",
-      body: pick(a, ["name", "postback_url_template"]),
-    }),
+    call: (a) => ({ method: "POST", path: "/api/entities/networks", body: pick(a, ["name"]) }),
   },
   {
     name: "create_lander",
@@ -459,12 +460,69 @@ export const TOOLS: McpTool[] = [
     }),
   },
 
+  // Outgoing postbacks
+  {
+    name: "list_postbacks",
+    title: "List postbacks",
+    description:
+      "List outgoing postbacks, optionally for one campaign, traffic source or network. Each has an optional event filter.",
+    inputSchema: schema(postbackOwner),
+    annotations: read,
+    call: (a) => ({
+      method: "GET",
+      path: "/api/postbacks",
+      query: pick(a, ["campaign_id", "traffic_source_id", "network_id"]) as Record<string, string>,
+    }),
+  },
+  {
+    name: "create_postback",
+    title: "Create postback",
+    description:
+      "Add an outgoing postback (S2S/pixel URL) to exactly one campaign, traffic source or network. " +
+      "Set event to fire it only for that conversion event (e.g. registration, ftd); omit to fire for every conversion. " +
+      "Campaign postbacks fire on every status; traffic source and network ones on approved conversions only. " +
+      "URL macros: {click_id} {external_id} {payout} {status} {status2} {event} {currency} {order_id} {affiliate_code}.",
+    inputSchema: schema(
+      { ...postbackOwner, event: postbackEvent, url: str("Postback URL (http/https) with macros.") },
+      ["url"],
+    ),
+    annotations: write,
+    call: (a) => ({
+      method: "POST",
+      path: "/api/postbacks",
+      body: pick(a, ["campaign_id", "traffic_source_id", "network_id", "event", "url"]),
+    }),
+  },
+  {
+    name: "update_postback",
+    title: "Update postback",
+    description: "Change a postback's URL or event filter.",
+    inputSchema: schema(
+      { postback_id: str("Postback id (pb_…)."), event: postbackEvent, url: str("New URL.") },
+      ["postback_id"],
+    ),
+    annotations: write,
+    call: (a) => ({
+      method: "PATCH",
+      path: `/api/postbacks/${id(a, "postback_id")}`,
+      body: pick(a, ["event", "url"]),
+    }),
+  },
+  {
+    name: "delete_postback",
+    title: "Delete postback",
+    description: "Delete an outgoing postback.",
+    inputSchema: schema({ postback_id: str("Postback id (pb_…).") }, ["postback_id"]),
+    annotations: destroy,
+    call: (a) => ({ method: "DELETE", path: `/api/postbacks/${id(a, "postback_id")}` }),
+  },
+
   // Reports
   {
     name: "report_campaigns",
     title: "Campaign report",
     description:
-      "Metrics per campaign: clicks, LP clicks, conversions, CR, revenue, cost, profit, ROI, EPC, CPC. Money in cents.",
+      "Metrics per campaign: clicks, LP clicks, conversions, CR, revenue, cost, profit, ROI, EPC, CPC, plus per-event counts (events). Money in cents.",
     inputSchema: schema(reportFilters),
     annotations: read,
     call: (a) => ({ method: "GET", path: "/api/reports/campaigns", query: filters(a) }),
@@ -473,7 +531,7 @@ export const TOOLS: McpTool[] = [
     name: "report_grouped",
     title: "Grouped report",
     description:
-      "Metrics grouped by one dimension (country, os, offer, sub1, date…), across all campaigns or one. Money in cents.",
+      "Metrics grouped by one dimension (country, os, offer, sub1, date…), across all campaigns or one, with per-event counts (events). Money in cents.",
     inputSchema: schema(
       {
         by: enumOf(GROUP_DIMENSIONS, "Dimension to group by."),
@@ -492,7 +550,7 @@ export const TOOLS: McpTool[] = [
   {
     name: "report_trends",
     title: "Campaign trends",
-    description: "Daily clicks, conversions and revenue for one campaign.",
+    description: "Daily clicks, conversions, revenue and per-event counts for one campaign.",
     inputSchema: schema({ campaign_id: campaignId, from: dateArg("Start"), to: dateArg("End") }, [
       "campaign_id",
     ]),

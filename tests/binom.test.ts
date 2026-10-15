@@ -302,10 +302,12 @@ describe("binom parity", () => {
         cost_type: "cpc",
         default_cost_cents: 0,
         postback_percent: 100,
-        s2s_postback_url:
-          "https://ts.example.com/pb?ext={external_id}&cid={clickid}&p={payout}&s={status}",
       },
     );
+    await post("/api/postbacks", {
+      traffic_source_id: traffic_source.id,
+      url: "https://ts.example.com/pb?ext={external_id}&cid={clickid}&p={payout}&s={status}",
+    });
     await env.DB.prepare("UPDATE programs SET traffic_source_id = ? WHERE id = ?")
       .bind(traffic_source.id, program.id)
       .run();
@@ -323,5 +325,98 @@ describe("binom parity", () => {
     // Rejections are not reported to the traffic source.
     await postback(`cnv_id=${clickId}&cnv_status=rejected`);
     expect(tsPostbacks).toHaveLength(1);
+  });
+  it("tracks conversion events with several postbacks each", async () => {
+    const { network } = await post<{ network: { id: string } }>("/api/entities/networks", {
+      name: "Net",
+    });
+    const { offer } = await post<{ offer: { id: string } }>("/api/entities/offers", {
+      name: "Casino",
+      url: "https://offer.example.com/?cid={clickid}",
+      network_id: network.id,
+      payout_cents: 5000,
+    });
+    // No destination URL: the campaign routes only through its path.
+    const { program } = await post<{ program: { id: string; destination_url: string | null } }>(
+      "/api/programs",
+      { name: "Events" },
+    );
+    expect(program.destination_url).toBeNull();
+    await post(`/api/programs/${program.id}/paths`, {
+      name: "Offer",
+      flow_type: "offer",
+      offer_id: offer.id,
+    });
+    const { affiliate } = await post<{ affiliate: { code: string } }>(
+      `/api/programs/${program.id}/affiliates`,
+      { name: "Buyer" },
+    );
+
+    await post("/api/postbacks", {
+      network_id: network.id,
+      event: "registration",
+      url: "https://ts.example.com/net-reg?cid={click_id}&e={event}",
+    });
+    await post("/api/postbacks", {
+      network_id: network.id,
+      event: "FTD",
+      url: "https://ts.example.com/net-ftd?p={payout}",
+    });
+    await post("/api/postbacks", {
+      campaign_id: program.id,
+      url: "https://ts.example.com/camp?e={event}&s={status}",
+    });
+    const listed = await SELF.fetch(`http://localhost/api/postbacks?network_id=${network.id}`, {
+      headers: authHeaders,
+    });
+    const { postbacks } = await json<{ postbacks: Array<{ event: string }> }>(listed);
+    expect(postbacks.map((pb) => pb.event)).toEqual(["registration", "ftd"]);
+
+    const { location, clickId } = await click(affiliate.code);
+    expect(location.hostname).toBe("offer.example.com");
+
+    tsPostbacks.length = 0;
+    const reg = await postback(`cnv_id=${clickId}&event=registration`);
+    expect(reg.status).toBe("created");
+    // Events only carry the payout they send (no offer payout fallback).
+    expect(reg.conversion.amount_cents).toBe(0);
+    expect(tsPostbacks.sort()).toEqual([
+      "/camp?e=registration&s=lead",
+      `/net-reg?cid=${clickId}&e=registration`,
+    ]);
+
+    tsPostbacks.length = 0;
+    expect((await postback(`cnv_id=${clickId}&event=ftd&payout=100`)).status).toBe("created");
+    expect(tsPostbacks.sort()).toEqual(["/camp?e=ftd&s=lead", "/net-ftd?p=100"]);
+
+    tsPostbacks.length = 0;
+    expect((await postback(`cnv_id=${clickId}&event=ftd&payout=100`)).status).toBe("duplicate");
+    expect(tsPostbacks).toHaveLength(0);
+
+    const bad = await SELF.fetch(`http://localhost/click?cnv_id=${clickId}&event=bad%20event`);
+    expect(bad.status).toBe(400);
+
+    const stats = await json<{
+      totals: { conversions: number; revenue_cents: number; events: Record<string, number> };
+    }>(await SELF.fetch(`http://localhost/api/programs/${program.id}/stats`, { headers: authHeaders }));
+    expect(stats.totals.conversions).toBe(2);
+    expect(stats.totals.revenue_cents).toBe(10000);
+    expect(stats.totals.events).toEqual({ registration: 1, ftd: 1 });
+
+    const report = await json<{ rows: Array<{ events: Record<string, number> }> }>(
+      await SELF.fetch(
+        `http://localhost/api/reports/grouped?by=campaign&campaign_id=${program.id}`,
+        { headers: authHeaders },
+      ),
+    );
+    expect(report.rows[0].events).toEqual({ registration: 1, ftd: 1 });
+
+    const csv = await (
+      await SELF.fetch(`http://localhost/api/reports/conversions.csv?program_id=${program.id}`, {
+        headers: authHeaders,
+      })
+    ).text();
+    expect(csv).toContain("event");
+    expect(csv).toContain("registration");
   });
 });

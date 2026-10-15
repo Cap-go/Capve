@@ -52,6 +52,14 @@ export function DocsConvertApi() {
             <td>Default <code>lead</code></td>
           </tr>
           <tr>
+            <td className="mono">event</td>
+            <td>No</td>
+            <td>
+              Conversion event, e.g. <code>registration</code> or <code>ftd</code>. Counted per
+              event in reports; fires postbacks set for that event
+            </td>
+          </tr>
+          <tr>
             <td className="mono">currency</td>
             <td>No</td>
             <td>Default <code>USD</code></td>

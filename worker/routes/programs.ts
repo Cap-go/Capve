@@ -17,7 +17,6 @@ import {
   buildCampaignUrl,
   buildPostbackUrl,
   buildTrackingUrl,
-  optionalHttpUrl,
   parseHttpUrl,
 } from "../lib/urls";
 import { requireUser, requireWrite } from "../lib/access";
@@ -44,9 +43,10 @@ programs.post("/", async (c) => {
   const destinationRaw = body.destination_url?.trim();
   if (!name) return c.json({ error: "Program name required" }, 400);
 
+  // Optional: a campaign can route only through paths (offers/landers).
   const destination = destinationRaw ? parseHttpUrl(destinationRaw) : null;
-  if (!destination) {
-    return c.json({ error: "Valid destination URL (http/https) required" }, 400);
+  if (destinationRaw && !destination) {
+    return c.json({ error: "Destination URL must be http/https" }, 400);
   }
 
   const trafficSourceId = body.traffic_source_id?.trim() || null;
@@ -64,9 +64,8 @@ programs.post("/", async (c) => {
     name,
     slug: slugify(name),
     api_key: apiKey(),
-    destination_url: destination.toString(),
+    destination_url: destination?.toString() ?? null,
     convert_secret: secret,
-    s2s_postback_url: null,
     group_id: null,
     traffic_source_id: trafficSourceId,
     tags: null,
@@ -88,14 +87,9 @@ programs.patch("/:id", async (c) => {
 
   const body = await c.req.json<{
     name?: string;
-    destination_url?: string;
-    s2s_postback_url?: string | null;
-  }>();
-  const updates: {
-    name?: string;
     destination_url?: string | null;
-    s2s_postback_url?: string | null;
-  } = {};
+  }>();
+  const updates: { name?: string; destination_url?: string | null } = {};
 
   if (body.name !== undefined) {
     const name = body.name.trim();
@@ -104,19 +98,12 @@ programs.patch("/:id", async (c) => {
   }
 
   if (body.destination_url !== undefined) {
-    const destination = parseHttpUrl(body.destination_url.trim());
-    if (!destination) {
-      return c.json({ error: "Valid destination URL (http/https) required" }, 400);
+    const raw = body.destination_url?.trim();
+    const destination = raw ? parseHttpUrl(raw) : null;
+    if (raw && !destination) {
+      return c.json({ error: "Destination URL must be http/https" }, 400);
     }
-    updates.destination_url = destination.toString();
-  }
-
-  if (body.s2s_postback_url !== undefined) {
-    const postback = optionalHttpUrl(body.s2s_postback_url);
-    if (postback === false) {
-      return c.json({ error: "s2s_postback_url must be an http/https URL" }, 400);
-    }
-    updates.s2s_postback_url = postback;
+    updates.destination_url = destination?.toString() ?? null;
   }
 
   const program = await updateProgram(c.env.DB, c.req.param("id"), session.account_id, updates);
@@ -161,10 +148,6 @@ programs.post("/:id/affiliates", async (c) => {
 
   const program = await getProgram(c.env.DB, c.req.param("id"), session.account_id);
   if (!program) return c.json({ error: "Not found" }, 404);
-  if (!program.destination_url) {
-    return c.json({ error: "Set a program destination URL before creating affiliates" }, 400);
-  }
-
   const body = await c.req.json<{ name?: string }>();
   const name = body.name?.trim();
   if (!name) return c.json({ error: "Affiliate name required" }, 400);
@@ -188,7 +171,6 @@ programs.get("/:id/tracking", async (c) => {
   return c.json({
     tracking: {
       postback_url: buildPostbackUrl(c.env.APP_URL),
-      s2s_postback_url: program.s2s_postback_url,
       campaign_url: program.campaign_key
         ? buildCampaignUrl(c.env.APP_URL, program.campaign_key)
         : null,

@@ -58,7 +58,15 @@ export function DocsServerConversions() {
           <tr>
             <td className="mono">order_id</td>
             <td>No</td>
-            <td>Idempotency key. Defaults to click ID. Reuse on retries.</td>
+            <td>Idempotency key. Defaults to click ID (plus event). Reuse on retries.</td>
+          </tr>
+          <tr>
+            <td className="mono">event</td>
+            <td>No</td>
+            <td>
+              Conversion event, e.g. <code>registration</code> or <code>ftd</code>. Each event is
+              its own conversion with its own count in reports
+            </td>
           </tr>
           <tr>
             <td className="mono">disable_postback</td>
@@ -79,9 +87,11 @@ export function DocsServerConversions() {
       <CodeBlock>{stripeWebhookConvertExample(base)}</CodeBlock>
       <h2>S2S postback (outgoing)</h2>
       <p>
-        In the dashboard, set an <strong>S2S postback URL</strong> on your program. Capve fires it
-        after each new conversion with macros: <code>{"{click_id}"}</code>, <code>{"{payout}"}</code>,{" "}
-        <code>{"{status}"}</code>, <code>{"{affiliate_code}"}</code>.
+        In the dashboard, add <strong>outgoing postbacks</strong> to a campaign, traffic source or
+        affiliate network, as many as you need, each optionally limited to one event. Capve fires
+        them after each new or updated conversion with macros: <code>{"{click_id}"}</code>,{" "}
+        <code>{"{payout}"}</code>, <code>{"{status}"}</code>, <code>{"{event}"}</code>,{" "}
+        <code>{"{affiliate_code}"}</code>. See <Link to="/docs/postback">Postback URL</Link>.
       </p>
     </>
   );

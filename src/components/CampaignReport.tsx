@@ -10,6 +10,12 @@ import {
   type TrendPoint,
 } from "../lib/api";
 import { ErrorBox } from "./ui";
+import { eventLabel, sortEvents } from "../lib/events";
+
+/** Event names present in rows, one report column each. */
+function eventColumns(rows: Array<{ events: Record<string, number> }>): string[] {
+  return sortEvents([...new Set(rows.flatMap((row) => Object.keys(row.events)))]);
+}
 
 type DatePreset = "7d" | "30d" | "all";
 
@@ -63,6 +69,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
   const [trends, setTrends] = useState<TrendPoint[]>([]);
   const [groupBy, setGroupBy] = useState("country");
   const [groupedRows, setGroupedRows] = useState<GroupedReportRow[]>([]);
+  const campaignEvents = useMemo(() => eventColumns(campaigns), [campaigns]);
 
   const filters = useMemo(() => {
     const range = presetRange(preset);
@@ -242,6 +249,9 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
                   <th>CR</th>
                   <th>LP Clicks</th>
                   <th>Leads</th>
+                  {campaignEvents.map((name) => (
+                    <th key={name}>{eventLabel(name)}</th>
+                  ))}
                   <th>EPC</th>
                   <th>CPC</th>
                   <th>Revenue</th>
@@ -253,7 +263,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
               <tbody>
                 {campaigns.length === 0 && (
                   <tr>
-                    <td colSpan={canWrite ? 13 : 12} className="text-[var(--velo-muted)]">
+                    <td colSpan={(canWrite ? 13 : 12) + campaignEvents.length} className="text-[var(--velo-muted)]">
                       No campaigns match these filters.
                     </td>
                   </tr>
@@ -286,6 +296,9 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
                     <td>{formatPercent(row.metrics.cr)}</td>
                     <td>{row.metrics.lp_clicks}</td>
                     <td>{row.metrics.leads}</td>
+                    {campaignEvents.map((name) => (
+                      <td key={name}>{row.events[name] ?? 0}</td>
+                    ))}
                     <td>{formatMoney(row.metrics.epc_cents)}</td>
                     <td>{formatMoney(row.metrics.cpc_cents)}</td>
                     <td>{formatMoney(row.metrics.revenue_cents)}</td>
@@ -373,6 +386,7 @@ function FilterSelect({
 }
 
 function GroupedTable({ rows }: { rows: GroupedReportRow[] }) {
+  const events = eventColumns(rows);
   return (
     <div className="mt-4 overflow-x-auto">
       <table className="table">
@@ -384,6 +398,9 @@ function GroupedTable({ rows }: { rows: GroupedReportRow[] }) {
             <th>Bots</th>
             <th>LP Clicks</th>
             <th>Conv.</th>
+            {events.map((name) => (
+              <th key={name}>{eventLabel(name)}</th>
+            ))}
             <th>CR</th>
             <th>EPC</th>
             <th>Revenue</th>
@@ -395,7 +412,7 @@ function GroupedTable({ rows }: { rows: GroupedReportRow[] }) {
         <tbody>
           {rows.length === 0 && (
             <tr>
-              <td colSpan={12} className="text-[var(--velo-muted)]">
+              <td colSpan={12 + events.length} className="text-[var(--velo-muted)]">
                 No data for this period.
               </td>
             </tr>
@@ -408,6 +425,9 @@ function GroupedTable({ rows }: { rows: GroupedReportRow[] }) {
               <td>{row.bot_clicks}</td>
               <td>{row.metrics.lp_clicks}</td>
               <td>{row.metrics.leads}</td>
+              {events.map((name) => (
+                <td key={name}>{row.events[name] ?? 0}</td>
+              ))}
               <td>{formatPercent(row.metrics.cr)}</td>
               <td>{formatMoney(row.metrics.epc_cents)}</td>
               <td>{formatMoney(row.metrics.revenue_cents)}</td>

@@ -9,6 +9,7 @@ import {
 } from "../db/queries";
 import { isApprovedStatus } from "./metrics";
 import { getTriggersForEvent } from "../db/ops";
+import { postbacksForConversion } from "../db/postbacks";
 import { fireS2SPostback } from "./postback";
 import { fireTriggerWebhooks } from "./triggers";
 import { id } from "./utils";
@@ -21,6 +22,8 @@ export type CreateConversionParams = {
   amount: number;
   status?: string;
   status2?: string | null;
+  /** Conversion event (registration, ftd, ...); null = plain conversion. */
+  event?: string | null;
   currency?: string;
   disable_s2s?: boolean;
   /**
@@ -39,29 +42,74 @@ function sampled(key: string, percent: number): boolean {
   return hash % 100 < percent;
 }
 
-async function fireTrafficSourcePostback(
+/**
+ * Fires every outgoing postback matching the conversion event: the campaign's
+ * (all statuses), and its traffic source's and the clicked offer's network's
+ * (approved statuses only; traffic source ones sampled by postback_percent).
+ */
+async function fireConversionPostbacks(
   db: D1Database,
-  program: { traffic_source_id?: string | null },
-  macros: { click_id: string | null; payout: number; status: string; currency: string; order_id: string; affiliate_code: string },
+  program: { id: string; traffic_source_id?: string | null },
+  macros: {
+    click_id: string | null;
+    payout: number;
+    status: string;
+    status2: string | null;
+    event: string | null;
+    currency: string;
+    order_id: string;
+    affiliate_code: string;
+  },
 ) {
-  if (!program.traffic_source_id || !isApprovedStatus(macros.status)) return;
-  const source = await db
-    .prepare("SELECT s2s_postback_url, postback_percent FROM traffic_sources WHERE id = ?")
-    .bind(program.traffic_source_id)
-    .first<{ s2s_postback_url: string | null; postback_percent: number | null }>();
-  if (!source?.s2s_postback_url?.trim()) return;
-  if (!sampled(macros.click_id ?? macros.order_id, source.postback_percent ?? 100)) return;
-
   const click = macros.click_id ? await getTrackedClick(db, macros.click_id) : null;
-  await fireS2SPostback(source.s2s_postback_url, {
+  const network = click?.offer_id
+    ? await db
+        .prepare("SELECT network_id FROM offers WHERE id = ?")
+        .bind(click.offer_id)
+        .first<{ network_id: string | null }>()
+    : null;
+  const postbacks = await postbacksForConversion(
+    db,
+    {
+      program_id: program.id,
+      traffic_source_id: program.traffic_source_id ?? null,
+      network_id: network?.network_id ?? null,
+    },
+    macros.event,
+  );
+  if (postbacks.length === 0) return;
+
+  const approved = isApprovedStatus(macros.status);
+  let sourcePercent = 100;
+  if (program.traffic_source_id && postbacks.some((pb) => pb.traffic_source_id)) {
+    const source = await db
+      .prepare("SELECT postback_percent FROM traffic_sources WHERE id = ?")
+      .bind(program.traffic_source_id)
+      .first<{ postback_percent: number | null }>();
+    sourcePercent = source?.postback_percent ?? 100;
+  }
+  const sourceSampled = sampled(macros.click_id ?? macros.order_id, sourcePercent);
+
+  const values = {
     click_id: macros.click_id ?? "",
     external_id: click?.external_id ?? "",
     payout: String(macros.payout),
     status: macros.status,
+    status2: macros.status2 ?? undefined,
+    event: macros.event ?? undefined,
     currency: macros.currency,
     order_id: macros.order_id,
     affiliate_code: macros.affiliate_code,
-  });
+  };
+  await Promise.all(
+    postbacks
+      .filter((pb) => {
+        if (pb.program_id) return true;
+        if (!approved) return false;
+        return pb.traffic_source_id ? sourceSampled : true;
+      })
+      .map((pb) => fireS2SPostback(pb.url, values)),
+  );
 }
 
 export async function createConversion(
@@ -69,7 +117,6 @@ export async function createConversion(
   program: {
     id: string;
     user_id: string;
-    s2s_postback_url?: string | null;
     traffic_source_id?: string | null;
   },
   affiliate: { id: string; code: string },
@@ -84,6 +131,7 @@ export async function createConversion(
     amount_cents: number;
     status: string;
     status2: string | null;
+    event: string | null;
     currency: string;
   };
 }> {
@@ -99,6 +147,7 @@ export async function createConversion(
       amount_cents: amountCents,
       status: params.status ?? "lead",
       status2: params.status2 ?? null,
+      event: params.event ?? null,
       currency: params.currency ?? "USD",
       created_at: Date.now(),
     } satisfies ConversionInput,
@@ -115,20 +164,12 @@ export async function createConversion(
   const payout = stored.amount_cents / 100;
 
   if (recorded.status !== "duplicate" && !params.disable_s2s) {
-    await fireS2SPostback(program.s2s_postback_url, {
-      click_id: stored.click_id ?? "",
-      payout: String(payout),
-      status: stored.status,
-      status2: stored.status2 ?? undefined,
-      currency: stored.currency,
-      order_id: stored.order_id,
-      affiliate_code: affiliate.code,
-    });
-
-    await fireTrafficSourcePostback(db, program, {
+    await fireConversionPostbacks(db, program, {
       click_id: stored.click_id,
       payout,
       status: stored.status,
+      status2: stored.status2,
+      event: stored.event,
       currency: stored.currency,
       order_id: stored.order_id,
       affiliate_code: affiliate.code,
@@ -140,6 +181,7 @@ export async function createConversion(
       payout,
       status: stored.status,
       order_id: stored.order_id,
+      event: stored.event,
       affiliate_code: affiliate.code,
       program_id: program.id,
     });
@@ -155,6 +197,7 @@ export async function createConversion(
       amount_cents: stored.amount_cents,
       status: stored.status,
       status2: stored.status2,
+      event: stored.event,
       currency: stored.currency,
     },
   };
