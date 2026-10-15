@@ -63,6 +63,7 @@ export function DashboardPage() {
   const [conversions, setConversions] = useState<ConversionLogRow[]>([]);
   const [programName, setProgramName] = useState("");
   const [destinationUrl, setDestinationUrl] = useState("");
+  const [editName, setEditName] = useState("");
   const [editDestinationUrl, setEditDestinationUrl] = useState("");
   const [affiliateName, setAffiliateName] = useState("");
   const [lastLink, setLastLink] = useState("");
@@ -146,6 +147,7 @@ export function DashboardPage() {
 
   useEffect(() => {
     const program = programs.find((p) => p.id === selectedId) ?? stats?.program;
+    setEditName(program?.name ?? "");
     setEditDestinationUrl(program?.destination_url ?? "");
   }, [selectedId, programs, stats?.program]);
 
@@ -200,6 +202,7 @@ export function DashboardPage() {
     setError("");
     try {
       const { program } = await api.updateProgram(selectedId, {
+        name: editName.trim(),
         destination_url: editDestinationUrl.trim() || null,
       });
       setPrograms((prev) => prev.map((item) => (item.id === program.id ? program : item)));
@@ -398,9 +401,11 @@ export function DashboardPage() {
                 selectedProgram={selectedProgram}
                 tracking={tracking}
                 visibleStats={visibleStats}
+                editName={editName}
                 editDestinationUrl={editDestinationUrl}
                 affiliateName={affiliateName}
                 onAffiliateNameChange={setAffiliateName}
+                onNameChange={setEditName}
                 onDestinationChange={setEditDestinationUrl}
                 onCreateAffiliate={createAffiliate}
                 onSaveSettings={saveProgramSettings}
@@ -424,9 +429,11 @@ function OverviewPanel({
   selectedProgram,
   tracking,
   visibleStats,
+  editName,
   editDestinationUrl,
   affiliateName,
   onAffiliateNameChange,
+  onNameChange,
   onDestinationChange,
   onCreateAffiliate,
   onSaveSettings,
@@ -440,9 +447,11 @@ function OverviewPanel({
   selectedProgram: Program;
   tracking: ProgramTracking | null;
   visibleStats: ProgramStats | null;
+  editName: string;
   editDestinationUrl: string;
   affiliateName: string;
   onAffiliateNameChange: (v: string) => void;
+  onNameChange: (v: string) => void;
   onDestinationChange: (v: string) => void;
   onCreateAffiliate: (e: FormEvent) => void;
   onSaveSettings: (e: FormEvent) => void;
@@ -511,6 +520,12 @@ function OverviewPanel({
         )}
 
         <form className="mt-4 space-y-3" onSubmit={onSaveSettings}>
+          <Field
+            label="Campaign name"
+            required
+            value={editName}
+            onChange={(e) => onNameChange(e.target.value)}
+          />
           <Field
             label="Destination URL (optional)"
             type="url"
