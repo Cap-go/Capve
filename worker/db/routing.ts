@@ -14,10 +14,10 @@ const PATH_COLUMNS =
 export async function getProgramByCampaignKey(
   db: D1Database,
   campaignKey: string,
-): Promise<{ id: string; user_id: string; campaign_key: string | null; destination_url: string | null; status: string } | null> {
+): Promise<{ id: string; user_id: string; campaign_key: string | null; destination_url: string | null; status: string; traffic_source_id: string | null } | null> {
   return db
     .prepare(
-      "SELECT id, user_id, campaign_key, destination_url, status FROM programs WHERE campaign_key = ?",
+      "SELECT id, user_id, campaign_key, destination_url, status, traffic_source_id FROM programs WHERE campaign_key = ?",
     )
     .bind(campaignKey)
     .first();

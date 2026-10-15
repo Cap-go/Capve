@@ -263,4 +263,35 @@ CREATE TABLE IF NOT EXISTS postback_deliveries (
 
 CREATE INDEX IF NOT EXISTS idx_postback_deliveries_postback ON postback_deliveries(postback_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_postback_deliveries_created ON postback_deliveries(created_at);
+
+CREATE TABLE IF NOT EXISTS traffic_source_settings (
+  traffic_source_id TEXT PRIMARY KEY REFERENCES traffic_sources(id) ON DELETE CASCADE,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  template TEXT,
+  tokens TEXT NOT NULL DEFAULT '[]',
+  api_provider TEXT,
+  api_key_sealed TEXT,
+  last_sync_at INTEGER,
+  last_sync_error TEXT,
+  updated_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_traffic_source_settings_provider ON traffic_source_settings(api_provider);
+
+CREATE TABLE IF NOT EXISTS cost_updates (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  program_id TEXT REFERENCES programs(id) ON DELETE CASCADE,
+  traffic_source_id TEXT REFERENCES traffic_sources(id) ON DELETE SET NULL,
+  from_ms INTEGER NOT NULL,
+  to_ms INTEGER NOT NULL,
+  filter_dim TEXT,
+  filter_value TEXT,
+  total_cents INTEGER NOT NULL,
+  clicks_updated INTEGER NOT NULL,
+  origin TEXT NOT NULL DEFAULT 'manual',
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_cost_updates_program ON cost_updates(program_id, created_at);
 `;

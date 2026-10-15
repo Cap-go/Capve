@@ -25,6 +25,7 @@ import {
 import { useAuth } from "../lib/auth";
 import { appBaseUrl } from "../lib/constants";
 import { eventLabel, sortEvents } from "../lib/events";
+import { CampaignSourcePanel } from "../components/SourceTemplates";
 
 type Tab = "overview" | "clicklog" | "conversions";
 type EntityView =
@@ -568,6 +569,8 @@ function OverviewPanel({
           />
         </div>
       </div>
+
+      <CampaignSourcePanel programId={selectedId} canWrite={canWrite} />
 
       <PathEditor programId={selectedId} />
 

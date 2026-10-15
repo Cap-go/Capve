@@ -32,10 +32,12 @@ name = "AUTH_EMAIL_LIMITER"
 namespace_id = "1002"
 simple = { limit = 5, period = 60 }
 
-# Daily data retention: prunes the postback delivery log (30 days) and, only when
-# RAW_CLICK_RETENTION_DAYS is set, raw clicks without conversions.
+# Scheduled jobs, dispatched by worker/cron/index.ts (CRON_JOBS keys must match).
+# Hourly ("17 * * * *"): pull traffic source spend (Adcash, ...) into click costs.
+# Daily ("17 3 * * *"): data retention — prunes the postback delivery log (30 days) and,
+# only when RAW_CLICK_RETENTION_DAYS is set, raw clicks without conversions.
 [triggers]
-crons = ["17 3 * * *"]
+crons = ["17 * * * *", "17 3 * * *"]
 
 [vars]
 APP_URL = "http://localhost:5173"
@@ -63,7 +65,7 @@ namespace_id = "1002"
 simple = { limit = 5, period = 60 }
 
 [env.production.triggers]
-crons = ["17 3 * * *"]
+crons = ["17 * * * *", "17 3 * * *"]
 
 # Custom domains for production.
 # [env.production] are copied into dist/velo/wrangler.json only when the build

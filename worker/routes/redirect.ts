@@ -19,6 +19,8 @@ import { fireTriggerWebhooks } from "../lib/triggers";
 import { id } from "../lib/utils";
 import { parseHttpUrl, resolveRedirectTarget, withQueryParam } from "../lib/urls";
 import { buildClickContext, SUB_KEYS } from "../lib/click-context";
+import { applySourceTokens } from "../lib/source-templates";
+import { parseTokenJson } from "../db/sources";
 import type { RoutingContext } from "../types-routing";
 
 import type { Context } from "hono";
@@ -39,6 +41,9 @@ async function handleClickRedirect(
     user_id: string;
     destination_url: string | null;
     campaign_key: string | null;
+    traffic_source_id?: string | null;
+    /** Source token JSON, loaded with the campaign in the hot-path lookup. */
+    source_tokens?: string | null;
   },
   affiliate: { id: string; code: string },
 ) {
@@ -61,7 +66,11 @@ async function handleClickRedirect(
   const setVisitorCookie = !visitorKey;
   if (!visitorKey) visitorKey = newVisitorKey();
 
-  const clickContext = await buildClickContext(c.req.raw);
+  // Named source tokens (e.g. Adcash zoneid → sub1) are mapped before anything reads the subs.
+  const rawContext = await buildClickContext(c.req.raw);
+  const clickContext = program.source_tokens
+    ? applySourceTokens(new URL(c.req.url), parseTokenJson(program.source_tokens), rawContext)
+    : rawContext;
   const ctx: RoutingContext = {
     click_id: clickId,
     velo_ref: affiliate.code,

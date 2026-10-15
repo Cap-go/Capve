@@ -82,8 +82,8 @@ describe("MCP server", () => {
 
     const list = await rpc("tools/list");
     const names = list.result?.tools?.map((t) => t.name) ?? [];
-    // Landing page and README advertise "48 tools".
-    expect(names).toHaveLength(48);
+    // Landing page and README advertise "57 tools".
+    expect(names).toHaveLength(57);
     expect(names).toContain("create_campaign");
     expect(names).toContain("report_grouped");
     expect(list.result?.tools?.find((t) => t.name === "list_campaigns")?.annotations.readOnlyHint).toBe(

@@ -21,6 +21,11 @@ export const DOC_PAGES: DocPage[] = [
     description: "Binom-style S2S postback from affiliate networks",
   },
   {
+    slug: "traffic-sources",
+    title: "Traffic sources & cost",
+    description: "Source templates, named tokens, cost updates and cost API sync",
+  },
+  {
     slug: "tracking-links",
     title: "Tracking links",
     description: "Affiliate links, redirects, and click counting",
