@@ -32,8 +32,3 @@ export function convertSecret(): string {
 export function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Error && error.message.includes("UNIQUE constraint failed");
 }
-
-export function conversionRate(conversions: number, clicks: number): number {
-  if (clicks === 0) return 0;
-  return Math.round((conversions / clicks) * 10000) / 100;
-}

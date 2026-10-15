@@ -38,7 +38,9 @@ const enumOf = (values: readonly string[], description: string) => ({
 
 const campaignId = str("Campaign id (prg_…). Use list_campaigns to find it.");
 const dateArg = (edge: string) =>
-  str(`${edge} of the report window: ISO date (2026-01-31) or Unix milliseconds.`);
+  str(
+    `${edge} of the report window: ISO date (2026-01-31) or Unix milliseconds. A date-only end includes that whole day (UTC).`,
+  );
 
 const reportFilters = {
   from: dateArg("Start"),
@@ -62,21 +64,27 @@ function id(args: Args, key: string): string {
   return encodeURIComponent(value.trim());
 }
 
-/** Accepts ISO dates or Unix ms; the API expects Unix ms. */
-function toMs(value: unknown): string | undefined {
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Accepts ISO dates or Unix ms; the API expects Unix ms. A date-only `to` (2026-01-31)
+ * means the end of that day (23:59:59.999 UTC), so the whole day is included.
+ */
+function toMs(value: unknown, endOfDay = false): string | undefined {
   if (value === undefined || value === null || value === "") return undefined;
   if (typeof value === "number") return String(value);
   const text = String(value).trim();
   if (/^\d+$/.test(text)) return text;
   const ms = Date.parse(text);
   if (Number.isNaN(ms)) throw new ToolInputError(`Invalid date: ${text}`);
+  if (endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(text)) return String(ms + DAY_MS - 1);
   return String(ms);
 }
 
 function filters(args: Args) {
   return {
     from: toMs(args.from),
-    to: toMs(args.to),
+    to: toMs(args.to, true),
     group_id: args.group_id as string | undefined,
     traffic_source_id: args.traffic_source_id as string | undefined,
     status: args.status as string | undefined,
@@ -89,13 +97,16 @@ function pick(args: Args, keys: string[]) {
 
 export class ToolInputError extends Error {}
 
+const METRICS_NOTE =
+  "Conversions count each converted click once (registration + FTD on one click = 1) plus click-less conversions; CR = conversions / clicks, max 100%. Cost is stored per click at click time (CPC/CPM), CPA is charged once per converted click. ROI is null without cost. Per-event metrics in event_metrics: count, revenue_cents, cr, cpa_cents. Money in cents; revenue is in `currency` and revenue_by_currency lists every currency (never summed).";
+
 const pathFields = {
   name: str("Path name."),
   flow_type: enumOf(
     ["direct", "lander", "lander_offer", "offer"],
     "direct = direct_url; lander = lander only; lander_offer = lander then offer via /lp; offer = offer only.",
   ),
-  weight: int("Rotation weight (default 100)."),
+  weight: int("Rotation weight, integer >= 0 (default 100). 0 = no traffic."),
   sort_order: int("Order for top_to_bottom rotation."),
   direct_url: nullableStr("Destination for flow_type=direct (http/https)."),
   lander_id: nullableStr("Lander id (lnd_…)."),
@@ -229,7 +240,7 @@ export const TOOLS: McpTool[] = [
     name: "get_campaign_stats",
     title: "Campaign stats",
     description:
-      "All-time clicks, conversions, revenue and per-event counts (registration, ftd, ...) for one campaign, per affiliate.",
+      "All-time clicks, conversions, CR and revenue for one campaign, per affiliate. Conversions = converted clicks (a click with registration + FTD counts once) plus click-less conversions; CR is capped at 100%. Per-event metrics in event_metrics (count, revenue_cents, cr). revenue_cents is in `currency`; revenue_by_currency lists every currency.",
     inputSchema: schema({ campaign_id: campaignId }, ["campaign_id"]),
     annotations: read,
     call: (a) => ({ method: "GET", path: `/api/programs/${id(a, "campaign_id")}/stats` }),
@@ -522,7 +533,7 @@ export const TOOLS: McpTool[] = [
     name: "report_campaigns",
     title: "Campaign report",
     description:
-      "Metrics per campaign: clicks, LP clicks, conversions, CR, revenue, cost, profit, ROI, EPC, CPC, plus per-event counts (events). Money in cents.",
+      `Metrics per campaign: clicks, LP clicks, conversions (metrics.leads), CR, revenue, cost, profit, ROI, EPC, CPC. ${METRICS_NOTE}`,
     inputSchema: schema(reportFilters),
     annotations: read,
     call: (a) => ({ method: "GET", path: "/api/reports/campaigns", query: filters(a) }),
@@ -531,7 +542,7 @@ export const TOOLS: McpTool[] = [
     name: "report_grouped",
     title: "Grouped report",
     description:
-      "Metrics grouped by one dimension (country, os, offer, sub1, date…), across all campaigns or one, with per-event counts (events). Money in cents.",
+      `Metrics grouped by one dimension (country, os, offer, sub1, date…), across all campaigns or one. ${METRICS_NOTE}`,
     inputSchema: schema(
       {
         by: enumOf(GROUP_DIMENSIONS, "Dimension to group by."),
@@ -550,7 +561,8 @@ export const TOOLS: McpTool[] = [
   {
     name: "report_trends",
     title: "Campaign trends",
-    description: "Daily clicks, conversions, revenue and per-event counts for one campaign.",
+    description:
+      "Daily clicks, conversions (leads, one per converted click), revenue and per-event counts for one campaign.",
     inputSchema: schema({ campaign_id: campaignId, from: dateArg("Start"), to: dateArg("End") }, [
       "campaign_id",
     ]),
@@ -558,7 +570,7 @@ export const TOOLS: McpTool[] = [
     call: (a) => ({
       method: "GET",
       path: `/api/reports/campaigns/${id(a, "campaign_id")}/trends`,
-      query: { from: toMs(a.from), to: toMs(a.to) },
+      query: { from: toMs(a.from), to: toMs(a.to, true) },
     }),
   },
 

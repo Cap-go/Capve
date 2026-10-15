@@ -17,6 +17,11 @@ import { parseHttpUrl } from "../lib/urls";
 
 const routing = new Hono<{ Bindings: Env }>();
 
+/** Path weight must be a non-negative integer (0 = no traffic). */
+function invalidWeight(weight: unknown): boolean {
+  return weight !== undefined && (!Number.isInteger(weight) || (weight as number) < 0);
+}
+
 /** Returns an error message when a referenced lander/offer is not owned by the account. */
 async function invalidPathRefs(
   db: D1Database,
@@ -87,6 +92,9 @@ routing.post("/:id/paths", async (c) => {
 
   const name = body.name?.trim();
   if (!name) return c.json({ error: "Path name required" }, 400);
+  if (invalidWeight(body.weight)) {
+    return c.json({ error: "weight must be a non-negative integer" }, 400);
+  }
 
   const validFlows: FlowType[] = ["direct", "lander", "lander_offer", "offer"];
   if (!body.flow_type || !validFlows.includes(body.flow_type)) {
@@ -133,6 +141,10 @@ routing.patch("/:id/paths/:pathId", async (c) => {
     offer_id?: string | null;
     enabled?: boolean;
   }>();
+
+  if (invalidWeight(body.weight)) {
+    return c.json({ error: "weight must be a non-negative integer" }, 400);
+  }
 
   if (body.direct_url) {
     const url = parseHttpUrl(body.direct_url);

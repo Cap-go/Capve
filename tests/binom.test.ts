@@ -399,7 +399,8 @@ describe("binom parity", () => {
     const stats = await json<{
       totals: { conversions: number; revenue_cents: number; events: Record<string, number> };
     }>(await SELF.fetch(`http://localhost/api/programs/${program.id}/stats`, { headers: authHeaders }));
-    expect(stats.totals.conversions).toBe(2);
+    // Registration + FTD on one click = one conversion; events are counted separately.
+    expect(stats.totals.conversions).toBe(1);
     expect(stats.totals.revenue_cents).toBe(10000);
     expect(stats.totals.events).toEqual({ registration: 1, ftd: 1 });
 

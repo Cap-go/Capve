@@ -1,6 +1,7 @@
 export type CampaignMetrics = {
   clicks: number;
   lp_clicks: number;
+  /** Conversions: distinct converted clicks + click-less conversions (events do not add up). */
   leads: number;
   revenue_cents: number;
   cost_cents: number;
@@ -9,7 +10,8 @@ export type CampaignMetrics = {
   cr: number;
   epc_cents: number;
   cpc_cents: number;
-  roi: number;
+  /** null when there is no cost. */
+  roi: number | null;
 };
 
 export function computeMetrics(input: {
@@ -30,11 +32,65 @@ export function computeMetrics(input: {
     cost_cents,
     profit_cents,
     lp_ctr: clicks > 0 ? round2((lp_clicks / clicks) * 100) : 0,
-    cr: clicks > 0 ? round2((leads / clicks) * 100) : 0,
+    cr: conversionRatePct(leads, clicks),
     epc_cents: clicks > 0 ? Math.round(revenue_cents / clicks) : 0,
     cpc_cents: clicks > 0 ? Math.round(cost_cents / clicks) : 0,
-    roi: cost_cents > 0 ? round2((profit_cents / cost_cents) * 100) : 0,
+    roi: cost_cents > 0 ? round2((profit_cents / cost_cents) * 100) : null,
   };
+}
+
+/**
+ * CR in percent. Click-less conversions (affiliate code / cookie) cannot be matched to a
+ * click, so the rate is capped at 100%.
+ */
+export function conversionRatePct(conversions: number, clicks: number): number {
+  if (clicks <= 0) return 0;
+  return round2((Math.min(conversions, clicks) / clicks) * 100);
+}
+
+export type EventMetrics = {
+  /** Converted clicks (or click-less conversions) with this event. */
+  count: number;
+  revenue_cents: number;
+  cr: number;
+  /** Cost per event; null when there is no cost data. */
+  cpa_cents: number | null;
+};
+
+export function computeEventMetrics(
+  events: Record<string, { count: number; revenue_cents: number }>,
+  clicks: number,
+  costCents: number | null,
+): Record<string, EventMetrics> {
+  return Object.fromEntries(
+    Object.entries(events).map(([event, { count, revenue_cents }]) => [
+      event,
+      {
+        count,
+        revenue_cents,
+        cr: conversionRatePct(count, clicks),
+        cpa_cents: costCents != null && costCents > 0 && count > 0 ? Math.round(costCents / count) : null,
+      },
+    ]),
+  );
+}
+
+/**
+ * Most used currency (ties: USD, then alphabetical). Revenue fields hold this currency only;
+ * other currencies are reported in `revenue_by_currency` and never summed together.
+ */
+export function primaryCurrency(counts: Map<string, number>): string {
+  let best = "USD";
+  let bestCount = -1;
+  for (const [currency, count] of [...counts].sort(([a], [b]) =>
+    a === "USD" ? -1 : b === "USD" ? 1 : a.localeCompare(b),
+  )) {
+    if (count > bestCount) {
+      best = currency;
+      bestCount = count;
+    }
+  }
+  return best;
 }
 
 function round2(value: number): number {

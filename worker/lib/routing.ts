@@ -42,14 +42,15 @@ function enabledPaths(paths: PathWithEntities[]): PathWithEntities[] {
   return paths.filter((p) => p.enabled);
 }
 
+/** Weighted random pick; paths with weight 0 never receive traffic. */
 function weightedPick(paths: PathWithEntities[]): PathWithEntities | null {
-  const pool = enabledPaths(paths);
+  const pool = enabledPaths(paths).filter((p) => p.weight > 0);
   if (pool.length === 0) return null;
-  const total = pool.reduce((sum, p) => sum + Math.max(p.weight, 1), 0);
+  const total = pool.reduce((sum, p) => sum + p.weight, 0);
   let roll = Math.random() * total;
   for (const path of pool) {
-    roll -= Math.max(path.weight, 1);
-    if (roll <= 0) return path;
+    roll -= path.weight;
+    if (roll < 0) return path;
   }
   return pool[pool.length - 1] ?? null;
 }

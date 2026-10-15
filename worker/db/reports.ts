@@ -1,5 +1,12 @@
 import type { Program } from "../types";
-import { approvedStatusSql, computeMetrics, type ReportFilters } from "../lib/metrics";
+import {
+  approvedStatusSql,
+  computeEventMetrics,
+  computeMetrics,
+  primaryCurrency,
+  type EventMetrics,
+  type ReportFilters,
+} from "../lib/metrics";
 
 export type CampaignReportRow = Program & {
   group_name: string | null;
@@ -8,6 +15,9 @@ export type CampaignReportRow = Program & {
   default_cost_cents: number;
   metrics: ReturnType<typeof computeMetrics>;
   events: EventCounts;
+  event_metrics: Record<string, EventMetrics>;
+  currency: string;
+  revenue_by_currency: Record<string, number>;
 };
 
 /** Approved conversions per event (registration, ftd, ...). Plain conversions are not listed. */
@@ -168,7 +178,15 @@ function dimensionSql(by: GroupDimension): DimensionSql {
         convJoin: "LEFT JOIN paths pa ON pa.id = c.path_id",
       };
     case "traffic_source":
-      return { click: "p.traffic_source_id", conv: "p.traffic_source_id", label: "ts.name" };
+      // Source stored on the click at click time; click-less conversions use the campaign's.
+      return {
+        click: "c.traffic_source_id",
+        conv: "COALESCE(c.traffic_source_id, p.traffic_source_id)",
+        label: "tsd.name",
+        clickJoin: "LEFT JOIN traffic_sources tsd ON tsd.id = c.traffic_source_id",
+        convJoin:
+          "LEFT JOIN traffic_sources tsd ON tsd.id = COALESCE(c.traffic_source_id, p.traffic_source_id)",
+      };
     case "affiliate":
       return {
         click: "c.affiliate_id",
@@ -190,14 +208,25 @@ export type GroupedReportRow = {
   bot_clicks: number;
   metrics: ReturnType<typeof computeMetrics>;
   events: EventCounts;
+  event_metrics: Record<string, EventMetrics>;
+  /** Currency of `metrics.revenue_cents` (most used currency in the report). */
+  currency: string;
+  /** Approved revenue per currency (cents); currencies are never summed together. */
+  revenue_by_currency: Record<string, number>;
 };
 
 export type GroupedReportOptions = ReportFilters & { campaign_id?: string };
 
+/** Approved conversion exists for click `c` (conversions follow their click's time). */
+const CLICK_CONVERTED = `EXISTS(SELECT 1 FROM conversions cv WHERE cv.click_id = c.id AND ${approvedStatusSql("cv")})`;
+
 /**
  * Report grouped by one dimension using two GROUP BY queries (clicks, conversions).
- * Cost = per-click `cost_cents` when present, else the traffic source model
- * (CPC per click, CPM per 1000 clicks, CPA per approved conversion).
+ * Conversions = distinct converted clicks + click-less conversions, so a click with
+ * registration + FTD is one conversion (per-event counts are in `events`).
+ * Cost uses values stored on the click at click time: `cost_cents` (CPC/CPM or `cost`
+ * URL param) plus `cpa_cost_cents` once per converted click. Click-less conversions are
+ * charged the campaign's current CPA rate.
  */
 export async function getGroupedReport(
   db: D1Database,
@@ -221,14 +250,12 @@ export async function getGroupedReport(
           COALESCE(SUM(c.is_unique), 0) AS unique_clicks,
           COALESCE(SUM(c.is_bot), 0) AS bot_clicks,
           SUM(CASE WHEN c.lp_clicked_at IS NOT NULL THEN 1 ELSE 0 END) AS lp_clicks,
-          COALESCE(SUM(CASE
-            WHEN c.cost_cents IS NOT NULL THEN c.cost_cents
-            WHEN ts.cost_type = 'cpm' THEN ts.default_cost_cents / 1000.0
-            WHEN ts.cost_type = 'cpc' THEN ts.default_cost_cents
-            ELSE 0 END), 0) AS cost
+          SUM(CASE WHEN ${CLICK_CONVERTED} THEN 1 ELSE 0 END) AS converted_clicks,
+          COALESCE(SUM(c.cost_cents), 0)
+            + COALESCE(SUM(CASE WHEN c.cpa_cost_cents IS NOT NULL AND ${CLICK_CONVERTED}
+                THEN c.cpa_cost_cents ELSE 0 END), 0) AS cost
          FROM clicks c
          JOIN programs p ON p.id = c.program_id
-         LEFT JOIN traffic_sources ts ON ts.id = p.traffic_source_id
          ${dim.clickJoin ?? ""}
          WHERE ${where.sql}${campaignSql}${clickTime.sql}
          GROUP BY k`,
@@ -241,15 +268,17 @@ export async function getGroupedReport(
         unique_clicks: number;
         bot_clicks: number;
         lp_clicks: number;
+        converted_clicks: number;
         cost: number;
       }>(),
     db
       .prepare(
-        `SELECT ${dim.conv} AS k, cv.event AS ev, MAX(${label}) AS label,
-          COUNT(*) AS leads,
+        `SELECT ${dim.conv} AS k, cv.event AS ev, UPPER(cv.currency) AS cur, MAX(${label}) AS label,
+          COUNT(DISTINCT COALESCE(cv.click_id, cv.id)) AS units,
+          SUM(CASE WHEN cv.click_id IS NULL THEN 1 ELSE 0 END) AS clickless,
           COALESCE(SUM(cv.amount_cents), 0) AS revenue,
           COALESCE(SUM(CASE
-            WHEN ts.cost_type = 'cpa' AND c.cost_cents IS NULL THEN ts.default_cost_cents
+            WHEN cv.click_id IS NULL AND ts.cost_type = 'cpa' THEN ts.default_cost_cents
             ELSE 0 END), 0) AS cpa_cost
          FROM conversions cv
          JOIN programs p ON p.id = cv.program_id
@@ -257,14 +286,16 @@ export async function getGroupedReport(
          LEFT JOIN traffic_sources ts ON ts.id = p.traffic_source_id
          ${dim.convJoin ?? ""}
          WHERE ${where.sql}${campaignSql} AND ${approvedStatusSql("cv")}${convTime.sql}
-         GROUP BY k, ev`,
+         GROUP BY k, ev, cur`,
       )
       .bind(...where.binds, ...campaignBinds, ...convTime.binds)
       .all<{
         k: string | null;
         ev: string | null;
+        cur: string | null;
         label: string | null;
-        leads: number;
+        units: number;
+        clickless: number;
         revenue: number;
         cpa_cost: number;
       }>(),
@@ -278,9 +309,9 @@ export async function getGroupedReport(
     bot_clicks: number;
     lp_clicks: number;
     leads: number;
-    revenue_cents: number;
     cost: number;
-    events: EventCounts;
+    revenue_by_currency: Record<string, number>;
+    events: Record<string, { count: number; revenue_by_currency: Record<string, number> }>;
   };
   const groups = new Map<string, Acc>();
   const get = (key: string | null, labelValue: string | null) => {
@@ -295,8 +326,8 @@ export async function getGroupedReport(
         bot_clicks: 0,
         lp_clicks: 0,
         leads: 0,
-        revenue_cents: 0,
         cost: 0,
+        revenue_by_currency: {},
         events: {},
       };
       groups.set(mapKey, acc);
@@ -311,30 +342,54 @@ export async function getGroupedReport(
     acc.unique_clicks += row.unique_clicks;
     acc.bot_clicks += row.bot_clicks;
     acc.lp_clicks += row.lp_clicks;
+    acc.leads += row.converted_clicks;
     acc.cost += row.cost;
   }
+  const currencyCounts = new Map<string, number>();
   for (const row of convRows.results ?? []) {
     const acc = get(row.k, row.label);
-    acc.leads += row.leads;
-    acc.revenue_cents += row.revenue;
+    const cur = row.cur || "USD";
+    acc.leads += row.clickless;
     acc.cost += row.cpa_cost;
-    if (row.ev) acc.events[row.ev] = (acc.events[row.ev] ?? 0) + row.leads;
+    acc.revenue_by_currency[cur] = (acc.revenue_by_currency[cur] ?? 0) + row.revenue;
+    currencyCounts.set(cur, (currencyCounts.get(cur) ?? 0) + row.units);
+    if (row.ev) {
+      const ev = (acc.events[row.ev] ??= { count: 0, revenue_by_currency: {} });
+      ev.count += row.units;
+      ev.revenue_by_currency[cur] = (ev.revenue_by_currency[cur] ?? 0) + row.revenue;
+    }
   }
+  const currency = primaryCurrency(currencyCounts);
 
-  const rows = [...groups.values()].map((acc) => ({
-    key: acc.key,
-    label: acc.label ?? acc.key ?? "(none)",
-    unique_clicks: acc.unique_clicks,
-    bot_clicks: acc.bot_clicks,
-    metrics: computeMetrics({
-      clicks: acc.clicks,
-      lp_clicks: acc.lp_clicks,
-      leads: acc.leads,
-      revenue_cents: acc.revenue_cents,
-      cost_cents: Math.round(acc.cost),
-    }),
-    events: acc.events,
-  }));
+  const rows = [...groups.values()].map((acc) => {
+    const cost_cents = Math.round(acc.cost);
+    return {
+      key: acc.key,
+      label: acc.label ?? acc.key ?? "(none)",
+      unique_clicks: acc.unique_clicks,
+      bot_clicks: acc.bot_clicks,
+      metrics: computeMetrics({
+        clicks: acc.clicks,
+        lp_clicks: acc.lp_clicks,
+        leads: acc.leads,
+        revenue_cents: acc.revenue_by_currency[currency] ?? 0,
+        cost_cents,
+      }),
+      events: Object.fromEntries(Object.entries(acc.events).map(([ev, e]) => [ev, e.count])),
+      event_metrics: computeEventMetrics(
+        Object.fromEntries(
+          Object.entries(acc.events).map(([ev, e]) => [
+            ev,
+            { count: e.count, revenue_cents: e.revenue_by_currency[currency] ?? 0 },
+          ]),
+        ),
+        acc.clicks,
+        cost_cents,
+      ),
+      currency,
+      revenue_by_currency: acc.revenue_by_currency,
+    };
+  });
 
   if (by === "date") {
     return rows.sort((a, b) => (a.key ?? "").localeCompare(b.key ?? ""));
@@ -383,6 +438,7 @@ export async function listCampaignReports(
 
   const byCampaign = new Map(grouped.map((row) => [row.key, row]));
   const empty = computeMetrics({ clicks: 0, lp_clicks: 0, leads: 0, revenue_cents: 0, cost_cents: 0 });
+  const currency = grouped[0]?.currency ?? "USD";
 
   return (results ?? []).map((program) => ({
     ...program,
@@ -392,6 +448,9 @@ export async function listCampaignReports(
     default_cost_cents: program.default_cost_cents ?? 0,
     metrics: byCampaign.get(program.id)?.metrics ?? empty,
     events: byCampaign.get(program.id)?.events ?? {},
+    event_metrics: byCampaign.get(program.id)?.event_metrics ?? {},
+    currency,
+    revenue_by_currency: byCampaign.get(program.id)?.revenue_by_currency ?? {},
   }));
 }
 

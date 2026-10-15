@@ -3,7 +3,9 @@ import {
   api,
   formatMoney,
   formatPercent,
+  otherCurrencies,
   type CampaignReportRow,
+  type EventMetrics,
   type Group,
   type GroupedReportRow,
   type TrafficSource,
@@ -15,6 +17,35 @@ import { eventLabel, sortEvents } from "../lib/events";
 /** Event names present in rows, one report column each. */
 function eventColumns(rows: Array<{ events: Record<string, number> }>): string[] {
   return sortEvents([...new Set(rows.flatMap((row) => Object.keys(row.events)))]);
+}
+
+/** Event count with its CR and cost per event. */
+function EventCell({ metrics, currency }: { metrics?: EventMetrics; currency: string }) {
+  if (!metrics) return <td>0</td>;
+  return (
+    <td>
+      {metrics.count}
+      <div className="text-xs text-[var(--velo-muted)]">
+        {formatPercent(metrics.cr)}
+        {metrics.cpa_cents != null && ` · ${formatMoney(metrics.cpa_cents, currency)}`}
+      </div>
+    </td>
+  );
+}
+
+/** Revenue in the report currency, plus other currencies (never summed together). */
+function RevenueCell({
+  row,
+}: {
+  row: { metrics: { revenue_cents: number }; currency: string; revenue_by_currency: Record<string, number> };
+}) {
+  const others = otherCurrencies(row.revenue_by_currency, row.currency);
+  return (
+    <td>
+      {formatMoney(row.metrics.revenue_cents, row.currency)}
+      {others && <div className="text-xs text-[var(--velo-muted)]">{others}</div>}
+    </td>
+  );
 }
 
 type DatePreset = "7d" | "30d" | "all";
@@ -248,7 +279,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
                   <th>LP CTR</th>
                   <th>CR</th>
                   <th>LP Clicks</th>
-                  <th>Leads</th>
+                  <th>Conversions</th>
                   {campaignEvents.map((name) => (
                     <th key={name}>{eventLabel(name)}</th>
                   ))}
@@ -297,13 +328,13 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
                     <td>{row.metrics.lp_clicks}</td>
                     <td>{row.metrics.leads}</td>
                     {campaignEvents.map((name) => (
-                      <td key={name}>{row.events[name] ?? 0}</td>
+                      <EventCell currency={row.currency} key={name} metrics={row.event_metrics[name]} />
                     ))}
-                    <td>{formatMoney(row.metrics.epc_cents)}</td>
-                    <td>{formatMoney(row.metrics.cpc_cents)}</td>
-                    <td>{formatMoney(row.metrics.revenue_cents)}</td>
-                    <td>{formatMoney(row.metrics.cost_cents)}</td>
-                    <td>{formatMoney(row.metrics.profit_cents)}</td>
+                    <td>{formatMoney(row.metrics.epc_cents, row.currency)}</td>
+                    <td>{formatMoney(row.metrics.cpc_cents, row.currency)}</td>
+                    <RevenueCell row={row} />
+                    <td>{formatMoney(row.metrics.cost_cents, row.currency)}</td>
+                    <td>{formatMoney(row.metrics.profit_cents, row.currency)}</td>
                     <td>{formatPercent(row.metrics.roi)}</td>
                   </tr>
                 ))}
@@ -397,7 +428,7 @@ function GroupedTable({ rows }: { rows: GroupedReportRow[] }) {
             <th>Unique</th>
             <th>Bots</th>
             <th>LP Clicks</th>
-            <th>Conv.</th>
+            <th>Conversions</th>
             {events.map((name) => (
               <th key={name}>{eventLabel(name)}</th>
             ))}
@@ -426,13 +457,13 @@ function GroupedTable({ rows }: { rows: GroupedReportRow[] }) {
               <td>{row.metrics.lp_clicks}</td>
               <td>{row.metrics.leads}</td>
               {events.map((name) => (
-                <td key={name}>{row.events[name] ?? 0}</td>
+                <EventCell currency={row.currency} key={name} metrics={row.event_metrics[name]} />
               ))}
               <td>{formatPercent(row.metrics.cr)}</td>
-              <td>{formatMoney(row.metrics.epc_cents)}</td>
-              <td>{formatMoney(row.metrics.revenue_cents)}</td>
-              <td>{formatMoney(row.metrics.cost_cents)}</td>
-              <td>{formatMoney(row.metrics.profit_cents)}</td>
+              <td>{formatMoney(row.metrics.epc_cents, row.currency)}</td>
+              <RevenueCell row={row} />
+              <td>{formatMoney(row.metrics.cost_cents, row.currency)}</td>
+              <td>{formatMoney(row.metrics.profit_cents, row.currency)}</td>
               <td>{formatPercent(row.metrics.roi)}</td>
             </tr>
           ))}
@@ -453,7 +484,7 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
   return (
     <div className="mt-4 space-y-6">
       <div>
-        <div className="mb-2 text-sm font-medium">Clicks & leads</div>
+        <div className="mb-2 text-sm font-medium">Clicks & conversions</div>
         <div className="flex h-40 items-end gap-1 border-b border-[var(--velo-border)] pb-2">
           {points.map((point) => (
             <div className="flex min-w-0 flex-1 flex-col items-center gap-1" key={point.date}>
@@ -466,7 +497,7 @@ function TrendChart({ points }: { points: TrendPoint[] }) {
                 <div
                   className="w-2 rounded-t bg-[var(--velo-muted)] opacity-40"
                   style={{ height: `${(point.leads / maxClicks) * 100}%` }}
-                  title={`${point.leads} leads`}
+                  title={`${point.leads} conversions`}
                 />
               </div>
               <span className="truncate text-[10px] text-[var(--velo-muted)]">

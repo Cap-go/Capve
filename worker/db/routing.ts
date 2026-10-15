@@ -24,29 +24,26 @@ export async function getProgramByCampaignKey(
 }
 
 export async function getOrCreateRotation(db: D1Database, programId: string): Promise<Rotation> {
-  const existing = await db
-    .prepare("SELECT id, program_id, mode, fixed_path_id, created_at FROM rotations WHERE program_id = ?")
-    .bind(programId)
-    .first<Rotation>();
+  const select = () =>
+    db
+      .prepare("SELECT id, program_id, mode, fixed_path_id, created_at FROM rotations WHERE program_id = ?")
+      .bind(programId)
+      .first<Rotation>();
 
-  if (existing) {
-    return { ...existing, fixed_path_id: existing.fixed_path_id ?? null };
+  let rotation = await select();
+  if (!rotation) {
+    // Concurrent first clicks: the loser of the insert race reads the winner's row.
+    await db
+      .prepare(
+        `INSERT INTO rotations (id, program_id, mode, fixed_path_id, created_at)
+         VALUES (?, ?, 'normal', NULL, ?) ON CONFLICT(program_id) DO NOTHING`,
+      )
+      .bind(id("rot"), programId, Date.now())
+      .run();
+    rotation = await select();
   }
-
-  const rotation: Rotation = {
-    id: id("rot"),
-    program_id: programId,
-    mode: "normal",
-    fixed_path_id: null,
-    created_at: Date.now(),
-  };
-  await db
-    .prepare(
-      "INSERT INTO rotations (id, program_id, mode, fixed_path_id, created_at) VALUES (?, ?, ?, ?, ?)",
-    )
-    .bind(rotation.id, rotation.program_id, rotation.mode, null, rotation.created_at)
-    .run();
-  return rotation;
+  if (!rotation) throw new Error("Could not create rotation");
+  return { ...rotation, fixed_path_id: rotation.fixed_path_id ?? null };
 }
 
 export async function updateRotation(
@@ -344,20 +341,26 @@ export async function getOrCreateCampaignAffiliate(
   campaignKey: string,
 ): Promise<{ id: string; code: string }> {
   const code = `c_${campaignKey}`;
-  const existing = await db
-    .prepare("SELECT id, code FROM affiliates WHERE program_id = ? AND code = ?")
-    .bind(programId, code)
-    .first<{ id: string; code: string }>();
+  const select = () =>
+    db
+      .prepare("SELECT id, code FROM affiliates WHERE program_id = ? AND code = ?")
+      .bind(programId, code)
+      .first<{ id: string; code: string }>();
+
+  const existing = await select();
   if (existing) return existing;
 
-  const affiliateId = id("aff");
+  // Concurrent first clicks: the loser of the insert race reads the winner's row.
   await db
     .prepare(
-      "INSERT INTO affiliates (id, program_id, name, code, created_at) VALUES (?, ?, ?, ?, ?)",
+      `INSERT INTO affiliates (id, program_id, name, code, created_at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(code) DO NOTHING`,
     )
-    .bind(affiliateId, programId, "Campaign traffic", code, Date.now())
+    .bind(id("aff"), programId, "Campaign traffic", code, Date.now())
     .run();
-  return { id: affiliateId, code };
+  const created = await select();
+  if (!created) throw new Error("Could not create campaign affiliate");
+  return created;
 }
 
 export async function getLanderById(db: D1Database, landerId: string) {

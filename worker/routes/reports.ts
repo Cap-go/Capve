@@ -9,14 +9,47 @@ import {
   listCampaignReports,
 } from "../db/reports";
 import type { Env } from "../types";
-import { parseReportFilters, toCsv } from "../lib/metrics";
+import { parseReportFilters, toCsv, type EventMetrics } from "../lib/metrics";
 import { requireUser } from "../lib/access";
 
 const reports = new Hono<{ Bindings: Env }>();
 
-/** Event names present in report rows, for one CSV column per event. */
+/** Event names present in report rows, for CSV columns per event. */
 function eventNames(rows: Array<{ events: Record<string, number> }>): string[] {
   return [...new Set(rows.flatMap((row) => Object.keys(row.events)))].sort();
+}
+
+type CsvMetricsRow = {
+  events: Record<string, number>;
+  event_metrics: Record<string, EventMetrics>;
+  revenue_by_currency: Record<string, number>;
+};
+
+const money = (cents: number | null | undefined) => (cents == null ? "" : (cents / 100).toFixed(2));
+
+/** Per-event columns (count, revenue, CR, CPA) and, with several currencies, revenue per currency. */
+function extraColumns(rows: CsvMetricsRow[]) {
+  const events = eventNames(rows);
+  const currencies = [...new Set(rows.flatMap((row) => Object.keys(row.revenue_by_currency)))].sort();
+  const multiCurrency = currencies.length > 1;
+  return {
+    headers: [
+      ...events.flatMap((event) => [event, `${event} Revenue`, `${event} CR %`, `${event} CPA`]),
+      ...(multiCurrency ? currencies.map((currency) => `Revenue ${currency}`) : []),
+    ],
+    values: (row: CsvMetricsRow) => [
+      ...events.flatMap((event) => {
+        const metrics = row.event_metrics[event];
+        return [
+          metrics?.count ?? 0,
+          money(metrics?.revenue_cents ?? 0),
+          metrics?.cr ?? 0,
+          money(metrics?.cpa_cents),
+        ];
+      }),
+      ...(multiCurrency ? currencies.map((currency) => money(row.revenue_by_currency[currency] ?? 0)) : []),
+    ],
+  };
 }
 
 reports.get("/campaigns", async (c) => {
@@ -48,7 +81,8 @@ reports.get("/campaigns.csv", async (c) => {
   });
 
   const campaigns = await listCampaignReports(c.env.DB, session.account_id, filters);
-  const events = eventNames(campaigns);
+  const extra = extraColumns(campaigns);
+  const currency = campaigns[0]?.currency ?? "USD";
   const rows = campaigns.map((row) => [
     row.name,
     row.campaign_key ?? row.slug,
@@ -63,10 +97,10 @@ reports.get("/campaigns.csv", async (c) => {
     (row.metrics.revenue_cents / 100).toFixed(2),
     (row.metrics.cost_cents / 100).toFixed(2),
     (row.metrics.profit_cents / 100).toFixed(2),
-    row.metrics.roi,
+    row.metrics.roi ?? "",
     (row.metrics.epc_cents / 100).toFixed(2),
     (row.metrics.cpc_cents / 100).toFixed(2),
-    ...events.map((event) => row.events[event] ?? 0),
+    ...extra.values(row),
   ]);
 
   const csv = toCsv(
@@ -79,15 +113,15 @@ reports.get("/campaigns.csv", async (c) => {
       "Clicks",
       "LP Clicks",
       "LP CTR %",
-      "Leads",
+      "Conversions",
       "CR %",
-      "Revenue",
+      `Revenue (${currency})`,
       "Cost",
       "Profit",
       "ROI %",
       "EPC",
       "CPC",
-      ...events,
+      ...extra.headers,
     ],
     rows,
   );
@@ -136,7 +170,8 @@ reports.get("/grouped", async (c) => {
 reports.get("/grouped.csv", async (c) => {
   const result = await groupedReport(c);
   if ("error" in result) return result.error;
-  const events = eventNames(result.rows);
+  const extra = extraColumns(result.rows);
+  const currency = result.rows[0]?.currency ?? "USD";
   const csv = toCsv(
     [
       result.by,
@@ -146,12 +181,12 @@ reports.get("/grouped.csv", async (c) => {
       "LP Clicks",
       "Conversions",
       "CR %",
-      "Revenue",
+      `Revenue (${currency})`,
       "Cost",
       "Profit",
       "ROI %",
       "EPC",
-      ...events,
+      ...extra.headers,
     ],
     result.rows.map((row) => [
       row.label,
@@ -164,9 +199,9 @@ reports.get("/grouped.csv", async (c) => {
       (row.metrics.revenue_cents / 100).toFixed(2),
       (row.metrics.cost_cents / 100).toFixed(2),
       (row.metrics.profit_cents / 100).toFixed(2),
-      row.metrics.roi,
+      row.metrics.roi ?? "",
       (row.metrics.epc_cents / 100).toFixed(2),
-      ...events.map((event) => row.events[event] ?? 0),
+      ...extra.values(row),
     ]),
   );
   return new Response(csv, {

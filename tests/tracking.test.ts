@@ -157,7 +157,8 @@ describe("affiliate tracking flow", () => {
     expect(stats.totals.clicks).toBe(1);
     expect(stats.totals.conversions).toBe(2);
     expect(stats.totals.revenue_cents).toBe(19900);
-    expect(stats.totals.conversion_rate).toBe(200);
+    // Click-less conversions can't be matched to a click: CR is capped at 100%.
+    expect(stats.totals.conversion_rate).toBe(100);
     expect(stats.affiliates[0]?.code).toBe(affiliate.code);
     expect(stats.affiliates[0]?.clicks).toBe(1);
     expect(stats.affiliates[0]?.conversions).toBe(2);

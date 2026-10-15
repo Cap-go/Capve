@@ -199,6 +199,9 @@ ops.post("/programs/bulk", async (c) => {
   }>();
   const programIds = body.program_ids ?? [];
   if (programIds.length === 0) return c.json({ error: "program_ids required" }, 400);
+  if (body.status !== undefined && !["active", "paused", "archived"].includes(body.status)) {
+    return c.json({ error: "status must be active, paused or archived" }, 400);
+  }
   if (
     body.traffic_source_id &&
     !(await entityBelongsTo(c.env.DB, "traffic_source", body.traffic_source_id, session.account_id))
