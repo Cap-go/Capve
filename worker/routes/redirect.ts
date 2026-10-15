@@ -31,8 +31,16 @@ type AppContext = { Bindings: Env };
 
 const UNIQUE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
-function lpClickUrl(appUrl: string | undefined, requestUrl: string, clickId: string): string {
-  const base = (appUrl?.trim() || new URL(requestUrl).origin).replace(/\/$/, "");
+/** LP click URL on the campaign's custom tracking domain when set, else APP_URL. */
+function lpClickUrl(
+  appUrl: string | undefined,
+  trackingHostname: string | null | undefined,
+  requestUrl: string,
+  clickId: string,
+): string {
+  const base = trackingHostname
+    ? `https://${trackingHostname}`
+    : (appUrl?.trim() || new URL(requestUrl).origin).replace(/\/$/, "");
   return `${base}/lp/${clickId}`;
 }
 
@@ -46,6 +54,8 @@ async function handleClickRedirect(
     traffic_source_id?: string | null;
     /** Source token JSON, loaded with the campaign in the hot-path lookup. */
     source_tokens?: string | null;
+    /** Custom tracking domain of the campaign; LP click URLs use it. */
+    tracking_hostname?: string | null;
   },
   affiliate: { id: string; code: string },
 ) {
@@ -80,7 +90,7 @@ async function handleClickRedirect(
     campaign_id: program.id,
     country: clickContext.country,
     external_id: clickContext.external_id,
-    lp_click_url: lpClickUrl(c.env.APP_URL, c.req.url, clickId),
+    lp_click_url: lpClickUrl(c.env.APP_URL, program.tracking_hostname, c.req.url, clickId),
     subs: Object.fromEntries(SUB_KEYS.map((key) => [key, clickContext[key]])),
   };
 

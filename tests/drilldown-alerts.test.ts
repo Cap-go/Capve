@@ -407,6 +407,21 @@ describe("drilldown, timezone, automation, tracking domains", () => {
     expect(click.status).toBe(302);
     expect(click.headers.get("location")).toContain("merchant.example.com");
 
+    // {lp_click_url} points at the campaign's tracking domain, not APP_URL.
+    expect(
+      (
+        await api(`/api/programs/${program.id}`, {
+          method: "PATCH",
+          body: JSON.stringify({ destination_url: `${MERCHANT}?lp={lp_click_url}` }),
+        })
+      ).status,
+    ).toBe(200);
+    const lpClick = await SELF.fetch(`http://track.example.com/c/${program.campaign_key}`, {
+      redirect: "manual",
+    });
+    const lp = new URL(lpClick.headers.get("location")!).searchParams.get("lp");
+    expect(lp).toMatch(/^https:\/\/track\.example\.com\/lp\/clk_/);
+
     expect((await SELF.fetch("http://track.example.com/api/health")).status).toBe(404);
     expect((await SELF.fetch("http://track.example.com/mcp", { method: "POST" })).status).toBe(404);
     expect(

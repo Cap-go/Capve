@@ -13,6 +13,8 @@ export type AffiliateLinkTarget = {
   traffic_source_id: string | null;
   /** traffic_source_settings.tokens JSON of the campaign's source (null = none). */
   source_tokens: string | null;
+  /** Campaign's custom tracking domain hostname (null = APP_URL). */
+  tracking_hostname: string | null;
 };
 
 /** Affiliate link code → affiliate + campaign in one round trip. */
@@ -21,10 +23,11 @@ export async function getAffiliateLinkTarget(db: D1Database, code: string) {
     .prepare(
       `SELECT a.id AS affiliate_id, a.code AS affiliate_code,
         p.id, p.user_id, p.destination_url, p.campaign_key, p.status,
-        p.traffic_source_id, tss.tokens AS source_tokens
+        p.traffic_source_id, tss.tokens AS source_tokens, td.hostname AS tracking_hostname
        FROM affiliates a
        JOIN programs p ON p.id = a.program_id
        LEFT JOIN traffic_source_settings tss ON tss.traffic_source_id = p.traffic_source_id
+       LEFT JOIN tracking_domains td ON td.id = p.tracking_domain_id AND td.user_id = p.user_id
        WHERE a.code = ?`,
     )
     .bind(code)
@@ -36,10 +39,11 @@ export async function getCampaignLinkTarget(db: D1Database, campaignKey: string)
   return db
     .prepare(
       `SELECT p.id, p.user_id, p.destination_url, p.campaign_key, p.status,
-        p.traffic_source_id, tss.tokens AS source_tokens,
+        p.traffic_source_id, tss.tokens AS source_tokens, td.hostname AS tracking_hostname,
         a.id AS affiliate_id, a.code AS affiliate_code
        FROM programs p
        LEFT JOIN traffic_source_settings tss ON tss.traffic_source_id = p.traffic_source_id
+       LEFT JOIN tracking_domains td ON td.id = p.tracking_domain_id AND td.user_id = p.user_id
        LEFT JOIN affiliates a ON a.program_id = p.id AND a.code = 'c_' || ?
        WHERE p.campaign_key = ?`,
     )
@@ -52,6 +56,7 @@ export async function getCampaignLinkTarget(db: D1Database, campaignKey: string)
       status: string;
       traffic_source_id: string | null;
       source_tokens: string | null;
+      tracking_hostname: string | null;
       affiliate_id: string | null;
       affiliate_code: string | null;
     }>();
