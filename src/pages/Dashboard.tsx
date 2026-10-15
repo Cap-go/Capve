@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AdminPanel } from "../components/AdminPanel";
 import { CampaignReportPanel } from "../components/CampaignReport";
@@ -65,6 +65,7 @@ export function DashboardPage() {
   const [destinationUrl, setDestinationUrl] = useState("");
   const [editName, setEditName] = useState("");
   const [editDestinationUrl, setEditDestinationUrl] = useState("");
+  const settingsSyncedFor = useRef<string | null>(null);
   const [affiliateName, setAffiliateName] = useState("");
   const [lastLink, setLastLink] = useState("");
   const [convertSecretOnce, setConvertSecretOnce] = useState("");
@@ -145,10 +146,13 @@ export function DashboardPage() {
     };
   }, [selectedId, lastLink, tab]);
 
+  // Load the settings drafts once per selected campaign so refreshes keep unsaved edits.
   useEffect(() => {
     const program = programs.find((p) => p.id === selectedId) ?? stats?.program;
-    setEditName(program?.name ?? "");
-    setEditDestinationUrl(program?.destination_url ?? "");
+    if (!program || program.id !== selectedId || settingsSyncedFor.current === selectedId) return;
+    settingsSyncedFor.current = selectedId;
+    setEditName(program.name);
+    setEditDestinationUrl(program.destination_url ?? "");
   }, [selectedId, programs, stats?.program]);
 
   function setEntity(next: EntityView) {
@@ -206,6 +210,8 @@ export function DashboardPage() {
         destination_url: editDestinationUrl.trim() || null,
       });
       setPrograms((prev) => prev.map((item) => (item.id === program.id ? program : item)));
+      setEditName(program.name);
+      setEditDestinationUrl(program.destination_url ?? "");
       if (stats) setStats({ ...stats, program });
       const { tracking: t } = await api.tracking(selectedId);
       setTracking(t);
