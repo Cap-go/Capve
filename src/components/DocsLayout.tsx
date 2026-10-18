@@ -10,7 +10,7 @@ export function DocsLayout() {
   const [outline, setOutline] = useState<{ id: string; title: string }[]>([]);
   const [menuOpen, setMenuOpen] = useState(false);
   const currentIndex = DOC_PAGES.findIndex(
-    (page) => docHref(page.slug) === pathname,
+    (page) => docHref(page.slug) === pathname.replace(/\/$/, ""),
   );
   const current = DOC_PAGES[currentIndex];
   const next = DOC_PAGES[currentIndex + 1];
