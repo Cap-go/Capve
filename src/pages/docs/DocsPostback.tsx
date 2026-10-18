@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { CodeBlock } from "../../components/CodeBlock";
 import { appBaseUrl } from "../../lib/constants";
 
@@ -16,6 +17,11 @@ export function DocsPostback() {
         code.
       </p>
 
+      <p>
+        Follow the <Link to="/docs/click-ids">Click ID round trip</Link> first. A network's
+        return macro must resolve to the Capve ID you sent to that network, even when its macro
+        is named <code>{"{external_id}"}</code>. This is separate from Capve's stored traffic-source ID.
+      </p>
       <h2>Incoming postback (network → Capve)</h2>
       <p>Configure this URL in your affiliate network as the conversion postback:</p>
       <CodeBlock>{postbackUrl}</CodeBlock>
