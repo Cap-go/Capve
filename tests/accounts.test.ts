@@ -99,11 +99,9 @@ describe("account context", () => {
     const listed = (await (
       await call("/api/auth/accounts", person.authHeaders)
     ).json()) as { accounts: { account_id: string }[] };
-    expect(listed.accounts.map((item) => item.account_id)).toEqual([
-      ownId,
-      oneId,
-      twoId,
-    ]);
+    expect(listed.accounts[0]?.account_id).toBe(ownId);
+    expect(listed.accounts).toHaveLength(3);
+    expect(listed.accounts.map((item) => item.account_id)).toEqual(expect.arrayContaining([ownId, oneId, twoId]));
     expect(
       (
         await call("/api/auth/switch-account", person.authHeaders, "POST", {

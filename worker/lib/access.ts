@@ -1,3 +1,4 @@
+import { HTTPException } from "hono/http-exception";
 import type { Context } from "hono";
 import type { Env, User } from "../types";
 import type { SessionUser, TeamRole } from "../types-ops";
@@ -104,7 +105,20 @@ export async function requireUser(c: {
   env: Env;
   req: { header: (name: string) => string | undefined };
 }): Promise<SessionUser | null> {
-  return resolveOperator(c);
+  const session = await resolveOperator(c);
+  const expectedAccount = c.req.header("X-Capve-Account");
+  if (session && expectedAccount && session.account_id !== expectedAccount) {
+    throw new HTTPException(409, {
+      res: Response.json(
+        {
+          error: "Account changed. Reload the dashboard.",
+          code: "account_changed",
+        },
+        { status: 409 },
+      ),
+    });
+  }
+  return session;
 }
 
 export function canWrite(role: TeamRole): boolean {

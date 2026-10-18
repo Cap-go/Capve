@@ -34,17 +34,6 @@ app.use("*", async (c, next) => {
 // Custom tracking domains serve only /r, /c, /lp, /click; unknown hosts get 404.
 app.use("*", hostGate);
 
-// Reject stale tabs before a write can land in an account selected in another tab.
-app.use("/api/*", async (c, next) => {
-  const expected = c.req.header("X-Capve-Account");
-  if (expected && !c.req.path.startsWith("/api/auth/") && !c.req.path.startsWith("/api/v1/") && c.req.path !== "/api/health") {
-    const session = await requireUser(c);
-    if (!session) return c.json({ error: "Unauthorized" }, 401);
-    if (session.account_id !== expected) return c.json({ error: "Account changed. Reload the dashboard.", code: "account_changed" }, 409);
-  }
-  await next();
-});
-
 app.get("/api/health", (c) => c.json({ ok: true, service: "capve" }));
 
 app.route("/api/auth", accounts);
