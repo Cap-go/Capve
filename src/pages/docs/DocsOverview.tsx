@@ -122,6 +122,48 @@ export function DocsOverview() {
           <span aria-hidden="true">↗</span>
         </Link>
       </div>
+      <h2>Find your way around the dashboard</h2>
+      <p>
+        The sidebar groups every screen. The account switcher at the top
+        changes which personal or team account you are working in.
+      </p>
+      <table className="table">
+        <thead>
+          <tr>
+            <th>Section</th>
+            <th>Screens</th>
+            <th>Use it to</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Tracking</td>
+            <td>Campaigns, Reports</td>
+            <td>
+              Create campaigns, copy tracking links, read live stats, and
+              compare or export results.
+            </td>
+          </tr>
+          <tr>
+            <td>Inventory</td>
+            <td>
+              Traffic sources, Affiliate networks, Offers, Landers, Groups
+            </td>
+            <td>
+              Set up the building blocks that campaigns route through and
+              report on.
+            </td>
+          </tr>
+          <tr>
+            <td>Workspace</td>
+            <td>Settings, AI / MCP, Admin</td>
+            <td>
+              Manage the account, team, tracking domains, and API tokens.
+              Admin appears only for platform admins.
+            </td>
+          </tr>
+        </tbody>
+      </table>
       <h2>How tracking fits together</h2>
       <div className="docs-flow">
         <div>
