@@ -21,6 +21,7 @@ A Capve instance lets a user:
 | --- | --- |
 | Auth | Email/password sessions (`worker/lib/session.ts`, `worker/lib/access.ts`); `AUTH_SECRET` is a Worker secret in production; new accounts verify their email (`/verify-email`); password reset and "sign out everywhere" revoke sessions (`users.session_version`); login/register/forgot-password rate limited (`ratelimits` bindings) |
 | Email-matched access | Team invites and `PLATFORM_ADMIN_EMAILS` only apply to verified emails |
+| Account context | Browser account selector lists personal and accepted team accounts; roles rechecked per request; signed, actor-bound account context; verified platform admins can impersonate personal accounts for one hour with an exit banner and entry/exit audit log. Stale dashboard requests are rejected after an account change. These session controls are unavailable to API tokens; personal token management is blocked while impersonating. |
 | Teams | Owner invites by email; invite applies only after the invitee accepts |
 | Click redirect | `/r/:code`, `/c/:key` → path target; appends `click_id` + `velo_ref`; paused campaigns 404 |
 | Click context | country/region/city/ISP from `request.cf`, device/OS/browser from UA, `sub1`–`sub10`, external `clickid`, per-click `cost`, unique + bot flags |

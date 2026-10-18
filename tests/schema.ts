@@ -1,4 +1,6 @@
 export const initSql = `
+CREATE TABLE IF NOT EXISTS account_access_log (id TEXT PRIMARY KEY, actor_user_id TEXT NOT NULL, account_id TEXT NOT NULL, action TEXT NOT NULL, created_at INTEGER NOT NULL);
+
 CREATE TABLE IF NOT EXISTS users (
   id TEXT PRIMARY KEY,
   email TEXT NOT NULL UNIQUE,

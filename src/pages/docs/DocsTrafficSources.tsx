@@ -14,6 +14,10 @@ export function DocsTrafficSources() {
         slot and shown by name in reports.
       </p>
 
+      <p>
+        Read <Link to="/docs/campaigns">multi-provider campaigns</Link> for a complete example,
+        and <Link to="/docs/click-ids">Click IDs &amp; SubIDs</Link> before mapping your source's ID.
+      </p>
       <h2>Named tokens</h2>
       <p>The Adcash template maps:</p>
       <table className="table">

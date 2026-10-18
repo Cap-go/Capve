@@ -1,3 +1,4 @@
+import { Link } from "react-router-dom";
 import { CodeBlock } from "../../components/CodeBlock";
 import { appBaseUrl } from "../../lib/constants";
 import { buildPostbackUrl, buildTrackingUrl } from "../../lib/tracking";
@@ -11,7 +12,15 @@ export function DocsTrackingLinks() {
         Each affiliate gets a short link. When clicked, Capve records the visit, assigns a click
         ID, and redirects to your campaign destination URL.
       </p>
-      <h2>Link format</h2>
+      <p>For a worked example, read <Link to="/docs/click-ids">Click IDs &amp; SubIDs</Link>.</p>
+      <h2>Campaign links</h2>
+      <p>
+        Campaigns also have a public <code>/c/:key</code> link. Copy the campaign's generated
+        traffic source link to include its source macros. See <Link to="/docs/campaigns">multi-provider
+        campaigns</Link> to combine several networks and offers.
+      </p>
+      <CodeBlock>{`${base}/c/{campaign_key}`}</CodeBlock>
+      <h2>Affiliate link format</h2>
       <CodeBlock>{buildTrackingUrl(base, "{affiliate_code}")}</CodeBlock>
       <h2>Redirect parameters</h2>
       <p>Capve appends these query parameters to your destination URL:</p>

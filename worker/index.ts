@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import type { Env } from "./types";
+import { accounts } from "./routes/accounts";
 import { admin } from "./routes/admin";
 import { antifraud } from "./routes/antifraud";
 import { auth } from "./routes/auth";
@@ -35,6 +36,7 @@ app.use("*", hostGate);
 
 app.get("/api/health", (c) => c.json({ ok: true, service: "capve" }));
 
+app.route("/api/auth", accounts);
 app.route("/api/auth", auth);
 app.route("/api/admin", admin);
 app.route("/api/antifraud", antifraud);

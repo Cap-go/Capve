@@ -1,5 +1,6 @@
 import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
+import { AccountSwitcher, ImpersonationBanner } from "../components/AccountSwitcher";
 import { AdminPanel } from "../components/AdminPanel";
 import { AccountSettingsPanel, TrackingDomainPicker } from "../components/AccountSettingsPanel";
 import { AutomationPanel } from "../components/AutomationPanel";
@@ -325,16 +326,18 @@ export function DashboardPage() {
       }
     >
       <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-6">
-        <div>
-          <h1 className="text-3xl font-semibold">Dashboard</h1>
-          <p className="mt-2 text-[var(--velo-muted)]">Campaigns, traffic, and conversions.</p>
+        <ImpersonationBanner />
+        <div className="dashboard-account-heading">
+          <div><h1 className="text-3xl font-semibold">Dashboard</h1>
+          <p className="mt-2 text-[var(--velo-muted)]">Campaigns, traffic, and conversions.</p></div>
+          <AccountSwitcher />
         </div>
 
         <nav
           aria-label="Dashboard sections"
           className="-mx-4 flex gap-2 overflow-x-auto border-b border-[var(--velo-border)] px-4 pb-4 sm:mx-0 sm:flex-wrap sm:px-0"
         >
-          {ENTITY_NAV.map(({ key, label }) => navButton(key, label))}
+          {ENTITY_NAV.filter(({ key }) => !user.impersonating || key !== "mcp").map(({ key, label }) => navButton(key, label))}
           {user.is_platform_admin ? navButton("admin", "Admin") : null}
         </nav>
 

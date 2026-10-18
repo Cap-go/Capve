@@ -5,6 +5,8 @@ export type User = {
   email: string;
   role?: TeamRole;
   account_id?: string;
+  account_email?: string;
+  impersonating?: boolean;
   is_platform_admin?: boolean;
   email_verified?: boolean;
 };
@@ -385,18 +387,27 @@ export type ProgramStats = {
   affiliates: AffiliateStats[];
 };
 
+let requestAccount: string | null = null;
+export function setRequestAccount(accountId: string | null) {
+  requestAccount = accountId;
+}
+
+export type AccessibleAccount = { account_id: string; email: string; name: string | null; role: TeamRole };
+
 export async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(path, {
     credentials: "include",
+    ...init,
     headers: {
       "Content-Type": "application/json",
+      ...(requestAccount && !path.startsWith("/api/auth/") ? { "X-Capve-Account": requestAccount } : {}),
       ...(init?.headers ?? {}),
     },
-    ...init,
   });
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 409 && data && typeof data === "object" && "code" in data && data.code === "account_changed") window.location.assign("/app");
     throw new Error((data as { error?: string }).error ?? "Request failed");
   }
   return data as T;
@@ -423,6 +434,10 @@ export type ApiToken = {
 };
 
 export const api = {
+  accounts: () => request<{ accounts: AccessibleAccount[] }>("/api/auth/accounts"),
+  switchAccount: (account_id: string) => request<{ ok: boolean }>("/api/auth/switch-account", { method: "POST", body: JSON.stringify({ account_id }) }),
+  impersonate: (account_id: string) => request<{ ok: boolean }>("/api/auth/impersonate", { method: "POST", body: JSON.stringify({ account_id }) }),
+  stopImpersonation: () => request<{ ok: boolean }>("/api/auth/stop-impersonation", { method: "POST", body: "{}" }),
   me: () => request<{ user: User | null }>("/api/auth/me"),
   register: (body: { email: string; password: string; name?: string }) =>
     request<{ user: User }>("/api/auth/register", { method: "POST", body: JSON.stringify(body) }),

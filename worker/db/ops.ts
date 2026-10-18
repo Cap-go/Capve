@@ -4,14 +4,15 @@ import { id } from "../lib/utils";
 export async function findTeamMembership(
   db: D1Database,
   email: string,
+  accountId?: string,
 ): Promise<{ owner_user_id: string; role: "admin" | "viewer" } | null> {
   return db
     .prepare(
       `SELECT owner_user_id, role FROM team_members
-       WHERE email = ? AND accepted_at IS NOT NULL
+       WHERE email = ? AND accepted_at IS NOT NULL ${accountId ? "AND owner_user_id = ?" : ""}
        ORDER BY accepted_at ASC, id ASC LIMIT 1`,
     )
-    .bind(email.toLowerCase())
+    .bind(...(accountId ? [email.toLowerCase(), accountId] : [email.toLowerCase()]))
     .first<{ owner_user_id: string; role: "admin" | "viewer" }>();
 }
 

@@ -10,6 +10,8 @@ tokens.use("*", async (c, next) => {
   if (readBearerToken(c.req.header("authorization"))) {
     return c.json({ error: "Manage API tokens from the dashboard" }, 403);
   }
+  const session = await requireUser(c);
+  if (session?.impersonating) return c.json({ error: "Exit impersonation to manage personal API tokens" }, 403);
   await next();
 });
 
