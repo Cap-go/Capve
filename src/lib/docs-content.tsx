@@ -10,6 +10,7 @@ import { DocsRouting } from "../pages/docs/DocsRouting";
 import { DocsBrowserAttribution } from "../pages/docs/DocsBrowserAttribution";
 import { DocsServerConversions } from "../pages/docs/DocsServerConversions";
 import { DocsConvertApi } from "../pages/docs/DocsConvertApi";
+import { DocsGlossary } from "../pages/docs/DocsGlossary";
 
 export const DOC_CONTENT = {
   "": DocsOverview,
@@ -24,4 +25,5 @@ export const DOC_CONTENT = {
   "browser-attribution": DocsBrowserAttribution,
   "server-conversions": DocsServerConversions,
   "api/convert": DocsConvertApi,
+  glossary: DocsGlossary,
 };

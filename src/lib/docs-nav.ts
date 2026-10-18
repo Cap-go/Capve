@@ -82,6 +82,12 @@ export const DOC_PAGES: DocPage[] = [
     title: "POST /api/v1/convert",
     description: "Request fields, responses, and idempotency",
   },
+  {
+    group: "Reference",
+    slug: "glossary",
+    title: "Glossary",
+    description: "Click ID, SubID, postback, EPC, ROI and other tracking terms",
+  },
 ];
 
 export function docHref(slug: string): string {
