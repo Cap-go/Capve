@@ -20,7 +20,16 @@ export function DocsSearch() {
         event.preventDefault();
         input.current?.focus();
       }
-      if (event.key === "Escape") setOpen(false);
+      if (event.key === "Escape") {
+        if (
+          root.current
+            ?.querySelector(".docs-search-results")
+            ?.contains(document.activeElement)
+        ) {
+          input.current?.focus();
+        }
+        setOpen(false);
+      }
     };
     const outside = (event: PointerEvent) => {
       if (event.target instanceof Node && !root.current?.contains(event.target))
