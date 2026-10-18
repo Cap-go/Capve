@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { api, type User } from "./api";
+import { api, setRequestAccount, type User } from "./api";
 
 type AuthState = {
   user: User | null;
@@ -12,7 +12,11 @@ type AuthState = {
 const AuthContext = createContext<AuthState | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
+  const [user, updateUser] = useState<User | null>(null);
+  const setUser = (next: User | null) => {
+    setRequestAccount(next?.account_id ?? null);
+    updateUser(next);
+  };
   const [loading, setLoading] = useState(true);
 
   const refresh = async () => {

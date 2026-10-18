@@ -1,4 +1,6 @@
 import { Hono } from "hono";
+import { ACCOUNT_CONTEXT_COOKIE } from "../lib/account-context";
+import type { SessionUser } from "../types-ops";
 import type { Env } from "../types";
 import { consumeAuthToken, createAuthToken, deleteAuthTokensForUser, isEmailTakenError } from "../db/auth";
 import {
@@ -24,6 +26,12 @@ import { id } from "../lib/utils";
 import { isSecureRequest } from "../lib/auth";
 
 const auth = new Hono<{ Bindings: Env }>();
+auth.use("*", async (c, next) => {
+  await next();
+  if (c.req.method === "POST" && c.res.ok && ["/register", "/login", "/logout", "/logout-all", "/reset-password"].some((path) => c.req.path === `/api/auth${path}`)) {
+    c.header("Set-Cookie", clearSessionCookie(isSecureRequest(new URL(c.req.url)), ACCOUNT_CONTEXT_COOKIE), { append: true });
+  }
+});
 
 function validEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -33,19 +41,14 @@ function validPassword(password: string): boolean {
   return password.length >= 8;
 }
 
-function publicUser(session: {
-  id: string;
-  email: string;
-  role: string;
-  account_id: string;
-  is_platform_admin: boolean;
-  email_verified: boolean;
-}) {
+function publicUser(session: SessionUser) {
   return {
     id: session.id,
     email: session.email,
     role: session.role,
     account_id: session.account_id,
+    account_email: session.account_email,
+    impersonating: session.impersonating,
     is_platform_admin: session.is_platform_admin,
     email_verified: session.email_verified,
   };

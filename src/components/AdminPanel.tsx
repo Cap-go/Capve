@@ -1,22 +1,32 @@
 import { useEffect, useState } from "react";
+import { useAuth } from "../lib/auth";
 import { ErrorBox } from "./ui";
 import { api, formatMoney, type PlatformOverview, type PlatformUserRow } from "../lib/api";
 
 export function AdminPanel() {
+  const { user: actor } = useAuth();
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [loading, setLoading] = useState(true);
   const [overview, setOverview] = useState<PlatformOverview | null>(null);
   const [users, setUsers] = useState<PlatformUserRow[]>([]);
   const [total, setTotal] = useState(0);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    Promise.all([api.adminOverview(), api.adminUsers()])
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([api.adminOverview(), api.adminUsers(50, offset)])
       .then(([overviewRes, usersRes]) => {
+        if (cancelled) return;
         setOverview(overviewRes.overview);
         setUsers(usersRes.users);
         setTotal(usersRes.total);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load admin data"));
-  }, []);
+      .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load admin data"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [offset]);
 
   return (
     <div className="space-y-8">
@@ -57,6 +67,7 @@ export function AdminPanel() {
               <th className="px-5 py-3 font-medium">Campaigns</th>
               <th className="px-5 py-3 font-medium">Admin</th>
               <th className="px-5 py-3 font-medium">Joined</th>
+              <th className="px-5 py-3 font-medium">Support access</th>
             </tr>
           </thead>
           <tbody>
@@ -67,10 +78,21 @@ export function AdminPanel() {
                 <td className="px-5 py-3">{user.program_count}</td>
                 <td className="px-5 py-3">{user.is_platform_admin ? "Yes" : "—"}</td>
                 <td className="px-5 py-3">{new Date(user.created_at).toLocaleDateString()}</td>
+                <td className="px-5 py-3"><button className="btn btn-secondary" type="button" disabled={loading || busyId !== null || user.id === actor?.id} onClick={async () => {
+                  setBusyId(user.id);
+                  setError("");
+                  try { await api.impersonate(user.id); window.location.assign("/app"); }
+                  catch (err) { setError(err instanceof Error ? err.message : "Could not impersonate account"); setBusyId(null); }
+                }}>{busyId === user.id ? "Opening…" : "Impersonate"}</button></td>
               </tr>
             ))}
           </tbody>
         </table>
+        <div className="flex items-center justify-between gap-3 border-t border-[var(--velo-border)] p-4">
+          <button className="btn btn-secondary" type="button" disabled={loading || offset === 0 || busyId !== null} onClick={() => setOffset(Math.max(0, offset - 50))}>Previous</button>
+          <p className="text-sm text-[var(--velo-muted)]">{total ? `${offset + 1}–${Math.min(offset + 50, total)} of ${total}` : "No accounts"}</p>
+          <button className="btn btn-secondary" type="button" disabled={loading || offset + 50 >= total || busyId !== null} onClick={() => setOffset(offset + 50)}>Next</button>
+        </div>
       </div>
     </div>
   );

@@ -1,3 +1,4 @@
+import { DocsAccounts } from "../pages/docs/DocsAccounts";
 import { DocsOverview } from "../pages/docs/DocsOverview";
 import { DocsClickIds } from "../pages/docs/DocsClickIds";
 import { DocsCampaigns } from "../pages/docs/DocsCampaigns";
@@ -14,6 +15,7 @@ export const DOC_CONTENT = {
   "": DocsOverview,
   "click-ids": DocsClickIds,
   campaigns: DocsCampaigns,
+  accounts: DocsAccounts,
   mcp: DocsMcp,
   postback: DocsPostback,
   "traffic-sources": DocsTrafficSources,

@@ -66,6 +66,12 @@ export const DOC_PAGES: DocPage[] = [
   },
   {
     group: "Reference",
+    slug: "accounts",
+    title: "Accounts & impersonation",
+    description: "Switch teams and use platform admin support access",
+  },
+  {
+    group: "Reference",
     slug: "mcp",
     title: "MCP server",
     description: "Run Capve from Claude, Cursor or any AI assistant",

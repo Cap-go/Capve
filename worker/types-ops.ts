@@ -5,6 +5,8 @@ export type SessionUser = {
   email: string;
   role: TeamRole;
   account_id: string;
+  account_email: string;
+  impersonating: boolean;
   is_platform_admin: boolean;
   email_verified: boolean;
 };
@@ -46,4 +48,11 @@ export type Trigger = {
   action_url: string;
   enabled: boolean;
   created_at: number;
+};
+
+export type AccessibleAccount = {
+  account_id: string;
+  email: string;
+  name: string | null;
+  role: TeamRole;
 };

@@ -706,3 +706,13 @@ textarea {
     padding: 16px;
   }
 }
+
+.dashboard-account-heading { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 24px; }
+.account-switcher { display: grid; gap: 6px; width: min(100%, 380px); min-width: 0; }
+.account-switcher > label, .account-switcher > .account-label { font-size: 12px; color: var(--velo-muted); }
+.account-switcher select { width: 100%; min-width: 0; padding: 10px 12px; border: 1px solid var(--velo-border); border-radius: 6px; background: white; font-size: 14px; }
+.account-switcher > p { font-size: 14px; overflow-wrap: anywhere; }
+.impersonation-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 16px; border: 1px solid #e6ca86; border-radius: 8px; padding: 18px 20px; background: #fffbeb; color: #713f12; }
+.impersonation-banner > div { flex: 1; min-width: min(100%, 240px); overflow-wrap: anywhere; }
+.impersonation-banner p { font-size: 14px; line-height: 1.7; margin-top: 4px; }
+@media (max-width: 639px) { .account-switcher select, .impersonation-banner p { font-size: 16px; } }
