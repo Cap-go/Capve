@@ -10,8 +10,10 @@ export function DocsAccounts() {
       </p>
       <h2>Switch accounts</h2>
       <p>
-        Use the Account selector at the top of the dashboard. Your personal
-        account is always listed. Team accounts appear after you verify your
+        Open the account switcher at the top of the dashboard sidebar. It
+        shows the current account and your role in it. Your personal account
+        is always listed, marked Personal; a check mark shows the active one.
+        With more than five accounts, type in the filter to find one. Team accounts appear after you verify your
         email and accept their invitations in Settings.
       </p>
       <p>
@@ -28,7 +30,8 @@ export function DocsAccounts() {
       <h2>Open an account for support</h2>
       <ol role="list">
         <li>
-          Sign in with a verified platform admin account and open the Admin tab.
+          Sign in with a verified platform admin account and open Admin in the
+          Workspace section of the sidebar.
         </li>
         <li>
           Find the account in the user list. Use Previous and Next to browse
@@ -39,11 +42,13 @@ export function DocsAccounts() {
           with owner access.
         </li>
         <li>
-          Check the banner before changing anything. It identifies both the
-          account being accessed and your signed-in admin email.
+          Check the amber bar at the top of the page before changing anything.
+          It names the account you are viewing and your signed-in admin email.
+          The account switcher shows Support access and is locked until you
+          exit.
         </li>
         <li>
-          Select Exit impersonation to return to the account you were using
+          Select Exit impersonation in the amber bar to return to the account you were using
           before support access began.
         </li>
       </ol>
@@ -58,7 +63,7 @@ export function DocsAccounts() {
         Account switching and impersonation require a browser session. API
         tokens cannot start or stop impersonation or change the browser's
         selected account. Existing API tokens keep their existing account
-        resolution; they do not follow the account selector.
+        resolution; they do not follow the account switcher.
       </p>
       <p>
         While impersonating, personal API-token management and the platform

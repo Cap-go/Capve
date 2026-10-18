@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { CodeBlock } from "../components/CodeBlock";
 import { Shell } from "../components/ui";
+import { useAuth } from "../lib/auth";
 import {
   DEPLOY_BUTTON_IMAGE,
   DEPLOY_BUTTON_URL,
@@ -26,6 +27,7 @@ const features = [
 ];
 
 export function LandingPage() {
+  const { user, loading } = useAuth();
   return (
     <Shell
       cta={
@@ -33,12 +35,20 @@ export function LandingPage() {
           <Link className="btn btn-ghost" to="/docs">
             Docs
           </Link>
-          <Link className="btn btn-ghost" to="/login">
-            Sign in
-          </Link>
-          <Link className="btn btn-primary" to="/register">
-            Sign up
-          </Link>
+          {loading ? null : user ? (
+            <Link className="btn btn-primary" to="/app">
+              Dashboard
+            </Link>
+          ) : (
+            <>
+              <Link className="btn btn-ghost" to="/login">
+                Sign in
+              </Link>
+              <Link className="btn btn-primary" to="/register">
+                Sign up
+              </Link>
+            </>
+          )}
         </>
       }
     >
@@ -54,8 +64,8 @@ export function LandingPage() {
               assistant over MCP.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
-              <Link className="btn btn-primary" to="/register">
-                Create account
+              <Link className="btn btn-primary" to={user ? "/app" : "/register"}>
+                {user ? "Open dashboard" : "Create account"}
               </Link>
               <Link className="btn btn-secondary" to="/docs">
                 Read the docs
