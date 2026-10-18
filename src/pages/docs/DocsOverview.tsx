@@ -1,18 +1,67 @@
 import { Link } from "react-router-dom";
+import { OPEN_DOCS_SEARCH } from "../../components/DocsSearch";
+import { Icon } from "../../components/Icon";
 
 export function DocsOverview() {
   return (
     <>
-      <div className="docs-eyebrow">The Capve handbook</div>
-      <h1>
-        Know where every
-        <br className="max-sm:hidden" /> conversion comes from.
-      </h1>
-      <p className="docs-lead">
-        Track campaigns, connect affiliate networks, and follow each click
-        through to revenue. Start with the basics, then build your first
-        campaign.
-      </p>
+      <div className="docs-hero">
+        <div className="docs-eyebrow">Capve documentation</div>
+        <h1>
+          Know where every
+          <br className="max-sm:hidden" /> conversion comes from.
+        </h1>
+        <p className="docs-lead">
+          Track campaigns, connect affiliate networks, and follow each click
+          through to revenue. Start with the basics, then build your first
+          campaign.
+        </p>
+        <button
+          className="docs-hero-search"
+          type="button"
+          onClick={() => window.dispatchEvent(new Event(OPEN_DOCS_SEARCH))}
+        >
+          <Icon name="search" size={18} />
+          <span>Search guides, tokens, and API fields…</span>
+          <kbd aria-hidden="true">⌘K</kbd>
+        </button>
+        <p className="docs-hero-popular">
+          Popular: <Link to="/docs/click-ids">click_id vs SubID</Link>
+          <Link to="/docs/postback">Postback URL</Link>
+          <Link to="/docs/campaigns">Several networks</Link>
+          <Link to="/docs/glossary">Glossary</Link>
+        </p>
+      </div>
+      <h2>Start with your role</h2>
+      <div className="docs-audience">
+        <Link to="/docs/campaigns">
+          <Icon name="campaigns" size={20} />
+          <strong>I buy traffic</strong>
+          <span>
+            Send ad traffic to offers from several networks and compare
+            placements by SubID.
+          </span>
+          <small>Multi-provider campaigns →</small>
+        </Link>
+        <Link to="/docs/browser-attribution">
+          <Icon name="networks" size={20} />
+          <strong>I run an affiliate program</strong>
+          <span>
+            Give partners tracking links and credit them for sales on your
+            own site.
+          </span>
+          <small>Browser attribution →</small>
+        </Link>
+        <Link to="/docs/api/convert">
+          <Icon name="docs" size={20} />
+          <strong>I'm a developer</strong>
+          <span>
+            Report conversions from your backend, or drive Capve from an AI
+            assistant.
+          </span>
+          <small>Conversion API →</small>
+        </Link>
+      </div>
       <div className="docs-start">
         <div>
           <small>Start here · Tracking fundamentals</small>
