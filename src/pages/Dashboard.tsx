@@ -1,6 +1,7 @@
 import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
-import { AccountSwitcher, ImpersonationBanner } from "../components/AccountSwitcher";
+import { AppShell, type AppNavItem } from "../components/AppShell";
+import { Icon } from "../components/Icon";
 import { AdminPanel } from "../components/AdminPanel";
 import { AccountSettingsPanel, TrackingDomainPicker } from "../components/AccountSettingsPanel";
 import { AutomationPanel } from "../components/AutomationPanel";
@@ -20,7 +21,6 @@ import {
   SavedNote,
   SecretBox,
   SelectField,
-  Shell,
   confirmDelete,
   useSaveState,
 } from "../components/ui";
@@ -58,17 +58,30 @@ type EntityView =
   | "mcp"
   | "admin";
 
-const ENTITY_NAV: { key: EntityView; label: string }[] = [
-  { key: "campaigns", label: "Campaigns" },
-  { key: "reports", label: "Reports" },
-  { key: "sources", label: "Traffic sources" },
-  { key: "networks", label: "Aff. networks" },
-  { key: "offers", label: "Offers" },
-  { key: "landers", label: "Landers" },
-  { key: "groups", label: "Groups" },
-  { key: "settings", label: "Settings" },
-  { key: "mcp", label: "AI / MCP" },
+const ENTITY_NAV: AppNavItem<EntityView>[] = [
+  { key: "campaigns", label: "Campaigns", icon: "campaigns", group: "Tracking" },
+  { key: "reports", label: "Reports", icon: "reports", group: "Tracking" },
+  { key: "sources", label: "Traffic sources", icon: "sources", group: "Inventory" },
+  { key: "networks", label: "Affiliate networks", icon: "networks", group: "Inventory" },
+  { key: "offers", label: "Offers", icon: "offers", group: "Inventory" },
+  { key: "landers", label: "Landers", icon: "landers", group: "Inventory" },
+  { key: "groups", label: "Groups", icon: "groups", group: "Inventory" },
+  { key: "settings", label: "Settings", icon: "settings", group: "Workspace" },
+  { key: "mcp", label: "AI / MCP", icon: "mcp", group: "Workspace" },
 ];
+
+const PAGE_COPY: Record<EntityView, { title: string; description: string }> = {
+  campaigns: { title: "Campaigns", description: "Tracking links, paths, postbacks, and live stats per campaign." },
+  reports: { title: "Reports", description: "Compare campaigns, drill into dimensions, and export data." },
+  sources: { title: "Traffic sources", description: "Where clicks come from, their tokens, cost model, and postbacks." },
+  networks: { title: "Affiliate networks", description: "Networks that send conversions back to Capve." },
+  offers: { title: "Offers", description: "Destinations that pay out when a click converts." },
+  landers: { title: "Landers", description: "Pre-sell pages shown before the offer." },
+  groups: { title: "Groups", description: "Organize campaigns for filtering and reports." },
+  settings: { title: "Settings", description: "Account, team, tracking domains, and operations." },
+  mcp: { title: "AI / MCP", description: "Connect AI assistants to this account." },
+  admin: { title: "Admin", description: "Platform overview and support access." },
+};
 
 const LOG_PAGE_SIZE = 50;
 
@@ -117,6 +130,8 @@ export function DashboardPage() {
   const [secretOnce, setSecretOnce] = useState<CampaignSecret | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [campaignFilter, setCampaignFilter] = useState("");
 
   useEffect(() => {
     if (!user) return;
@@ -191,9 +206,9 @@ export function DashboardPage() {
 
   if (loading) {
     return (
-      <Shell>
-        <div className="mx-auto max-w-6xl px-6 py-16 text-[var(--velo-muted)]">Loading...</div>
-      </Shell>
+      <div className="app-loading" role="status">
+        Loading…
+      </div>
     );
   }
 
@@ -221,6 +236,7 @@ export function DashboardPage() {
       setDestinationUrl("");
       setNewSourceId("");
       setNewGroupId("");
+      setCreating(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not create campaign");
     } finally {
@@ -290,117 +306,111 @@ export function DashboardPage() {
     }
   }
 
+  const filterTerm = campaignFilter.toLowerCase().trim();
+  const visiblePrograms = filterTerm
+    ? programs.filter((p) => `${p.name} ${p.campaign_key ?? p.slug}`.toLowerCase().includes(filterTerm))
+    : programs;
   const selectedProgram = programs.find((p) => p.id === selectedId) ?? stats?.program;
   const visibleStats = stats && stats.program.id === selectedId ? stats : null;
 
-  const navButton = (key: EntityView, label: string) => (
-    <button
-      key={key}
-      className={`btn shrink-0 whitespace-nowrap text-sm ${entity === key ? "btn-primary" : "btn-secondary"}`}
-      onClick={() => setEntity(key)}
-      type="button"
-    >
-      {label}
-    </button>
-  );
+  const navItems: AppNavItem<EntityView>[] = [
+    ...ENTITY_NAV.filter(({ key }) => !user.impersonating || key !== "mcp"),
+    ...(user.is_platform_admin
+      ? [{ key: "admin" as const, label: "Admin", icon: "admin" as const, group: "Workspace" }]
+      : []),
+  ];
 
   return (
-    <Shell
-      cta={
-        <>
-          <Link className="btn btn-ghost" to="/docs">
-            Docs
-          </Link>
-          <span className="hidden text-sm text-[var(--velo-muted)] sm:inline">{user.email}</span>
-          <button
-            className="btn btn-ghost"
-            type="button"
-            onClick={async () => {
-              await logout();
-              window.location.href = "/login";
-            }}
-          >
-            Sign out
-          </button>
-        </>
-      }
+    <AppShell
+      items={navItems}
+      active={entity}
+      onSelect={setEntity}
+      email={user.email}
+      onSignOut={async () => {
+        await logout();
+        window.location.href = "/login";
+      }}
+      title={PAGE_COPY[entity].title}
+      description={PAGE_COPY[entity].description}
     >
-      <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-6">
-        <ImpersonationBanner />
-        <div className="dashboard-account-heading">
-          <div><h1 className="text-3xl font-semibold">Dashboard</h1>
-          <p className="mt-2 text-[var(--velo-muted)]">Campaigns, traffic, and conversions.</p></div>
-          <AccountSwitcher />
-        </div>
-
-        <nav
-          aria-label="Dashboard sections"
-          className="-mx-4 flex gap-2 overflow-x-auto border-b border-[var(--velo-border)] px-4 pb-4 sm:mx-0 sm:flex-wrap sm:px-0"
-        >
-          {ENTITY_NAV.filter(({ key }) => !user.impersonating || key !== "mcp").map(({ key, label }) => navButton(key, label))}
-          {user.is_platform_admin ? navButton("admin", "Admin") : null}
+      {entity === "campaigns" && (
+        <nav className="app-tabs" aria-label="Campaign views">
+          {(
+            [
+              ["overview", "Overview"],
+              ["clicklog", "Clicklog"],
+              ["conversions", "Conversions"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              className={tab === key ? "app-tab is-active" : "app-tab"}
+              aria-current={tab === key ? "page" : undefined}
+              onClick={() => setTab(key)}
+              type="button"
+            >
+              {label}
+            </button>
+          ))}
         </nav>
+      )}
 
-        {entity === "campaigns" && (
-          <nav className="flex flex-wrap gap-2" aria-label="Campaign views">
-            {(
-              [
-                ["overview", "Overview"],
-                ["clicklog", "Clicklog"],
-                ["conversions", "Conversions"],
-              ] as const
-            ).map(([key, label]) => (
-              <button
-                key={key}
-                className={`btn text-sm ${tab === key ? "btn-primary" : "btn-secondary"}`}
-                onClick={() => setTab(key)}
-                type="button"
-              >
-                {label}
-              </button>
-            ))}
-          </nav>
-        )}
+      {user.email_verified === false ? <VerifyEmailBanner /> : null}
 
-        {user.email_verified === false ? <VerifyEmailBanner /> : null}
+      <ErrorBox message={error} />
 
-        <ErrorBox message={error} />
-
-        {entity !== "campaigns" ? (
-          entity === "admin" ? (
-            <AdminPanel />
-          ) : entity === "reports" ? (
-            <CampaignReportPanel canWrite={canWrite} />
-          ) : entity === "settings" ? (
-            <div className="space-y-6">
-              <AccountSettingsPanel canWrite={(user.role ?? "owner") !== "viewer"} />
-              <OpsPanel role={user.role ?? "owner"} />
-            </div>
-          ) : entity === "mcp" ? (
-            <McpPanel />
-          ) : (
-            <EntityPanel kind={entity} canWrite={canWrite} />
-          )
+      {entity !== "campaigns" ? (
+        entity === "admin" ? (
+          <AdminPanel />
+        ) : entity === "reports" ? (
+          <CampaignReportPanel canWrite={canWrite} />
+        ) : entity === "settings" ? (
+          <div className="space-y-6">
+            <AccountSettingsPanel canWrite={(user.role ?? "owner") !== "viewer"} />
+            <OpsPanel role={user.role ?? "owner"} />
+          </div>
+        ) : entity === "mcp" ? (
+          <McpPanel />
         ) : (
-          <div className="grid grid-cols-1 gap-6 lg:grid-cols-[320px_minmax(0,1fr)]">
-            <section className="card min-w-0 p-5">
-              <h2 className="font-semibold">Campaigns</h2>
-              {canWrite && (
-                <form className="mt-4 space-y-3" onSubmit={createProgram}>
-                  <Field
-                    label="New campaign name"
-                    placeholder="Acme SaaS affiliates"
-                    value={programName}
-                    onChange={(e) => setProgramName(e.target.value)}
-                    required
-                  />
-                  <Field
-                    label="Destination URL (optional)"
-                    type="url"
-                    placeholder="Empty = route through paths"
-                    value={destinationUrl}
-                    onChange={(e) => setDestinationUrl(e.target.value)}
-                  />
+          <EntityPanel kind={entity} canWrite={canWrite} />
+        )
+      ) : (
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
+          <section className="card campaign-list min-w-0">
+            <div className="campaign-list-head">
+              <h2>
+                Campaigns <span>{programs.length}</span>
+              </h2>
+              {canWrite && programs.length > 0 && (
+                <button
+                  className={`btn ${creating ? "btn-secondary" : "btn-primary"}`}
+                  type="button"
+                  aria-expanded={creating}
+                  aria-controls="new-campaign"
+                  onClick={() => setCreating(!creating)}
+                >
+                  {creating ? "Cancel" : "+ New"}
+                </button>
+              )}
+            </div>
+            {canWrite && (creating || !programs.length) && (
+              <form id="new-campaign" className="campaign-create space-y-3" onSubmit={createProgram}>
+                <Field
+                  label="New campaign name"
+                  placeholder="Acme SaaS affiliates"
+                  value={programName}
+                  onChange={(e) => setProgramName(e.target.value)}
+                  required
+                  autoFocus={programs.length > 0}
+                />
+                <Field
+                  label="Destination URL (optional)"
+                  type="url"
+                  placeholder="Empty = route through paths"
+                  value={destinationUrl}
+                  onChange={(e) => setDestinationUrl(e.target.value)}
+                />
+                <div className="grid grid-cols-2 gap-3">
                   <SelectField
                     label="Traffic source"
                     value={newSourceId}
@@ -413,84 +423,110 @@ export function DashboardPage() {
                     onChange={setNewGroupId}
                     options={[{ value: "", label: "None" }, ...groups.map((g) => ({ value: g.id, label: g.name }))]}
                   />
-                  <button className="btn btn-primary w-full" disabled={busy} type="submit">
-                    {busy ? "Creating…" : "Create campaign"}
-                  </button>
-                </form>
-              )}
-              <div className="mt-5 space-y-2">
-                {programs.length === 0 && (
-                  <p className="text-sm text-[var(--velo-muted)]">No campaigns yet.</p>
-                )}
-                {programs.map((program) => (
-                  <button
-                    key={program.id}
-                    className={`w-full rounded-md border px-3 py-2 text-left ${
-                      selectedId === program.id
-                        ? "border-[var(--velo-accent)] bg-[var(--velo-accent-soft)]"
-                        : "border-[var(--velo-border)]"
-                    }`}
-                    onClick={() => setSelectedId(program.id)}
-                    type="button"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span className="min-w-0 truncate font-medium">{program.name}</span>
-                      {program.status !== "active" && (
-                        <span className="shrink-0 rounded border border-[var(--velo-border)] px-1.5 text-xs text-[var(--velo-muted)]">
-                          {program.status}
-                        </span>
-                      )}
-                    </div>
-                    <div className="mono truncate text-[var(--velo-muted)]">
-                      {program.campaign_key ?? program.slug}
-                    </div>
-                  </button>
-                ))}
-              </div>
-            </section>
-
-            <section className="min-w-0 space-y-6">
-              {!selectedProgram ? (
-                <div className="card p-8 text-[var(--velo-muted)]">
-                  Create your first campaign to start tracking.
                 </div>
-              ) : tab === "clicklog" ? (
-                <ClicklogTable key={selectedId} programId={selectedId} onError={setError} />
-              ) : tab === "conversions" ? (
-                <ConversionsTable key={selectedId} programId={selectedId} onError={setError} />
-              ) : (
-                <OverviewPanel
-                  key={selectedId}
-                  busy={busy}
-                  canWrite={canWrite}
-                  secretOnce={secretOnce?.programId === selectedId ? secretOnce.secret : ""}
-                  lastLink={lastLink?.programId === selectedId ? lastLink.url : ""}
-                  selectedId={selectedId}
-                  selectedProgram={selectedProgram}
-                  sources={sources}
-                  groups={groups}
-                  tracking={tracking}
-                  visibleStats={visibleStats}
-                  affiliateName={affiliateName}
-                  onAffiliateNameChange={setAffiliateName}
-                  onCreateAffiliate={createAffiliate}
-                  onProgramSaved={replaceProgram}
-                  onError={setError}
-                  onClone={cloneSelectedProgram}
-                  onDelete={() => deleteSelectedProgram(selectedProgram)}
-                  onTrackingChanged={() =>
-                    api
-                      .tracking(selectedId)
-                      .then(({ tracking: t }) => setTracking(t))
-                      .catch(() => undefined)
-                  }
-                />
+                <button className="btn btn-primary w-full" disabled={busy} type="submit">
+                  {busy ? "Creating…" : "Create campaign"}
+                </button>
+              </form>
+            )}
+            {programs.length > 5 && (
+              <input
+                className="input campaign-filter"
+                type="search"
+                aria-label="Filter campaigns"
+                placeholder="Filter campaigns…"
+                value={campaignFilter}
+                onChange={(e) => setCampaignFilter(e.target.value)}
+              />
+            )}
+            <div className="campaign-items">
+              {programs.length === 0 && (
+                <p className="campaign-empty">No campaigns yet. Create one to get a tracking link.</p>
               )}
-            </section>
-          </div>
-        )}
-      </div>
-    </Shell>
+              {visiblePrograms.map((program) => (
+                <button
+                  key={program.id}
+                  className={selectedId === program.id ? "campaign-item is-active" : "campaign-item"}
+                  aria-current={selectedId === program.id ? "true" : undefined}
+                  onClick={() => setSelectedId(program.id)}
+                  type="button"
+                >
+                  <span className={`status-dot is-${program.status}`} title={program.status} />
+                  <span className="min-w-0 flex-1">
+                    <strong>{program.name}</strong>
+                    <small className="mono">{program.campaign_key ?? program.slug}</small>
+                  </span>
+                  {program.status !== "active" && <span className="status-badge">{program.status}</span>}
+                </button>
+              ))}
+            </div>
+          </section>
+
+          <section className="min-w-0 space-y-6">
+            {!selectedProgram ? (
+              <div className="card empty-state">
+                <span className="empty-state-icon" aria-hidden="true">
+                  <Icon name="campaigns" size={20} />
+                </span>
+                <h2>Create your first campaign</h2>
+                <p>A campaign gives you a tracking link, a postback URL, and live stats.</p>
+                <ol>
+                  <li>
+                    <span>
+                      <strong>Name the campaign</strong> and pick its traffic source.
+                    </span>
+                  </li>
+                  <li>
+                    <span>
+                      <strong>Copy the tracking link</strong> into your ad or partner placement.
+                    </span>
+                  </li>
+                  <li>
+                    <span>
+                      <strong>Add the postback URL</strong> in your affiliate network.
+                    </span>
+                  </li>
+                </ol>
+                <Link className="btn btn-secondary" to="/docs/campaigns">
+                  Read the campaign guide
+                </Link>
+              </div>
+            ) : tab === "clicklog" ? (
+              <ClicklogTable key={selectedId} programId={selectedId} onError={setError} />
+            ) : tab === "conversions" ? (
+              <ConversionsTable key={selectedId} programId={selectedId} onError={setError} />
+            ) : (
+              <OverviewPanel
+                key={selectedId}
+                busy={busy}
+                canWrite={canWrite}
+                secretOnce={secretOnce?.programId === selectedId ? secretOnce.secret : ""}
+                lastLink={lastLink?.programId === selectedId ? lastLink.url : ""}
+                selectedId={selectedId}
+                selectedProgram={selectedProgram}
+                sources={sources}
+                groups={groups}
+                tracking={tracking}
+                visibleStats={visibleStats}
+                affiliateName={affiliateName}
+                onAffiliateNameChange={setAffiliateName}
+                onCreateAffiliate={createAffiliate}
+                onProgramSaved={replaceProgram}
+                onError={setError}
+                onClone={cloneSelectedProgram}
+                onDelete={() => deleteSelectedProgram(selectedProgram)}
+                onTrackingChanged={() =>
+                  api
+                    .tracking(selectedId)
+                    .then(({ tracking: t }) => setTracking(t))
+                    .catch(() => undefined)
+                }
+              />
+            )}
+          </section>
+        </div>
+      )}
+    </AppShell>
   );
 }
 
@@ -608,10 +644,14 @@ function OverviewPanel({
       <div className="card min-w-0 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-semibold">{selectedProgram.name}</h2>
-            <p className="mt-1 text-sm text-[var(--velo-muted)]">
-              Status: <strong className="text-[var(--velo-ink)]">{selectedProgram.status}</strong>
-              {paused && " — links return 404 until resumed."}
+            <h2 className="truncate text-lg font-semibold tracking-tight">{selectedProgram.name}</h2>
+            <p className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-[var(--velo-muted)]">
+              <span className={`status-pill is-${selectedProgram.status}`}>
+                <span className={`status-dot is-${selectedProgram.status}`} />
+                {selectedProgram.status}
+              </span>
+              <span className="mono">{selectedProgram.campaign_key ?? selectedProgram.slug}</span>
+              {paused && <span>Links return 404 until resumed.</span>}
             </p>
           </div>
           {canWrite && (
