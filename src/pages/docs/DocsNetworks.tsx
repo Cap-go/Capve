@@ -253,8 +253,8 @@ export function DocsNetworks() {
             Add your account key from the campaign's <em>Tracking &amp; postback</em> card. For
             several funnel steps, add one postback per event:
           </p>
-          <CodeBlock>{`${base}/click?cnv_id={aff_sub}&payout={payout}&event=registration&key=YOUR_POSTBACK_KEY
-${base}/click?cnv_id={aff_sub}&payout={payout}&event=ftd&key=YOUR_POSTBACK_KEY`}</CodeBlock>
+          <CodeBlock label="Registration postback">{`${base}/click?cnv_id={aff_sub}&payout={payout}&event=registration&key=YOUR_POSTBACK_KEY`}</CodeBlock>
+          <CodeBlock label="FTD postback">{`${base}/click?cnv_id={aff_sub}&payout={payout}&event=ftd&key=YOUR_POSTBACK_KEY`}</CodeBlock>
         </li>
       </ol>
 
