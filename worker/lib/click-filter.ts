@@ -21,6 +21,7 @@ export function buildRuleContext(request: Request, click: ClickContext, now = Da
   return {
     ip: click.ip,
     country: click.country,
+    continent: click.continent,
     region: click.region,
     city: click.city,
     device_type: click.device_type,

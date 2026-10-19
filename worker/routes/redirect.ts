@@ -138,6 +138,10 @@ async function handleClickRedirect(
   // Uniqueness is computed inside the INSERT (one round trip).
   await recordClick(c.env.DB, {
     ...contextColumns,
+    // Same values rules matched on, so reports group exactly like rules route.
+    asn: traffic.rule_context.asn,
+    language: traffic.rule_context.language,
+    connection: traffic.rule_context.is_datacenter ? "datacenter" : "residential",
     id: clickId,
     program_id: program.id,
     affiliate_id: affiliate.id,

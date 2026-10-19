@@ -136,7 +136,7 @@ const ruleFields = {
   conditions: {
     type: "array",
     description:
-      "AND-ed conditions. field: country, region, city, device_type, os, browser, isp, asn, language, connection (datacenter|residential), bot (yes|no), referrer_domain, ip (IP or CIDR), weekday (mon..sun), hour (9 or 9-17), sub1..sub10. op: in | not_in.",
+      "AND-ed conditions. field: country, continent (EU, NA…), region, city, device_type, os, browser, isp, asn, language, connection (datacenter|residential), bot (yes|no), referrer_domain, ip (IP or CIDR), weekday (mon..sun), hour (9 or 9-17), sub1..sub10. op: in | not_in.",
     items: {
       type: "object",
       properties: {

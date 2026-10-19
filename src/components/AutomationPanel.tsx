@@ -11,6 +11,7 @@ import { Field, ErrorBox } from "./ui";
 const ZONE_DIMENSIONS = [
   ...Array.from({ length: 10 }, (_, i) => `sub${i + 1}`),
   "isp",
+  "asn",
   "country",
   "referrer_domain",
   "os",

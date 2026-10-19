@@ -19,6 +19,7 @@ export type ClickContext = {
   ip: string | null;
   user_agent: string | null;
   country: string | null;
+  continent: string | null;
   region: string | null;
   city: string | null;
   device_type: string | null;
@@ -34,6 +35,7 @@ export type ClickContext = {
 
 type CfProperties = {
   country?: string;
+  continent?: string;
   region?: string;
   city?: string;
   asOrganization?: string;
@@ -98,6 +100,7 @@ export async function buildClickContext(request: Request): Promise<ClickContext>
     ip,
     user_agent: userAgent,
     country: cf.country?.toUpperCase() ?? null,
+    continent: cf.continent?.toUpperCase() ?? null,
     region: cf.region ?? null,
     city: cf.city ?? null,
     device_type: ua.device_type,

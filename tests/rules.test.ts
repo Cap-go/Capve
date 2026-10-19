@@ -81,6 +81,7 @@ function ctx(overrides: Partial<RuleContext> = {}): RuleContext {
   return {
     ip: null,
     country: null,
+    continent: null,
     region: null,
     city: null,
     device_type: null,
@@ -147,6 +148,7 @@ describe("rule matching (unit)", () => {
   it("supports not_in, language, referrer subdomains and asn", () => {
     const c = ctx({
       country: "FR",
+      continent: "EU",
       language: "de-at",
       referrer_domain: "m.adcash.com",
       asn: 3320,
@@ -155,6 +157,9 @@ describe("rule matching (unit)", () => {
     expect(ruleMatches({ timezone: "UTC", conditions: conditions([{ field: "language", values: ["de"] }]) }, c)).toBe(true);
     expect(ruleMatches({ timezone: "UTC", conditions: conditions([{ field: "referrer_domain", values: ["adcash.com"] }]) }, c)).toBe(true);
     expect(ruleMatches({ timezone: "UTC", conditions: conditions([{ field: "asn", values: ["AS3320"] }]) }, c)).toBe(true);
+    expect(ruleMatches({ timezone: "UTC", conditions: conditions([{ field: "continent", values: ["eu"] }]) }, c)).toBe(true);
+    expect(ruleMatches({ timezone: "UTC", conditions: conditions([{ field: "continent", values: ["NA"] }]) }, c)).toBe(false);
+    expect("error" in parseConditions([{ field: "continent", op: "in", values: ["Europe"] }])).toBe(true);
     // Missing value: `in` never matches, `not_in` always does.
     expect(ruleMatches({ timezone: "UTC", conditions: conditions([{ field: "city", values: ["paris"] }]) }, c)).toBe(false);
     expect(ruleMatches({ timezone: "UTC", conditions: conditions([{ field: "city", op: "not_in", values: ["paris"] }]) }, c)).toBe(true);
@@ -425,6 +430,40 @@ describe("routing rules + anti-fraud (integration)", () => {
     expect((await api("DELETE", `/api/antifraud/blocklist/${list.data.entries[0].id}`)).status).toBe(200);
     await api("PUT", `/api/programs/${programId}/traffic-filter`, { block_datacenter: false });
     expect(target(await click(code, { ip: "203.0.113.5" }))).toBe(DEFAULT_URL);
+  });
+
+  it("stores continent, ASN, language and connection on the click for reports", async () => {
+    const { programId, code } = await setupCampaign();
+    await click(code, { ip: "192.0.2.20", cf: { asn: 3320, continent: "EU", asOrganization: "Deutsche Telekom" }, lang: "de-DE,de;q=0.9" });
+    await click(code, { ip: "192.0.2.21", cf: { asn: 16509, continent: "NA", asOrganization: "Amazon" }, lang: "en-US" });
+    const row = await env.DB.prepare(
+      "SELECT continent, asn, language, connection FROM clicks WHERE program_id = ? AND ip = ?",
+    )
+      .bind(programId, "192.0.2.20")
+      .first();
+    expect(row).toEqual({ continent: "EU", asn: 3320, language: "de-de", connection: "residential" });
+
+    const grouped = async (by: string) =>
+      (await api<{ rows: Array<{ key: string | number | null; label: string; metrics: { clicks: number } }> }>(
+        "GET",
+        `/api/reports/grouped?by=${by}&campaign_id=${programId}`,
+      )).data.rows.map((r) => [String(r.key), r.label]).sort();
+    expect(await grouped("asn")).toEqual([
+      ["16509", "AS16509 · Amazon"],
+      ["3320", "AS3320 · Deutsche Telekom"],
+    ]);
+    expect(await grouped("connection")).toEqual([
+      ["datacenter", "datacenter"],
+      ["residential", "residential"],
+    ]);
+    expect(await grouped("language")).toEqual([
+      ["de-de", "de-de"],
+      ["en-us", "en-us"],
+    ]);
+    expect(await grouped("continent")).toEqual([
+      ["EU", "EU"],
+      ["NA", "NA"],
+    ]);
   });
 
   it("still enforces redirect allowlist rules", async () => {

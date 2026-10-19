@@ -3,6 +3,7 @@ import { appBaseUrl } from "../../lib/constants";
 
 const FIELDS: Array<[string, string]> = [
   ["country", "ISO code from Cloudflare: DE, AT"],
+  ["continent", "AF, AN, AS, EU, NA, OC, SA"],
   ["region, city", "Cloudflare region / city"],
   ["device_type", "mobile, tablet, desktop, bot"],
   ["os, browser", "Android, iOS, Windows · Chrome, Safari"],

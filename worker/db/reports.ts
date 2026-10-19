@@ -108,12 +108,16 @@ export const GROUP_DIMENSIONS = [
   "campaign",
   "date",
   "country",
+  "continent",
   "region",
   "city",
   "device_type",
   "os",
   "browser",
   "isp",
+  "asn",
+  "connection",
+  "language",
   "referrer_domain",
   "offer",
   "lander",
@@ -237,6 +241,13 @@ function dimensionSql(by: GroupDimension, tzOffsetMinutes?: number): DimensionSq
           "LEFT JOIN offers ofn ON ofn.id = c.offer_id LEFT JOIN affiliate_networks nw ON nw.id = ofn.network_id",
         convJoin:
           "LEFT JOIN offers ofn ON ofn.id = c.offer_id LEFT JOIN affiliate_networks nw ON nw.id = ofn.network_id",
+      };
+    case "asn":
+      // Key is the AS number; label adds the ISP name seen on those clicks.
+      return {
+        click: "c.asn",
+        conv: "c.asn",
+        label: "CASE WHEN c.asn IS NULL THEN NULL ELSE 'AS' || c.asn || COALESCE(' · ' || c.isp, '') END",
       };
     case "ip_range":
       return { click: IP_RANGE_SQL, conv: IP_RANGE_SQL };

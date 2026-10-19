@@ -268,6 +268,10 @@ export async function getClickById(db: D1Database, clickId: string): Promise<Cli
 
 const CLICK_CONTEXT_COLUMNS = [
   "country",
+  "continent",
+  "asn",
+  "language",
+  "connection",
   "region",
   "city",
   "device_type",
