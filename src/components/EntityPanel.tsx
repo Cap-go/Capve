@@ -284,7 +284,13 @@ export function EntityPanel({ kind, canWrite = true }: { kind: EntityKind; canWr
             )}
             {kind === "offers" && (
               <p className="text-sm text-[var(--velo-muted)]">
-                Use <span className="mono">{"{click_id}"}</span> in the offer URL for network macros.
+                Paste the network link as is, and put <span className="mono">{"{click_id}"}</span> in its
+                sub ID field, e.g. <span className="mono">{"?subid1={click_id}"}</span>. Not the traffic
+                source&apos;s macro (<span className="mono">[clickid]</span>): that one goes in the
+                campaign link.{" "}
+                <a className="underline" href="/docs/networks" target="_blank" rel="noreferrer">
+                  Example
+                </a>
               </p>
             )}
             {kind === "landers" && (
@@ -503,7 +509,7 @@ function DraftFields({
         <Field
           label="URL"
           type="url"
-          placeholder="https://..."
+          placeholder={kind === "offers" ? "https://network.example/abc123?subid1={click_id}" : "https://..."}
           value={draft.url}
           onChange={(e) => set({ url: e.target.value })}
           required
