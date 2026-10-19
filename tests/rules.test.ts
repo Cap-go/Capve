@@ -466,6 +466,44 @@ describe("routing rules + anti-fraud (integration)", () => {
     ]);
   });
 
+  it("report row actions: a paused path gets no traffic and a row cost uses the report range", async () => {
+    const { programId, code } = await setupCampaign();
+    await api("POST", `/api/programs/${programId}/paths`, {
+      name: "Second",
+      flow_type: "direct",
+      direct_url: DE_MOBILE_URL,
+    });
+    const { data } = await api<{ paths: Array<{ id: string; name: string }> }>(
+      "GET",
+      `/api/programs/${programId}/rotation`,
+    );
+    const first = data.paths.find((p) => p.name === "Default")!;
+    expect(
+      (await api("PATCH", `/api/programs/${programId}/paths/${first.id}`, { enabled: false })).status,
+    ).toBe(200);
+    for (let i = 0; i < 4; i++) {
+      expect(target(await click(code, { cf: { country: i < 3 ? "DE" : "US" } }))).toBe(DE_MOBILE_URL);
+    }
+
+    // The report sends its range as Unix ms.
+    const from = Date.now() - 60_000;
+    const to = Date.now() + 60_000;
+    expect(
+      (await api("POST", `/api/campaigns/${programId}/costs`, {
+        from,
+        to,
+        total_cents: 300,
+        filter_dim: "country",
+        filter_value: "DE",
+      })).status,
+    ).toBe(201);
+    const { data: report } = await api<{ rows: Array<{ key: string; metrics: { clicks: number; cost_cents: number } }> }>(
+      "GET",
+      `/api/reports/grouped?by=country&campaign_id=${programId}&from=${from}&to=${to}`,
+    );
+    expect(report.rows.find((r) => r.key === "DE")?.metrics).toMatchObject({ clicks: 3, cost_cents: 300 });
+  });
+
   it("still enforces redirect allowlist rules", async () => {
     const { programId, code } = await setupCampaign();
     for (const bad of ["javascript:alert(1)", "ftp://safe.example.com", "not a url"]) {

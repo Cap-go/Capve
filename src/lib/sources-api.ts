@@ -107,7 +107,7 @@ export const sourcesApi = {
     request<{ cost_updates: CostUpdate[] }>(`/api/campaigns/${campaignId}/costs`),
   updateCost: (
     campaignId: string,
-    body: { from: string; to: string; total_cents: number; filter_dim?: string; filter_value?: string },
+    body: { from: string | number; to: string | number; total_cents: number; filter_dim?: string; filter_value?: string },
   ) => request<{ cost_update: CostUpdate }>(`/api/campaigns/${campaignId}/costs`, json("POST", body)),
 };
 
