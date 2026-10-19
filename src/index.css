@@ -1762,3 +1762,160 @@ label > span.text-sm.font-medium {
     font-size: 16px;
   }
 }
+
+/* Docs illustrations: a click ID travelling between Capve and an affiliate network. */
+.docs-tok {
+  display: inline-block;
+  border-radius: 4px;
+  padding: 0 4px;
+  font-weight: 600;
+  line-height: 1.5;
+}
+.docs-tok.is-capve {
+  background: #e3ecff;
+  color: #1d3f8f;
+}
+.docs-tok.is-net {
+  background: #fdefc8;
+  color: #7a4300;
+}
+.docs-tok.is-macro {
+  background: #e7f6ec;
+  color: #17643a;
+}
+.docs-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  margin: 20px 0;
+  font-size: 13px;
+  color: var(--velo-muted);
+}
+.docs-legend .docs-tok {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  margin-right: 4px;
+}
+.docs-url {
+  border: 1px solid var(--velo-border);
+  border-radius: 8px;
+  background: #fafaf8;
+  padding: 10px 12px;
+  margin: 6px 0 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  color: #1a1a1a;
+}
+.docs-prose ol.docs-journey {
+  list-style: none;
+  counter-reset: journey;
+  margin: 24px 0;
+  padding: 0;
+}
+.docs-prose .docs-journey > li {
+  counter-increment: journey;
+  position: relative;
+  margin: 0;
+  padding: 0 0 24px 44px;
+}
+.docs-journey > li::before {
+  content: counter(journey);
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #1a1a1a;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+}
+.docs-journey > li:not(:last-child)::after {
+  content: "";
+  position: absolute;
+  left: 13px;
+  top: 32px;
+  bottom: 4px;
+  width: 2px;
+  background: var(--velo-border);
+}
+.docs-journey-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  margin-bottom: 6px;
+}
+.docs-journey-actor {
+  border: 1px solid var(--velo-border);
+  border-radius: 999px;
+  padding: 1px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--velo-muted);
+}
+.docs-journey-actor.is-capve {
+  border-color: #c5d6fa;
+  background: #f5f8ff;
+  color: #1d3f8f;
+}
+.docs-journey-actor.is-net {
+  border-color: #f3dc9b;
+  background: #fffaeb;
+  color: #7a4300;
+}
+.docs-shell .docs-prose .docs-journey-label {
+  margin: 10px 0 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--velo-muted);
+}
+.docs-store {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 4px;
+  border: 1px dashed #e0c069;
+  border-radius: 8px;
+  background: #fffaeb;
+  padding: 10px 14px;
+  margin: 6px 0 10px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+.docs-store > span:first-child {
+  font-size: 11px;
+  color: #7a4300;
+}
+.docs-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 20px 0;
+}
+.docs-pair > div {
+  border: 1px solid var(--velo-border);
+  border-radius: 10px;
+  padding: 14px 16px;
+}
+.docs-pair small {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--velo-muted);
+}
+.docs-shell .docs-prose .docs-pair p {
+  margin: 4px 0 0;
+  font-size: 14px;
+}
+@media (max-width: 767px) {
+  .docs-pair {
+    grid-template-columns: 1fr;
+  }
+  .docs-prose .docs-journey > li {
+    padding-left: 36px;
+  }
+}

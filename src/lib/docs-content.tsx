@@ -2,6 +2,7 @@ import { DocsAccounts } from "../pages/docs/DocsAccounts";
 import { DocsOverview } from "../pages/docs/DocsOverview";
 import { DocsClickIds } from "../pages/docs/DocsClickIds";
 import { DocsCampaigns } from "../pages/docs/DocsCampaigns";
+import { DocsNetworks } from "../pages/docs/DocsNetworks";
 import { DocsMcp } from "../pages/docs/DocsMcp";
 import { DocsPostback } from "../pages/docs/DocsPostback";
 import { DocsTrafficSources } from "../pages/docs/DocsTrafficSources";
@@ -15,6 +16,7 @@ import { DocsGlossary } from "../pages/docs/DocsGlossary";
 export const DOC_CONTENT = {
   "": DocsOverview,
   "click-ids": DocsClickIds,
+  networks: DocsNetworks,
   campaigns: DocsCampaigns,
   accounts: DocsAccounts,
   mcp: DocsMcp,

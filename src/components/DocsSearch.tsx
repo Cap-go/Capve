@@ -11,6 +11,7 @@ export const OPEN_DOCS_SEARCH = "capve:open-docs-search";
 
 const SUGGESTED = [
   { title: "Click IDs & SubIDs", detail: "Which ID to pass, and where", href: "/docs/click-ids" },
+  { title: "Connect an affiliate network", detail: "Offer URL + postback, tested end to end", href: "/docs/networks" },
   { title: "Multi-provider campaigns", detail: "Several networks behind one source", href: "/docs/campaigns" },
   { title: "Postback URL", detail: "Receive conversions from networks", href: "/docs/postback" },
   { title: "POST /api/v1/convert", detail: "Send conversions from your backend", href: "/docs/api/convert" },

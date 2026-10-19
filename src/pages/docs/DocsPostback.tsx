@@ -22,9 +22,22 @@ export function DocsPostback() {
         return macro must resolve to the Capve ID you sent to that network, even when its macro
         is named <code>{"{external_id}"}</code>. This is separate from Capve's stored traffic-source ID.
       </p>
+      <div className="docs-callout">
+        <strong>Setting up a network for the first time?</strong>
+        <p>
+          <Link to="/docs/networks">Connect an affiliate network</Link> walks one click through
+          the offer URL and postback with real values, with a cheat sheet per network and a
+          5-minute test.
+        </p>
+      </div>
       <h2>Incoming postback (network → Capve)</h2>
       <p>Configure this URL in your affiliate network as the conversion postback:</p>
       <CodeBlock>{postbackUrl}</CodeBlock>
+      <p>
+        Replace <code>{"{click_id}"}</code>, <code>{"{payout}"}</code> and{" "}
+        <code>{"{status}"}</code> with <strong>your network&apos;s</strong> macros, e.g.{" "}
+        <code>{"cnv_id={aff_sub}"}</code> on TUNE. The network fills them, not Capve.
+      </p>
 
       <h3>Postback key</h3>
       <p>
