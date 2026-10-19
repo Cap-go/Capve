@@ -21,6 +21,13 @@ export const DOC_PAGES: DocPage[] = [
   },
   {
     group: "Get started",
+    slug: "networks",
+    title: "Connect an affiliate network",
+    description:
+      "Offer URL + postback with real values, a cheat sheet per network, and how to test",
+  },
+  {
+    group: "Get started",
     slug: "campaigns",
     title: "Multi-provider campaigns",
     description:

@@ -85,6 +85,12 @@ export function SourceTemplatePicker({ onCreated }: { onCreated: () => void }) {
             </p>
             {template.postback_url && <CodeBlock>{template.postback_url}</CodeBlock>}
             {template.notes && <p className="text-[var(--velo-muted)]">{template.notes}</p>}
+            <p className="text-[var(--velo-muted)]">
+              Add <span className="mono">&amp;key=…</span> from the campaign&apos;s Tracking &amp; postback card.{" "}
+              <a className="underline" href="/docs/networks" target="_blank" rel="noreferrer">
+                How to test the round trip
+              </a>
+            </p>
             {!template.verified && (
               <p className="text-[var(--velo-muted)]">
                 Macro names could not be verified: compare them with the source's tracking settings
