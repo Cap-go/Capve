@@ -12,6 +12,11 @@ function Net({ children }: { children: string }) {
   return <span className="docs-tok is-net">{children}</span>;
 }
 
+/** A traffic source macro such as Adcash's [clickid] (grey in every illustration). */
+function Src({ children }: { children: string }) {
+  return <span className="docs-tok is-src">{children}</span>;
+}
+
 /** A value Capve fills in before the URL leaves Capve. */
 function Macro({ children }: { children: string }) {
   return <span className="docs-tok is-macro">{children}</span>;
@@ -60,7 +65,62 @@ export function DocsNetworks() {
         <span>
           <Macro>{"{click_id}"}</Macro> Capve macro, filled by Capve
         </span>
+        <span>
+          <Src>[clickid]</Src> traffic source macro
+        </span>
       </div>
+
+      <h2>Already sending ads straight to the network?</h2>
+      <p>
+        Many people start like this: in the traffic source (here Adcash), the ad points directly at
+        the network link, with the source's macro in the network's sub ID.
+      </p>
+      <p className="docs-journey-label">Before: ad URL in Adcash, no tracker</p>
+      <div className="docs-url">
+        https://goyesplay.com/ysrbgh8c2?<Net>subid1</Net>=<Src>[clickid]</Src>
+      </div>
+      <p>
+        Capve sits in the middle, so that one URL becomes <strong>two</strong>. Copy the network
+        link into Capve as an offer, keep everything as is (<code>ysrbgh8c2</code> is your
+        network's link code, leave it), and only swap the macro after <code>subid1=</code>:
+      </p>
+      <div className="docs-pair">
+        <div>
+          <small>A · Ad URL in Adcash</small>
+          <div className="docs-url">
+            {host}/c/YOUR_CAMPAIGN_KEY?zoneid=<Src>[zone]</Src>&amp;clickid=<Src>[clickid]</Src>
+            &amp;…
+          </div>
+          <p>
+            Copy it from the campaign&apos;s <strong>Traffic source link &amp; cost</strong> card. Adcash fills its{" "}
+            <code>[…]</code> macros.
+          </p>
+        </div>
+        <div>
+          <small>B · Offer URL in Capve</small>
+          <div className="docs-url">
+            https://goyesplay.com/ysrbgh8c2?<Net>subid1</Net>=<Macro>{"{click_id}"}</Macro>
+          </div>
+          <p>
+            <code>[clickid]</code> → <code>{"{click_id}"}</code>. Capve fills it with its own ID.
+          </p>
+        </div>
+      </div>
+      <ul role="list">
+        <li>
+          <strong>Do not</strong> recreate the network's link code or campaign name in Capve. Your
+          Capve campaign has its own key; the network link stays exactly the same inside the offer.
+        </li>
+        <li>
+          <strong>Do not</strong> leave <code>[clickid]</code> in the offer URL. Only Adcash
+          understands it, and Adcash never sees that URL. Capve still keeps Adcash's ID (stored as{" "}
+          <code>external_id</code>) to report conversions back to Adcash.
+        </li>
+        <li>
+          In the network's postback, use the macro that returns <code>subid1</code>:{" "}
+          <code>{"/click?cnv_id={subid1}"}</code> (check the exact name in the network).
+        </li>
+      </ul>
 
       <h2>Follow one click</h2>
       <p>
@@ -253,8 +313,8 @@ export function DocsNetworks() {
             Add your account key from the campaign's <em>Tracking &amp; postback</em> card. For
             several funnel steps, add one postback per event:
           </p>
-          <CodeBlock>{`${base}/click?cnv_id={aff_sub}&payout={payout}&event=registration&key=YOUR_POSTBACK_KEY
-${base}/click?cnv_id={aff_sub}&payout={payout}&event=ftd&key=YOUR_POSTBACK_KEY`}</CodeBlock>
+          <CodeBlock label="Registration postback">{`${base}/click?cnv_id={aff_sub}&payout={payout}&event=registration&key=YOUR_POSTBACK_KEY`}</CodeBlock>
+          <CodeBlock label="FTD postback">{`${base}/click?cnv_id={aff_sub}&payout={payout}&event=ftd&key=YOUR_POSTBACK_KEY`}</CodeBlock>
         </li>
       </ol>
 

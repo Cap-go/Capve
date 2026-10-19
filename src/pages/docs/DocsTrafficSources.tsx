@@ -55,10 +55,10 @@ export function DocsTrafficSources() {
         MyAffiliates) give the offer URL parameter and the incoming postbacks with the network's
         macros, one per event:
       </p>
-      <CodeBlock>{`Offer URL: https://casino.example/?aff_sub={click_id}
-${base}/click?cnv_id={aff_sub}&payout={payout}
-${base}/click?cnv_id={aff_sub}&payout={payout}&event=registration
-${base}/click?cnv_id={aff_sub}&payout={payout}&event=ftd`}</CodeBlock>
+      <CodeBlock label="Offer URL (in Capve)">{"https://casino.example/?aff_sub={click_id}"}</CodeBlock>
+      <CodeBlock label="Default postback (in the network)">{`${base}/click?cnv_id={aff_sub}&payout={payout}`}</CodeBlock>
+      <CodeBlock label="Registration postback">{`${base}/click?cnv_id={aff_sub}&payout={payout}&event=registration`}</CodeBlock>
+      <CodeBlock label="FTD postback">{`${base}/click?cnv_id={aff_sub}&payout={payout}&event=ftd`}</CodeBlock>
 
       <h2>Cost updates</h2>
       <p>

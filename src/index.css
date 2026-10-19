@@ -1779,6 +1779,10 @@ label > span.text-sm.font-medium {
   background: #fdefc8;
   color: #7a4300;
 }
+.docs-tok.is-src {
+  background: #ececea;
+  color: #3d3d3a;
+}
 .docs-tok.is-macro {
   background: #e7f6ec;
   color: #17643a;
