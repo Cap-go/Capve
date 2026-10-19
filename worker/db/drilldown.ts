@@ -1,4 +1,5 @@
 import {
+  TIME_DIMENSIONS,
   getGroupedReport,
   type GroupDimension,
   type GroupedReportOptions,
@@ -74,5 +75,14 @@ export async function getDrilldownReport(
     parents = next;
   });
 
+  sortTimeLevels(roots);
   return roots;
+}
+
+/** Time levels (hour, weekday…) read in order; other levels keep the by-clicks order. */
+function sortTimeLevels(nodes: DrilldownNode[]): void {
+  if (nodes.length && TIME_DIMENSIONS.has(nodes[0].dimension)) {
+    nodes.sort((a, b) => (a.key ?? "").localeCompare(b.key ?? ""));
+  }
+  for (const node of nodes) sortTimeLevels(node.children);
 }

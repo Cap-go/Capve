@@ -120,6 +120,17 @@ export const GROUP_DIMENSIONS = [
   "path",
   "traffic_source",
   "affiliate",
+  "network",
+  "hour",
+  "weekday",
+  "week",
+  "month",
+  "ip",
+  "ip_range",
+  "user_agent",
+  "uniqueness",
+  "bot",
+  "external_id",
   "sub1",
   "sub2",
   "sub3",
@@ -133,6 +144,24 @@ export const GROUP_DIMENSIONS = [
 ] as const;
 
 export type GroupDimension = (typeof GROUP_DIMENSIONS)[number];
+
+/** Time-of-click dimensions: report rows are sorted by key instead of by clicks. */
+export const TIME_DIMENSIONS: ReadonlySet<GroupDimension> = new Set([
+  "date",
+  "hour",
+  "weekday",
+  "week",
+  "month",
+]);
+
+/** Dimensions that cannot hold a traffic zone (automation zone blacklist). */
+export const NON_ZONE_DIMENSIONS: ReadonlySet<string> = new Set([
+  "campaign",
+  "traffic_source",
+  "uniqueness",
+  "bot",
+  ...TIME_DIMENSIONS,
+]);
 
 export function isGroupDimension(value: string | undefined): value is GroupDimension {
   return !!value && (GROUP_DIMENSIONS as readonly string[]).includes(value);
@@ -157,17 +186,64 @@ function tzModifier(offsetMinutes: number | undefined): string {
   return minutes ? `, '${minutes > 0 ? "+" : "-"}${Math.abs(minutes)} minutes'` : "";
 }
 
+/** Click time formatted with strftime in the account timezone. */
+function timeSql(format: string, tzOffsetMinutes?: number): DimensionSql {
+  const tz = tzModifier(tzOffsetMinutes);
+  return {
+    click: `strftime('${format}', c.created_at / 1000, 'unixepoch'${tz})`,
+    conv: `strftime('${format}', ${CONV_TIME} / 1000, 'unixepoch'${tz})`,
+  };
+}
+
+/** Boolean click flag as a readable key, e.g. 1 → "unique", 0 → "repeat". */
+function flagSql(column: string, yes: string, no: string): DimensionSql {
+  const sql = `CASE WHEN ${column} IS NULL THEN NULL WHEN ${column} = 1 THEN '${yes}' ELSE '${no}' END`;
+  return { click: sql, conv: sql };
+}
+
+/** Weekday key sortable Monday-first: "1 Monday" … "7 Sunday". */
+function weekdaySql(dayOfWeek: string): string {
+  const days = ["7 Sunday", "1 Monday", "2 Tuesday", "3 Wednesday", "4 Thursday", "5 Friday", "6 Saturday"];
+  return `CASE ${dayOfWeek} ${days.map((d, i) => `WHEN '${i}' THEN '${d}'`).join(" ")} END`;
+}
+
+/** IPv4 → its /24 range (`1.2.3.xxx`); other addresses are kept as they are. */
+const IP_RANGE_SQL =
+  "CASE WHEN c.ip LIKE '%.%.%.%' AND instr(c.ip, ':') = 0 THEN rtrim(c.ip, '0123456789') || 'xxx' ELSE c.ip END";
+
 function dimensionSql(by: GroupDimension, tzOffsetMinutes?: number): DimensionSql {
   switch (by) {
     case "campaign":
       return { click: "p.id", conv: "p.id", label: "p.name" };
-    case "date": {
-      const tz = tzModifier(tzOffsetMinutes);
-      return {
-        click: `strftime('%Y-%m-%d', c.created_at / 1000, 'unixepoch'${tz})`,
-        conv: `strftime('%Y-%m-%d', ${CONV_TIME} / 1000, 'unixepoch'${tz})`,
-      };
+    case "date":
+      return timeSql("%Y-%m-%d", tzOffsetMinutes);
+    case "hour":
+      return timeSql("%H", tzOffsetMinutes);
+    case "weekday": {
+      const day = timeSql("%w", tzOffsetMinutes);
+      return { click: weekdaySql(day.click), conv: weekdaySql(day.conv) };
     }
+    case "week":
+      return timeSql("%Y-W%W", tzOffsetMinutes);
+    case "month":
+      return timeSql("%Y-%m", tzOffsetMinutes);
+    case "network":
+      // The clicked offer's affiliate network (offers.network_id).
+      return {
+        click: "ofn.network_id",
+        conv: "ofn.network_id",
+        label: "nw.name",
+        clickJoin:
+          "LEFT JOIN offers ofn ON ofn.id = c.offer_id LEFT JOIN affiliate_networks nw ON nw.id = ofn.network_id",
+        convJoin:
+          "LEFT JOIN offers ofn ON ofn.id = c.offer_id LEFT JOIN affiliate_networks nw ON nw.id = ofn.network_id",
+      };
+    case "ip_range":
+      return { click: IP_RANGE_SQL, conv: IP_RANGE_SQL };
+    case "uniqueness":
+      return flagSql("c.is_unique", "unique", "repeat");
+    case "bot":
+      return flagSql("c.is_bot", "bot", "human");
     case "offer":
       return {
         click: "c.offer_id",
@@ -437,7 +513,7 @@ export async function getGroupedReport(
     };
   });
 
-  if (by === "date") {
+  if (TIME_DIMENSIONS.has(by)) {
     return rows.sort((a, b) => (a.key ?? "").localeCompare(b.key ?? ""));
   }
   return rows.sort((a, b) => b.metrics.clicks - a.metrics.clicks || b.metrics.leads - a.metrics.leads);

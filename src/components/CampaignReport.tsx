@@ -15,6 +15,7 @@ import { ErrorBox, Field } from "./ui";
 import { DrilldownPanel } from "./Drilldown";
 import { eventLabel, sortEvents } from "../lib/events";
 import { useSubLabels, withSubLabels } from "../lib/sources-api";
+import { REPORT_DIMENSIONS, groupOptions } from "../lib/report-dimensions";
 
 /** Event names present in rows, one report column each. */
 function eventColumns(rows: Array<{ events: Record<string, number> }>): string[] {
@@ -50,41 +51,65 @@ function RevenueCell({
   );
 }
 
-type DatePreset = "7d" | "30d" | "all" | "custom";
+type DatePreset =
+  | "today"
+  | "yesterday"
+  | "7d"
+  | "30d"
+  | "this_month"
+  | "last_month"
+  | "all"
+  | "custom";
 
-const GROUP_BY_OPTIONS = [
-  { value: "date", label: "Date" },
-  { value: "country", label: "Country" },
-  { value: "region", label: "Region" },
-  { value: "city", label: "City" },
-  { value: "device_type", label: "Device type" },
-  { value: "os", label: "OS" },
-  { value: "browser", label: "Browser" },
-  { value: "isp", label: "ISP" },
-  { value: "referrer_domain", label: "Referrer" },
-  { value: "offer", label: "Offer" },
-  { value: "lander", label: "Lander" },
-  { value: "path", label: "Path" },
-  { value: "affiliate", label: "Affiliate" },
-  { value: "traffic_source", label: "Traffic source" },
-  ...Array.from({ length: 10 }, (_, i) => ({ value: `sub${i + 1}`, label: `Sub ${i + 1}` })),
+const DATE_PRESETS: Array<{ value: DatePreset; label: string }> = [
+  { value: "today", label: "Today" },
+  { value: "yesterday", label: "Yesterday" },
+  { value: "7d", label: "Last 7 days" },
+  { value: "30d", label: "Last 30 days" },
+  { value: "this_month", label: "This month" },
+  { value: "last_month", label: "Last month" },
+  { value: "all", label: "All time" },
+  { value: "custom", label: "Custom range" },
 ];
 
+/** Inside one campaign, grouping by campaign is meaningless. */
+const GROUP_BY_OPTIONS = REPORT_DIMENSIONS.filter((d) => d.value !== "campaign");
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Date presets use the browser's local calendar days, like the custom range. */
 function presetRange(
   preset: DatePreset,
   custom: { from: string; to: string },
+  now = new Date(),
 ): { from?: number; to?: number } {
-  if (preset === "all") return {};
-  if (preset === "custom") {
-    return {
-      from: custom.from ? new Date(`${custom.from}T00:00:00`).getTime() : undefined,
-      to: custom.to ? new Date(`${custom.to}T23:59:59.999`).getTime() : undefined,
-    };
+  const startOfDay = (d: Date) => new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+  const today = startOfDay(now);
+  switch (preset) {
+    case "all":
+      return {};
+    case "custom":
+      return {
+        from: custom.from ? new Date(`${custom.from}T00:00:00`).getTime() : undefined,
+        to: custom.to ? new Date(`${custom.to}T23:59:59.999`).getTime() : undefined,
+      };
+    case "today":
+      return { from: today, to: now.getTime() };
+    case "yesterday": {
+      const yesterday = startOfDay(new Date(today - 1));
+      return { from: yesterday, to: today - 1 };
+    }
+    case "this_month":
+      return { from: new Date(now.getFullYear(), now.getMonth(), 1).getTime(), to: now.getTime() };
+    case "last_month": {
+      const start = new Date(now.getFullYear(), now.getMonth() - 1, 1).getTime();
+      return { from: start, to: new Date(now.getFullYear(), now.getMonth(), 1).getTime() - 1 };
+    }
+    default: {
+      const days = preset === "7d" ? 7 : 30;
+      return { from: now.getTime() - days * DAY_MS, to: now.getTime() };
+    }
   }
-  const days = preset === "7d" ? 7 : 30;
-  const to = Date.now();
-  const from = to - days * 24 * 60 * 60 * 1000;
-  return { from, to };
 }
 
 function queryString(filters: Record<string, string | number | undefined>): string {
@@ -262,12 +287,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
             label="Date range"
             value={preset}
             onChange={(v) => setPreset(v as DatePreset)}
-            options={[
-              { value: "7d", label: "Last 7 days" },
-              { value: "30d", label: "Last 30 days" },
-              { value: "all", label: "All time" },
-              { value: "custom", label: "Custom range" },
-            ]}
+            options={DATE_PRESETS}
           />
           {preset === "custom" && (
             <>
@@ -458,8 +478,9 @@ function FilterSelect({
   label: string;
   value: string;
   onChange: (value: string) => void;
-  options: Array<{ value: string; label: string }>;
+  options: Array<{ value: string; label: string; group?: string }>;
 }) {
+  const sections = groupOptions(options);
   return (
     <label className="block space-y-2">
       <span className="text-sm font-medium text-[var(--velo-muted)]">{label}</span>
@@ -468,11 +489,20 @@ function FilterSelect({
         value={value}
         onChange={(e) => onChange(e.target.value)}
       >
-        {options.map((option) => (
-          <option key={option.value} value={option.value}>
-            {option.label}
-          </option>
-        ))}
+        {sections.map(([group, items]) => {
+          const rendered = items.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ));
+          return group ? (
+            <optgroup key={group} label={group}>
+              {rendered}
+            </optgroup>
+          ) : (
+            rendered
+          );
+        })}
       </select>
     </label>
   );
