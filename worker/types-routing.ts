@@ -47,6 +47,7 @@ export type RuleOperator = "in" | "not_in";
 
 export type RuleField =
   | "country"
+  | "continent"
   | "region"
   | "city"
   | "device_type"

@@ -16,6 +16,7 @@ const SELECT =
 
 const FIELDS: { value: string; label: string; hint: string }[] = [
   { value: "country", label: "Country", hint: "DE, AT, CH" },
+  { value: "continent", label: "Continent", hint: "EU, NA, AS (AF, AN, OC, SA)" },
   { value: "region", label: "Region", hint: "BY, NRW" },
   { value: "city", label: "City", hint: "Berlin, Munich" },
   { value: "device_type", label: "Device", hint: "mobile, tablet, desktop" },

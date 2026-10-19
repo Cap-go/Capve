@@ -15,6 +15,7 @@ import type {
 
 export const RULE_FIELDS: readonly RuleField[] = [
   "country",
+  "continent",
   "region",
   "city",
   "device_type",
@@ -32,6 +33,9 @@ export const RULE_FIELDS: readonly RuleField[] = [
   ...SUB_KEYS,
 ];
 
+/** Cloudflare continent codes (`request.cf.continent`). */
+const CONTINENTS = ["AF", "AN", "AS", "EU", "NA", "OC", "SA"];
+
 const OPERATORS: readonly RuleOperator[] = ["in", "not_in"];
 const WEEKDAYS = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"] as const;
 const MAX_CONDITIONS = 20;
@@ -42,6 +46,7 @@ export type RuleContext = Pick<
   ClickContext,
   | "ip"
   | "country"
+  | "continent"
   | "region"
   | "city"
   | "device_type"
@@ -130,6 +135,8 @@ function normalizeValue(field: RuleField, raw: string): string | null {
   switch (field) {
     case "country":
       return /^[a-z]{2}$/i.test(value) ? value.toUpperCase() : null;
+    case "continent":
+      return CONTINENTS.includes(value.toUpperCase()) ? value.toUpperCase() : null;
     case "asn": {
       const asn = parseAsn(value);
       return asn === null ? null : String(asn);
@@ -205,6 +212,8 @@ function fieldMatches(
   switch (field) {
     case "country":
       return !!ctx.country && values.includes(ctx.country.toUpperCase());
+    case "continent":
+      return !!ctx.continent && values.includes(ctx.continent.toUpperCase());
     case "isp": {
       const isp = lower(ctx.isp);
       return !!isp && values.some((v) => isp.includes(v));

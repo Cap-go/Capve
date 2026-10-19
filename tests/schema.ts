@@ -136,6 +136,10 @@ CREATE TABLE IF NOT EXISTS clicks (
   is_unique INTEGER NOT NULL DEFAULT 1,
   is_bot INTEGER NOT NULL DEFAULT 0,
   lp_clicked_at INTEGER,
+  continent TEXT,
+  asn INTEGER,
+  language TEXT,
+  connection TEXT,
   created_at INTEGER NOT NULL
 );
 
