@@ -165,9 +165,9 @@ export function NetworkTemplatePicker({ onCreated }: { onCreated: () => void }) 
               Add <span className="mono">{template.offer_url_suffix}</span> to the offer URL, then
               paste these postbacks in the network (one per event):
             </p>
-            <CodeBlock>
-              {`${template.incoming_postback_urls.default}\n${template.incoming_postback_urls.registration}\n${template.incoming_postback_urls.ftd}`}
-            </CodeBlock>
+            <CodeBlock label="Default postback">{template.incoming_postback_urls.default}</CodeBlock>
+            <CodeBlock label="Registration postback">{template.incoming_postback_urls.registration}</CodeBlock>
+            <CodeBlock label="FTD postback">{template.incoming_postback_urls.ftd}</CodeBlock>
             {template.notes && <p className="text-[var(--velo-muted)]">{template.notes}</p>}
           </div>
         )}

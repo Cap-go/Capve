@@ -840,12 +840,20 @@ function OverviewPanel({
             <CodeBlock>{tracking.postback_url}</CodeBlock>
             {canWrite ? <PostbackKeyControls onChange={onTrackingChanged} /> : null}
             <p className="text-sm text-[var(--velo-muted)]">
-              Several events per campaign? Give the network one URL per event. Each event is counted on
-              its own in stats:
+              In the network, replace <span className="mono">{"{click_id}"}</span>,{" "}
+              <span className="mono">{"{payout}"}</span> and <span className="mono">{"{status}"}</span>{" "}
+              with the network&apos;s own macros (e.g. <span className="mono">{"cnv_id={aff_sub}"}</span>
+              ).{" "}
+              <Link className="underline" to="/docs/networks">
+                Cheat sheet per network
+              </Link>
             </p>
-            <CodeBlock>
-              {`${tracking.postback_url}&event=registration\n${tracking.postback_url}&event=ftd`}
-            </CodeBlock>
+            <p className="text-sm text-[var(--velo-muted)]">
+              Several events per campaign? Add one postback per event in the network. Each event is
+              counted on its own in stats:
+            </p>
+            <CodeBlock label="Registration postback">{`${tracking.postback_url}&event=registration`}</CodeBlock>
+            <CodeBlock label="FTD postback">{`${tracking.postback_url}&event=ftd`}</CodeBlock>
             {tracking.campaign_url && (
               <>
                 <p className="text-sm text-[var(--velo-muted)]">

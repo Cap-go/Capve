@@ -136,8 +136,8 @@ export function DocsPostback() {
         One campaign can report several events. Give the network one postback URL per event,
         each with its own <code>event</code> value:
       </p>
-      <CodeBlock>{`${postbackUrl}&event=registration
-${postbackUrl}&event=ftd`}</CodeBlock>
+      <CodeBlock label="Registration postback">{`${postbackUrl}&event=registration`}</CodeBlock>
+      <CodeBlock label="FTD postback">{`${postbackUrl}&event=ftd`}</CodeBlock>
       <p>
         A registration and an FTD for the same click are two conversions. Reports, campaign stats
         and CSV exports show one column per event (Registrations, FTD, …) next to the total.
