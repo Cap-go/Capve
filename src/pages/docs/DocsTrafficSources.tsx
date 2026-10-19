@@ -76,6 +76,14 @@ export function DocsTrafficSources() {
         <code>external_id</code>). Use <code>from</code>/<code>to</code> (ISO or Unix ms) for a
         range. <code>GET /api/campaigns/:id/costs</code> lists past updates.
       </p>
+      <h3>From a report row</h3>
+      <p>
+        In <strong>Reports → Breakdown</strong>, group by a token, country or external ID and use{" "}
+        <strong>Set cost</strong> on a row. It sends the same update for that value over the
+        report's date range. Rows grouped by a token also have <strong>Blacklist</strong>, which adds
+        the zone to the campaign's blacklist export. Group by <strong>Path</strong> to pause or resume
+        a path; a paused path gets no new traffic and keeps its stats.
+      </p>
 
       <h2>Cost from the traffic source API</h2>
       <p>

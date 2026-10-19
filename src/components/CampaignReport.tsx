@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import {
   api,
   formatMoney,
@@ -13,6 +13,7 @@ import {
 } from "../lib/api";
 import { ErrorBox, Field } from "./ui";
 import { DrilldownPanel } from "./Drilldown";
+import { useReportRowActions } from "./ReportRowActions";
 import { eventLabel, sortEvents } from "../lib/events";
 import { useSubLabels, withSubLabels } from "../lib/sources-api";
 import { REPORT_DIMENSIONS, groupOptions } from "../lib/report-dimensions";
@@ -139,6 +140,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
   const [trends, setTrends] = useState<TrendPoint[]>([]);
   const [groupBy, setGroupBy] = useState("country");
   const [groupedRows, setGroupedRows] = useState<GroupedReportRow[]>([]);
+  const [groupedVersion, setGroupedVersion] = useState(0);
   const campaignEvents = useMemo(() => eventColumns(campaigns), [campaigns]);
 
   const filters = useMemo(() => {
@@ -215,7 +217,16 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
     return () => {
       cancelled = true;
     };
-  }, [selectedId, groupBy, filters.from, filters.to]);
+  }, [selectedId, groupBy, filters.from, filters.to, groupedVersion]);
+
+  const rowActions = useReportRowActions({
+    campaignId: selectedId,
+    groupBy,
+    from: filters.from,
+    to: filters.to,
+    onChanged: () => setGroupedVersion((v) => v + 1),
+    onError: setError,
+  });
 
   const selectedName = campaigns.find((row) => row.id === selectedId)?.name ?? "selected campaign";
   const exportCampaignsUrl = `/api/reports/campaigns.csv${queryString(filters)}`;
@@ -460,7 +471,18 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
               Export CSV
             </a>
           </div>
-          <GroupedTable rows={groupedRows} />
+          {canWrite && rowActions.hasActions && (
+            <p className="mt-2 text-xs text-[var(--velo-muted)]">
+              {groupBy === "path"
+                ? "Pause a path to stop sending traffic to it; its stats stay."
+                : "Set cost spreads a total over this row's clicks in the selected period and replaces their cost."}
+            </p>
+          )}
+          <GroupedTable
+            actions={canWrite && rowActions.hasActions ? rowActions.render : undefined}
+            pausedKey={(key) => groupBy === "path" && rowActions.pathEnabled(key) === false}
+            rows={groupedRows}
+          />
         </div>
       )}
 
@@ -508,7 +530,15 @@ function FilterSelect({
   );
 }
 
-function GroupedTable({ rows }: { rows: GroupedReportRow[] }) {
+function GroupedTable({
+  rows,
+  actions,
+  pausedKey,
+}: {
+  rows: GroupedReportRow[];
+  actions?: (row: GroupedReportRow) => ReactNode;
+  pausedKey?: (key: string) => boolean;
+}) {
   const events = eventColumns(rows);
   return (
     <div className="mt-4 overflow-x-auto">
@@ -530,19 +560,25 @@ function GroupedTable({ rows }: { rows: GroupedReportRow[] }) {
             <th>Cost</th>
             <th>Profit</th>
             <th>ROI</th>
+            {actions && <th>Actions</th>}
           </tr>
         </thead>
         <tbody>
           {rows.length === 0 && (
             <tr>
-              <td colSpan={12 + events.length} className="text-[var(--velo-muted)]">
+              <td colSpan={(actions ? 13 : 12) + events.length} className="text-[var(--velo-muted)]">
                 No data for this period.
               </td>
             </tr>
           )}
           {rows.map((row) => (
             <tr key={row.key ?? "__none"}>
-              <td className="font-medium">{row.label}</td>
+              <td className="font-medium">
+                {row.label}
+                {row.key != null && pausedKey?.(row.key) && (
+                  <span className="ml-2 text-xs font-normal text-[var(--velo-muted)]">paused</span>
+                )}
+              </td>
               <td>{row.metrics.clicks}</td>
               <td>{row.unique_clicks}</td>
               <td>{row.bot_clicks}</td>
@@ -557,6 +593,7 @@ function GroupedTable({ rows }: { rows: GroupedReportRow[] }) {
               <td>{formatMoney(row.metrics.cost_cents, row.currency)}</td>
               <td>{formatMoney(row.metrics.profit_cents, row.currency)}</td>
               <td>{formatPercent(row.metrics.roi)}</td>
+              {actions && <td className="whitespace-nowrap">{actions(row)}</td>}
             </tr>
           ))}
         </tbody>
