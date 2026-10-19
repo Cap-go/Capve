@@ -456,7 +456,8 @@ export function CampaignSourcePanel({ programId, canWrite }: { programId: string
       {link?.tracking_url && (
         <div className="mt-4 space-y-2">
           <p className="text-sm text-[var(--velo-muted)]">
-            Paste in your traffic source (its macros are filled per click):
+            Use this as the ad URL in your traffic source, instead of the network link (its macros
+            are filled per click). The network link goes in the offer.
           </p>
           <CodeBlock>{link.tracking_url}</CodeBlock>
         </div>
