@@ -3,25 +3,8 @@ import { formatMoney, formatPercent } from "../lib/api";
 import { automationApi, type DrilldownNode } from "../lib/api-automation";
 import { eventLabel, sortEvents } from "../lib/events";
 import { ErrorBox } from "./ui";
+import { REPORT_DIMENSIONS, dimensionLabel, groupOptions } from "../lib/report-dimensions";
 
-const DIMENSIONS = [
-  { value: "campaign", label: "Campaign" },
-  { value: "date", label: "Date" },
-  { value: "country", label: "Country" },
-  { value: "region", label: "Region" },
-  { value: "city", label: "City" },
-  { value: "device_type", label: "Device type" },
-  { value: "os", label: "OS" },
-  { value: "browser", label: "Browser" },
-  { value: "isp", label: "ISP" },
-  { value: "referrer_domain", label: "Referrer" },
-  { value: "offer", label: "Offer" },
-  { value: "lander", label: "Lander" },
-  { value: "path", label: "Path" },
-  { value: "affiliate", label: "Affiliate" },
-  { value: "traffic_source", label: "Traffic source" },
-  ...Array.from({ length: 10 }, (_, i) => ({ value: `sub${i + 1}`, label: `Sub ${i + 1}` })),
-];
 const MAX_LEVELS = 4;
 
 function collectEvents(rows: DrilldownNode[], into = new Set<string>()): Set<string> {
@@ -130,7 +113,6 @@ export function DrilldownPanel({
     });
   }
 
-  const options = [{ value: "", label: "—" }, ...DIMENSIONS];
 
   return (
     <div className="card p-5">
@@ -150,14 +132,18 @@ export function DrilldownPanel({
                 value={levels[index] ?? ""}
                 onChange={(e) => setLevel(index, e.target.value)}
               >
-                {options
-                  .filter((o) => o.value === levels[index] || !levels.includes(o.value))
-                  .filter((o) => index > 0 || o.value)
-                  .map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
-                  ))}
+                {index > 0 && <option value="">—</option>}
+                {groupOptions(
+                  REPORT_DIMENSIONS.filter((o) => o.value === levels[index] || !levels.includes(o.value)),
+                ).map(([group, items]) => (
+                  <optgroup key={group} label={group}>
+                    {items.map((option) => (
+                      <option key={option.value} value={option.value}>
+                        {option.label}
+                      </option>
+                    ))}
+                  </optgroup>
+                ))}
               </select>
             </label>
           ))}
@@ -168,7 +154,7 @@ export function DrilldownPanel({
         <table className="table">
           <thead>
             <tr>
-              <th>{levels.map((l) => DIMENSIONS.find((d) => d.value === l)?.label ?? l).join(" › ")}</th>
+              <th>{levels.map(dimensionLabel).join(" › ")}</th>
               <th>Clicks</th>
               <th>Conv.</th>
               {events.map((name) => (

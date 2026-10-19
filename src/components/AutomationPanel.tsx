@@ -18,6 +18,11 @@ const ZONE_DIMENSIONS = [
   "device_type",
   "offer",
   "lander",
+  "network",
+  "ip",
+  "ip_range",
+  "user_agent",
+  "external_id",
 ];
 
 function describe(rule: AutomationRule): string {

@@ -10,7 +10,7 @@ import {
   setAutomationRuleEnabled,
   type NewAutomationRule,
 } from "../db/automation";
-import { isGroupDimension } from "../db/reports";
+import { NON_ZONE_DIMENSIONS, isGroupDimension } from "../db/reports";
 import { evaluateAutomationRule } from "../cron/alerts";
 import { requireUser, requireWrite } from "../lib/access";
 import { toCsv } from "../lib/metrics";
@@ -18,7 +18,6 @@ import { optionalHttpUrl } from "../lib/urls";
 import type { Env } from "../types";
 
 /** Dimensions that can be blacklisted as zones (not campaign/date/traffic source). */
-const NON_ZONE_DIMENSIONS = new Set(["campaign", "date", "traffic_source"]);
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const automation = new Hono<{ Bindings: Env }>();

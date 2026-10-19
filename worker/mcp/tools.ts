@@ -1,4 +1,4 @@
-import { GROUP_DIMENSIONS } from "../db/reports";
+import { GROUP_DIMENSIONS, NON_ZONE_DIMENSIONS } from "../db/reports";
 import { SOURCE_TOOLS } from "./tools-sources";
 
 /** Internal API request an MCP tool call maps to. Runs with the caller's bearer token. */
@@ -1008,7 +1008,7 @@ export const TOOLS: McpTool[] = [
         kind: enumOf(["zone_blacklist", "alert"], "Rule type."),
         name: str("Rule name (optional)."),
         dimension: enumOf(
-          GROUP_DIMENSIONS.filter((d) => !["campaign", "date", "traffic_source"].includes(d)),
+          GROUP_DIMENSIONS.filter((d) => !NON_ZONE_DIMENSIONS.has(d)),
           "zone_blacklist: dimension holding the zone (default sub1).",
         ),
         min_clicks: int("zone_blacklist: minimum clicks."),

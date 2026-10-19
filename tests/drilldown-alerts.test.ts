@@ -223,6 +223,100 @@ describe("drilldown, timezone, automation, tracking domains", () => {
     await api("/api/settings", { method: "PUT", body: JSON.stringify({ timezone: "UTC" }) });
   });
 
+  it("groups reports by time, network, IP range, uniqueness and bot", async () => {
+    const { program, affiliateId } = await createCampaign("Groupings campaign");
+    const { body: net } = await api<{ network: { id: string } }>("/api/entities/networks", {
+      method: "POST",
+      body: JSON.stringify({ name: "Net A" }),
+    });
+    const { body: off } = await api<{ offer: { id: string } }>("/api/entities/offers", {
+      method: "POST",
+      body: JSON.stringify({ name: "Offer A", url: MERCHANT, network_id: net.network.id }),
+    });
+    const insert = (id: string, fields: Record<string, string | number | null>) =>
+      env.DB.prepare(
+        `INSERT INTO clicks (id, program_id, affiliate_id, created_at, ip, user_agent, is_unique, is_bot, external_id, offer_id)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      )
+        .bind(
+          id,
+          program.id,
+          affiliateId,
+          fields.created_at,
+          fields.ip,
+          "UA",
+          fields.is_unique ?? 1,
+          fields.is_bot ?? 0,
+          fields.external_id ?? null,
+          fields.offer_id ?? null,
+        )
+        .run();
+    // Europe/Paris is UTC+2 in July: hours and weekdays follow the account timezone.
+    await api("/api/settings", { method: "PUT", body: JSON.stringify({ timezone: "Europe/Paris" }) });
+    await insert("clk_g1", {
+      created_at: Date.UTC(2026, 6, 6, 8, 15), // Monday 10:15 Paris
+      ip: "1.2.3.4",
+      external_id: "src_1",
+      offer_id: off.offer.id,
+    });
+    await insert("clk_g2", { created_at: Date.UTC(2026, 6, 6, 8, 45), ip: "1.2.3.99", is_unique: 0, is_bot: 1 });
+    await insert("clk_g3", { created_at: Date.UTC(2026, 6, 5, 20, 0), ip: "2001:db8::1" }); // Sunday 22:00
+    await insertConversion(program.id, affiliateId, "clk_g1", "ftd", 5000, Date.UTC(2026, 6, 6, 9));
+
+    const grouped = async (by: string) =>
+      (
+        await api<{ rows: Array<{ key: string | null; label: string; metrics: { clicks: number; leads: number } }> }>(
+          `/api/reports/grouped?by=${by}&campaign_id=${program.id}&from=2026-07-01&to=2026-07-31`,
+        )
+      ).body.rows.map((r) => [r.key, r.label, r.metrics.clicks, r.metrics.leads]);
+
+    expect(await grouped("hour")).toEqual([
+      ["10", "10", 2, 1],
+      ["22", "22", 1, 0],
+    ]);
+    expect(await grouped("weekday")).toEqual([
+      ["1 Monday", "1 Monday", 2, 1],
+      ["7 Sunday", "7 Sunday", 1, 0],
+    ]);
+    expect(await grouped("month")).toEqual([["2026-07", "2026-07", 3, 1]]);
+    expect(await grouped("ip_range")).toEqual([
+      ["1.2.3.xxx", "1.2.3.xxx", 2, 1],
+      ["2001:db8::1", "2001:db8::1", 1, 0],
+    ]);
+    expect(await grouped("uniqueness")).toEqual([
+      ["unique", "unique", 2, 1],
+      ["repeat", "repeat", 1, 0],
+    ]);
+    expect(await grouped("bot")).toEqual([
+      ["human", "human", 2, 1],
+      ["bot", "bot", 1, 0],
+    ]);
+    const byNetwork = await grouped("network");
+    expect(byNetwork).toContainEqual([net.network.id, "Net A", 1, 1]);
+    expect(byNetwork).toContainEqual([null, expect.any(String), 2, 0]);
+
+    // New dimensions also work as drilldown levels.
+    const drill = await api<{ rows: Node[] }>(
+      `/api/reports/drilldown?by=network,hour&campaign_id=${program.id}&from=2026-07-01&to=2026-07-31`,
+    );
+    expect(drill.status).toBe(200);
+    const netA = drill.body.rows.find((n) => n.key === net.network.id);
+    expect(netA?.children.map((n) => [n.key, n.metrics.clicks])).toEqual([["10", 1]]);
+    // Hours read in order inside a level, not by clicks.
+    const none = drill.body.rows.find((n) => n.key === null);
+    expect(none?.children.map((n) => n.key)).toEqual(["10", "22"]);
+
+    // Time and visitor-flag dimensions cannot hold a zone for automation.
+    const rule = (dimension: string) =>
+      api("/api/automation/rules", {
+        method: "POST",
+        body: JSON.stringify({ campaign_id: program.id, kind: "zone_blacklist", dimension, min_clicks: 1 }),
+      });
+    expect((await rule("hour")).status).toBe(400);
+    expect((await rule("bot")).status).toBe(400);
+    expect((await rule("ip_range")).status).toBe(201);
+  });
+
   it("blacklists zones without FTDs and notifies by email and webhook", async () => {
     const { program, affiliateId } = await createCampaign("Zones");
     const t = Date.now() - 2 * 60 * 60 * 1000;
