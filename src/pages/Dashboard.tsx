@@ -769,9 +769,9 @@ function OverviewPanel({
 
       {section === "tracking" && (
         <div className="card min-w-0 overflow-hidden p-5">
-          <h2 className="font-semibold">Affiliates</h2>
+          <h2 id="affiliates-heading" className="font-semibold">Affiliates</h2>
           <div className="mt-4 overflow-x-auto">
-            <table className="table">
+            <table className="table" aria-labelledby="affiliates-heading">
               <thead>
                 <tr>
                   <th>Name</th>

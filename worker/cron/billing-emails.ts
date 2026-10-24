@@ -2,9 +2,12 @@ import type { Env } from "../types";
 import { bentoConfigured, bentoRequest } from "../lib/bento";
 import { billingRow, billingStatus } from "../lib/billing";
 
-// At most two event types per account: a lifecycle notice and an overage notice.
-// 50 accounts use at most 600 D1 queries, plus fixed cursor/lease overhead.
+// Reserve the Workers Free limit, including lease, page read and final release.
+// Each account needs 5 billing reads/writes, up to 4 queries for each of two
+// events (including recovery if marking delivery fails), and one cursor write.
 export const BILLING_EMAIL_BATCH_SIZE = 50;
+export const BILLING_EMAIL_QUERY_BUDGET = 50;
+const ACCOUNT_QUERY_RESERVATION = 5 + 2 * 4 + 1;
 const RUN_BUDGET_MS = 20_000;
 
 /** Event scheduling uses the stored trial dates, including manual extensions. */
@@ -21,8 +24,10 @@ export async function billingEmails(env: Env, now = Date.now()) {
     const page = await env.DB.prepare("SELECT id, email FROM users WHERE id > ? AND email_verified = 1 ORDER BY id LIMIT ?")
       .bind(cursor, BILLING_EMAIL_BATCH_SIZE).all<{ id: string; email: string }>();
     let processed = 0;
+    let remainingQueries = BILLING_EMAIL_QUERY_BUDGET - 3;
     for (const user of page.results) {
-      if (Date.now() - startedAt >= RUN_BUDGET_MS) break;
+      if (Date.now() - startedAt >= RUN_BUDGET_MS || remainingQueries < ACCOUNT_QUERY_RESERVATION) break;
+      remainingQueries -= ACCOUNT_QUERY_RESERVATION;
       const row = await billingRow(env, user.id);
       const status = await billingStatus(env, user.id, now);
       const subscribed = status.subscriptionStatus === "active";

@@ -5,12 +5,13 @@ import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
 import worker from "../worker";
 import type { Env } from "../worker/types";
 import { billingRow, billingStatus } from "../worker/lib/billing";
-import { billingEmails, BILLING_EMAIL_BATCH_SIZE } from "../worker/cron/billing-emails";
+import { billingEmails, BILLING_EMAIL_BATCH_SIZE, BILLING_EMAIL_QUERY_BUDGET } from "../worker/cron/billing-emails";
 import type { BillingStatus } from "../shared/billing";
 import { initSql } from "./schema";
 import { registerTestUser } from "./helpers";
 import migration from "../migrations/0024_billing.sql?raw";
 import medialabMigration from "../migrations/0025_medialab_trial.sql?raw";
+import resetRolloutTrials from "../scripts/reset-rollout-trials.sql?raw";
 
 const billingEnv: Env = { ...env, APP_URL: "http://localhost:5173", BILLING_ENABLED: "true" };
 let headers: Record<string, string>;
@@ -227,23 +228,65 @@ describe("hosted billing", () => {
     expect((await billingRow(billingEnv, accountId)).trial_ends_at).toBe(unaffected.trial_ends_at);
   });
 
+  it("corrects delayed rollout trials without resetting new accounts, subscribers or courtesy overrides", async () => {
+    const now = Date.now();
+    const oldStart = now - 30 * 86400_000;
+    for (const [suffix, days, subscribed, cohort] of [
+      ["existing", 14, false, true], ["new", 14, false, false],
+      ["courtesy", 1095, false, true], ["paid", 14, true, true],
+    ] as const) {
+      const id = `usr_rollout_${suffix}`;
+      await env.DB.prepare("INSERT INTO users (id, email, created_at) VALUES (?, ?, ?)")
+        .bind(id, `${suffix}@rollout.example.com`, oldStart).run();
+      await env.DB.prepare(`INSERT INTO account_billing
+        (account_id, trial_started_at, trial_ends_at, stripe_subscription_id) VALUES (?, ?, ?, ?)`)
+        .bind(id, oldStart, oldStart + days * 86400_000, subscribed ? "sub_rollout" : null).run();
+      if (cohort) await env.DB.prepare("INSERT INTO billing_rollout_accounts (account_id) VALUES (?)").bind(id).run();
+    }
+    const result = await env.DB.prepare(resetRolloutTrials).all<{ account_id: string; trial_started_at: number; trial_ends_at: number }>();
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].account_id).toBe("usr_rollout_existing");
+    expect(result.results[0].trial_started_at).toBeGreaterThanOrEqual(now - 1000);
+    expect(result.results[0].trial_ends_at - result.results[0].trial_started_at).toBe(14 * 86400_000);
+    for (const suffix of ["new", "courtesy", "paid"]) {
+      const row = await billingRow(billingEnv, `usr_rollout_${suffix}`);
+      expect(row.trial_started_at).toBe(oldStart);
+    }
+  });
+
   it("bounds billing-email scans and resumes with a durable cursor across invocations", async () => {
     await env.DB.prepare("UPDATE users SET email_verified = 0").run();
     const now = Date.now();
     await env.DB.batch(Array.from({ length: BILLING_EMAIL_BATCH_SIZE + 1 }, (_, i) =>
       env.DB.prepare("INSERT INTO users (id, email, email_verified, created_at) VALUES (?, ?, 1, ?)")
         .bind(`usr_batch_${String(i).padStart(3, "0")}`, `batch-${i}@example.com`, now)));
+    // Every account emits both a trial event and an overage event: the largest event set.
+    await env.DB.batch(Array.from({ length: BILLING_EMAIL_BATCH_SIZE + 1 }, (_, i) =>
+      env.DB.prepare("INSERT INTO billing_usage (account_id, period, clicks) VALUES (?, ?, ?)")
+        .bind(`usr_batch_${String(i).padStart(3, "0")}`, new Date(now).toISOString().slice(0, 7), 1_000_001)));
     const mailEnv = { ...billingEnv, BENTO_SITE_UUID: "test-site", BENTO_PUBLISHABLE_KEY: "test-public", BENTO_SECRET_KEY: "test-secret" };
     const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ results: 1 }));
-    await billingEmails(mailEnv, now);
-    expect(fetch).toHaveBeenCalledTimes(BILLING_EMAIL_BATCH_SIZE);
-    const progress = await env.DB.prepare("SELECT cursor, lease_token FROM billing_email_progress WHERE id = 1").first();
-    expect(progress).toMatchObject({ cursor: "usr_batch_049", lease_token: null });
-    await billingEmails(mailEnv, now);
-    expect(fetch).toHaveBeenCalledTimes(BILLING_EMAIL_BATCH_SIZE + 1);
-    expect(await env.DB.prepare("SELECT cursor FROM billing_email_progress WHERE id = 1").first()).toEqual({ cursor: "" });
-    await billingEmails(mailEnv, now);
-    expect(fetch).toHaveBeenCalledTimes(BILLING_EMAIL_BATCH_SIZE + 1);
+    const prepare = vi.spyOn(env.DB, "prepare");
+    const run = async () => {
+      const before = prepare.mock.calls.length;
+      await billingEmails(mailEnv, now);
+      expect(prepare.mock.calls.length - before).toBeLessThanOrEqual(BILLING_EMAIL_QUERY_BUDGET);
+      return env.DB.prepare("SELECT cursor, lease_token FROM billing_email_progress WHERE id = 1")
+        .first<{ cursor: string; lease_token: string | null }>();
+    };
+    expect(await run()).toMatchObject({ cursor: "usr_batch_002", lease_token: null });
+    expect(fetch).toHaveBeenCalledTimes(6);
+    let completed = false;
+    for (let i = 0; i < BILLING_EMAIL_BATCH_SIZE; i++) {
+      if ((await run())?.cursor === "") { completed = true; break; }
+    }
+    expect(completed).toBe(true);
+    expect(fetch).toHaveBeenCalledTimes(2 * (BILLING_EMAIL_BATCH_SIZE + 1));
+    // A full second sweep claims no already-delivered events, under the same budget.
+    for (let i = 0; i < BILLING_EMAIL_BATCH_SIZE; i++) {
+      if ((await run())?.cursor === "") break;
+    }
+    expect(fetch).toHaveBeenCalledTimes(2 * (BILLING_EMAIL_BATCH_SIZE + 1));
   });
 
   it("rejects unsigned webhooks, invalid plans and cross-origin checkout", async () => {

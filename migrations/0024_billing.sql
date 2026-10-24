@@ -13,6 +13,13 @@ CREATE TABLE account_billing (
 INSERT INTO account_billing (account_id, trial_started_at, trial_ends_at)
 SELECT id, unixepoch() * 1000, (unixepoch() + 14 * 86400) * 1000 FROM users;
 
+-- Freeze the pre-billing cohort for a reviewed correction if activation is delayed.
+-- Accounts registered later retain their ordinary signup-based trial dates.
+CREATE TABLE billing_rollout_accounts (
+  account_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE
+);
+INSERT INTO billing_rollout_accounts (account_id) SELECT id FROM users;
+
 -- Durable usage survives raw-click retention and campaign deletion. UTC calendar months.
 CREATE TABLE billing_usage (
   account_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,

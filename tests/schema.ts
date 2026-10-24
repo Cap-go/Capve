@@ -16,6 +16,10 @@ CREATE TABLE billing_checkouts (
   session_id TEXT
 );
 
+CREATE TABLE billing_rollout_accounts (
+  account_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE
+);
+
 CREATE TABLE account_billing (
   account_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   plan TEXT NOT NULL DEFAULT 'starter' CHECK (plan IN ('starter', 'pro')),

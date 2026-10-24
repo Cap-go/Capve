@@ -23,9 +23,33 @@ After trial expiry, an active or trialing Stripe subscription with an unexpired 
 4. Add webhook `https://capve.app/api/billing/webhook` for `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. Select the API version matching the installed Stripe SDK, currently 2026-09-30.endive. The handler verifies the raw payload signature, then retrieves the current subscription before updating D1. Do not use a Checkout success redirect as proof of payment.
 5. Set Worker secrets with `bunx wrangler secret put NAME --env production` for `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. Never paste them into chat or git. Keep CI/deploy credentials at Cap-go org level.
 6. Set non-secret production vars `STRIPE_PRICE_STARTER` and `STRIPE_PRICE_PRO` to the two price IDs. Add `BILLING_ENABLED = "true"` only after Stripe and Bento setup is complete. These vars must be included in `env.production.vars` in wrangler.toml for later deployments to retain them.
-7. Apply migrations through the normal deployment workflow after review and merge. Before launch, follow the Medialab steps below. Martin performs deployment; agents must not deploy.
+7. Apply migrations through the normal deployment workflow after review and merge. Coordinate the initial migration and billing activation; if activation is delayed, follow the existing-account correction below. Before launch, follow the Medialab steps below. Martin performs deployment; agents must not deploy.
 
 Stripe prices are the charging source of truth. Verify that the configured IDs are the correct account, currency, amount and monthly interval. Changing `shared/billing.ts` alone does not change Stripe charges. Configure Stripe's failed-payment retries and receipts; Capve sends the reporting-access notices through Bento.
+
+## Existing-account activation and delayed rollout
+
+Prepare Stripe and Bento before applying the billing migrations, then enable billing in the same launch window so existing owners receive their full 14 days. New accounts keep their signup-based trial dates.
+
+Migration 0024 captures the pre-billing account IDs in `billing_rollout_accounts`. If deployment happens before setup is ready, keep billing disabled and run the one-time corrective migration `scripts/reset-rollout-trials.sql` immediately before first activation. Do this for any delay that would shorten existing owners' usable trial, and always if the original 14-day window has expired.
+
+First review the exact affected accounts:
+
+```sql
+SELECT u.id, u.email, b.trial_started_at, b.trial_ends_at
+FROM account_billing b JOIN users u ON u.id = b.account_id
+JOIN billing_rollout_accounts r ON r.account_id = b.account_id
+WHERE b.stripe_subscription_id IS NULL
+  AND b.trial_ends_at - b.trial_started_at = 14 * 86400000;
+```
+
+After reviewing that cohort, Martin applies the correction using:
+
+```sh
+bunx wrangler d1 execute velo-db --remote --env production --file scripts/reset-rollout-trials.sql
+```
+
+The SQL returns the affected IDs and new dates. Verify those dates, then enable billing immediately. It resets only unsubscribed accounts in the frozen cohort that still have the standard 14-day duration. Medialab's three-year trial and other custom-duration overrides are preserved; accounts registered after migration are excluded. This is a one-time launch operation: running it again restarts eligible trials again, so do not add it to routine deployment. If an earlier version of migration 0024 was already applied without the cohort table, reconstruct the cohort from the original deployment's account snapshot and review its IDs before running this correction; do not infer membership from display names.
 
 ## Medialab's three-year trial
 
@@ -46,4 +70,4 @@ This date override survives deployments. Reminder scheduling uses the stored int
 - Set trial expiry in the test DB. Confirm charts, logs, CSV and MCP report calls return 402 while `/r`, `/c`, `/lp`, `/click`, and convert continue recording.
 - Cross the allowance, upgrade, and verify reports unlock after webhook confirmation. Verify next UTC month's allowance resets without restarting an expired trial.
 - Confirm selected team accounts use the owner's subscription and allowance. Only a verified owner session can open Checkout or the portal; team members, API tokens and support impersonation cannot.
-- Confirm Bento receives each event and sends the configured email, including recovery after an API failure. Trial email cron runs every 15 minutes in separate invocations, processes at most 50 verified owners per invocation, and persists its cursor. Delivery timing depends on the full scan duration.
+- Confirm Bento receives each event and sends the configured email, including recovery after an API failure. Trial email cron runs every 15 minutes in separate invocations, reserves a 50-query D1 budget including lease, page, cursor, event delivery and failure recovery writes, and persists its cursor. It reads pages of up to 50 owners but processes at most three per invocation under the conservative per-account reservation. Delivery timing depends on the full scan duration.
