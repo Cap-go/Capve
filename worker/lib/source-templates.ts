@@ -322,6 +322,24 @@ export function applySourceTokens<T extends Pick<ClickContext, SubKey | "externa
   return next;
 }
 
+/**
+ * Click-id placeholders a traffic source fills on its own campaign URL (`[clickid]`, `${SUBID}`, …).
+ * Pasted into an offer or destination, they stay literal: the source never sees that URL.
+ * Capve fills them with its own click id, the same value as `{click_id}`.
+ * Curly `{name}` macros are excluded so `{external_id}` and `{gclid}` keep their own meaning.
+ */
+export function passthroughClickMacros(templates: readonly SourceTemplate[] = SOURCE_TEMPLATES): string[] {
+  const macros: string[] = [];
+  for (const template of templates) {
+    for (const token of template.tokens) {
+      if (token.slot !== "external_id" || !token.macro) continue;
+      if (/^\{[a-z0-9_]+\}$/i.test(token.macro)) continue;
+      if (!macros.includes(token.macro)) macros.push(token.macro);
+    }
+  }
+  return macros;
+}
+
 /** `?zoneid=[zone]&clickid=[clickid]…` for the source's tokens that have a macro. */
 export function trackingUrlWithMacros(campaignUrl: string, tokens: SourceToken[]): string {
   const query = tokens

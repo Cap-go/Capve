@@ -81,8 +81,10 @@ export function DocsNetworks() {
       </div>
       <p>
         Capve sits in the middle, so that one URL becomes <strong>two</strong>. Copy the network
-        link into Capve as an offer, keep everything as is (<code>ysrbgh8c2</code> is your
-        network's link code, leave it), and only swap the macro after <code>subid1=</code>:
+        link into Capve as an offer and keep the link code (<code>ysrbgh8c2</code> is your
+        network's code). <code>[clickid]</code> can stay: Capve fills it with its own click id,
+        the same value as <code>{"{click_id}"}</code>. Swapping to <code>{"{click_id}"}</code> is
+        the same result, and reads more clearly.
       </p>
       <div className="docs-pair">
         <div>
@@ -102,7 +104,7 @@ export function DocsNetworks() {
             https://goyesplay.com/ysrbgh8c2?<Net>subid1</Net>=<Macro>{"{click_id}"}</Macro>
           </div>
           <p>
-            <code>[clickid]</code> → <code>{"{click_id}"}</code>. Capve fills it with its own ID.
+            <code>[clickid]</code> or <code>{"{click_id}"}</code>. Capve fills either one with its own ID.
           </p>
         </div>
       </div>
@@ -112,9 +114,18 @@ export function DocsNetworks() {
           Capve campaign has its own key; the network link stays exactly the same inside the offer.
         </li>
         <li>
-          <strong>Do not</strong> leave <code>[clickid]</code> in the offer URL. Only Adcash
-          understands it, and Adcash never sees that URL. Capve still keeps Adcash's ID (stored as{" "}
-          <code>external_id</code>) to report conversions back to Adcash.
+          The offer URL and the Adcash pixel take different macros.
+          <ul>
+            <li>
+              <strong>Offer URL</strong> (Capve → YesPlay): <code>subid1={"{click_id}"}</code>. A pasted{" "}
+              <code>[clickid]</code> is filled with that same Capve id.
+            </li>
+            <li>
+              <strong>Adcash pixel</strong> (Capve → Adcash, on the traffic source):{" "}
+              <code>cid={"{external_id}"}</code>. This is Adcash's own click id.{" "}
+              <code>cid={"{click_id}"}</code> sends Capve's id, and Adcash cannot match it.
+            </li>
+          </ul>
         </li>
         <li>
           In the network's postback, use the macro that returns <code>subid1</code>:{" "}
@@ -138,7 +149,10 @@ export function DocsNetworks() {
           <div className="docs-url">
             {host}/c/welcome?clickid=src_789&amp;sub1=zone_42
           </div>
-          <p>The traffic source's own ID (src_789) is stored as external_id. Not used by the network.</p>
+          <p>
+            Capve stores <code>src_789</code> as <code>external_id</code>. The offer leaves it off
+            the network link. The Adcash pixel sends it back as <code>cid={"{external_id}"}</code>.
+          </p>
         </li>
 
         <li>
@@ -247,8 +261,9 @@ export function DocsNetworks() {
           Putting <code>cnv_id={"{click_id}"}</code> in the network's postback. The network does
           not know Capve's macro, so it sends the text <code>{"{click_id}"}</code> (or nothing) and
           Capve answers <code>404 click not found</code>. In the network, always use the{" "}
-          <em>network's</em> macro. The generic <code>{"{click_id}"}</code> URL shown elsewhere is
-          a template to adapt, not to paste as is.
+          <em>network's</em> macro, for example <code>{"${subid1}"}</code>. This warning is only
+          about the URL saved in the affiliate network. The Adcash pixel is the opposite: there
+          you do write a Capve macro, and it is <code>cid={"{external_id}"}</code>.
         </p>
       </div>
 
@@ -351,7 +366,11 @@ export function DocsNetworks() {
                 <td>
                   <code>aff_sub=src_789</code>
                 </td>
-                <td>You passed the traffic source's ID. Use Capve's {"{click_id}"}.</td>
+                <td>
+                  The offer is sending Adcash's id to the network. The offer wants Capve's{" "}
+                  <code>{"{click_id}"}</code>. <code>{"{external_id}"}</code> belongs on the Adcash
+                  pixel: <code>cid={"{external_id}"}</code>.
+                </td>
               </tr>
             </tbody>
           </table>

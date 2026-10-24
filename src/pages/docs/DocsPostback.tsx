@@ -18,9 +18,16 @@ export function DocsPostback() {
       </p>
 
       <p>
-        Follow the <Link to="/docs/click-ids">Click ID round trip</Link> first. A network's
-        return macro must resolve to the Capve ID you sent to that network, even when its macro
-        is named <code>{"{external_id}"}</code>. This is separate from Capve's stored traffic-source ID.
+        Follow the <Link to="/docs/click-ids">Click ID round trip</Link> first. The offer and the
+        postback saved in the affiliate network carry Capve's click id (<code>clk_…</code>). In
+        the network, use the network's macro. YesPlay uses <code>{"${subid1}"}</code>.
+      </p>
+      <p>
+        Some networks name their own return macro <code>{"{external_id}"}</code>. That name is
+        theirs, and the value they send is still the <code>clk_…</code> from the offer. Capve's{" "}
+        <code>{"{external_id}"}</code> macro is a different token: the click id the traffic source
+        sent in. On the Adcash pixel, saved on the traffic source, the parameter is{" "}
+        <code>cid={"{external_id}"}</code>.
       </p>
       <div className="docs-callout">
         <strong>Setting up a network for the first time?</strong>
@@ -152,6 +159,20 @@ export function DocsPostback() {
       <CodeBlock>
         {`https://your-source.com/postback?click={external_id}&payout={payout}&goal={event}`}
       </CodeBlock>
+      <CodeBlock label="Adcash pixel, saved on the traffic source">
+        {`https://www.pixelhere.com/et/event.php?advertiser=YOUR_ADVERTISER&cid={external_id}&id=YOUR_GOAL&value={payout}`}
+      </CodeBlock>
+      <p>
+        <code>cid={"{external_id}"}</code> is required on this pixel. Capve fills it with the click
+        id Adcash sent on the campaign link. Keep <code>advertiser</code> and <code>id</code> as
+        Adcash gave them, and add <code>value={"{payout}"}</code> for revenue.{" "}
+        <code>cid={"{click_id}"}</code> sends Capve's <code>clk_…</code> id, and Adcash does not
+        match it, so the conversion stays at zero there.
+      </p>
+      <p>
+        The warning about pasting <code>{"{click_id}"}</code> is only for the postback saved in
+        the affiliate network. On this pixel, <code>{"{external_id}"}</code> is the macro you write.
+      </p>
       <table className="table">
         <thead>
           <tr>
@@ -201,8 +222,13 @@ export function DocsPostback() {
         attributed to the click&apos;s time.
       </p>
 
-      <h2>Network-specific template</h2>
-      <p>Example for networks that pass external click tokens:</p>
+      <h2>When the network names its macro {"{external_id}"}</h2>
+      <p>
+        Paste this in the affiliate network only when their docs use that name for the value you
+        sent them on the offer. The value that arrives is still Capve's <code>clk_…</code>. This
+        URL is not the Adcash pixel. The Adcash pixel is saved in Capve, on the traffic source,
+        and Capve fills <code>cid={"{external_id}"}</code> with Adcash's click id.
+      </p>
       <CodeBlock>{networkPostback}</CodeBlock>
 
       <h2>Attribution flow</h2>

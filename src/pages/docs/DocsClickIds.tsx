@@ -12,11 +12,22 @@ export function DocsClickIds() {
         identity separate from the labels you use to analyze it.
       </p>
       <div className="docs-callout">
-        <strong>The rule to remember</strong>
+        <strong>Where each id goes</strong>
         <p>
-          Send Capve's click ID to the offer. Send that same value back as{" "}
-          <code>cnv_id</code>. Return the traffic source's original ID only when
-          reporting a conversion back to that source.
+          <strong>Offer URL</strong>, saved in Capve: <code>subid1={"{click_id}"}</code>.
+          That is Capve's id, <code>clk_…</code>.
+        </p>
+        <p>
+          <strong>Postback saved in the affiliate network</strong>: the network's own
+          macro. YesPlay uses <code>{"${subid1}"}</code>. The network fills it. Pasting{" "}
+          <code>{"{click_id}"}</code> or <code>{"{external_id}"}</code> there sends the
+          braces as text.
+        </p>
+        <p>
+          <strong>Adcash pixel</strong>, saved on the traffic source in Capve:{" "}
+          <code>cid={"{external_id}"}</code>. Required. That is the click id Adcash
+          created. <code>cid={"{click_id}"}</code> sends Capve's id, and the conversion
+          does not show in Adcash.
         </p>
       </div>
       <h2>Three identifiers, three jobs</h2>
@@ -122,9 +133,18 @@ export function DocsClickIds() {
         On an <em>incoming tracking link</em>, <code>?clickid=src_789</code>{" "}
         stores the source's ID. In an <em>offer URL macro</em>,{" "}
         <code>{"{clickid}"}</code> and <code>{"{click_id}"}</code> both expand
-        to Capve's ID. The direction matters. Prefer <code>{"{click_id}"}</code>{" "}
-        for offers and <code>{"{external_id}"}</code> for source callbacks.
+        to Capve's ID. The two directions use different macros:
       </p>
+      <ul>
+        <li>
+          <strong>Offer URL</strong>, Capve to the network: <code>{"{click_id}"}</code>.
+        </li>
+        <li>
+          <strong>Traffic-source pixel</strong>, Capve to Adcash: <code>cid={"{external_id}"}</code>.
+          Adcash matches the click id it created. <code>cid={"{click_id}"}</code> is Capve's id
+          and will not show as a conversion in Adcash.
+        </li>
+      </ul>
       <h2>Choose a stable SubID taxonomy</h2>
       <p>
         Start with one meaning per slot. For example, use <code>sub1</code> for
@@ -160,7 +180,8 @@ export function DocsClickIds() {
       <ul role="list">
         <li>
           Inspect the actual offer redirect. The network's tracking field must
-          contain a resolved Capve ID, not literal braces or the source's ID.
+          contain a resolved Capve ID (<code>clk_…</code>). The source's id stays
+          on the Adcash pixel as <code>cid={"{external_id}"}</code>.
         </li>
         <li>
           Check that every lander and redirect preserves that ID. For a lander

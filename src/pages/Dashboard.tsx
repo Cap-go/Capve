@@ -25,6 +25,9 @@ import {
   useSaveState,
 } from "../components/ui";
 import { snippetScriptTag } from "../lib/integration-examples";
+
+/** Shown in the destination field, same idea as the outgoing-postback placeholder. */
+const DESTINATION_EXAMPLE = "https://network.example/offer?subid1={click_id}";
 import {
   api,
   formatMoney,
@@ -406,10 +409,16 @@ export function DashboardPage() {
                 <Field
                   label="Destination URL (optional)"
                   type="url"
-                  placeholder="Empty = route through paths"
+                  placeholder={DESTINATION_EXAMPLE}
                   value={destinationUrl}
                   onChange={(e) => setDestinationUrl(e.target.value)}
                 />
+                <p className="text-sm text-[var(--velo-muted)]">
+                  Leave empty to route through paths. Copy <span className="mono">{"{click_id}"}</span> into
+                  the network sub ID, as in the example. <span className="mono">[clickid]</span> stays on
+                  the traffic-source link. The Adcash pixel on that source is{" "}
+                  <span className="mono">cid={"{external_id}"}</span>.
+                </p>
                 <div className="grid grid-cols-2 gap-3">
                   <SelectField
                     label="Traffic source"
@@ -843,7 +852,8 @@ function OverviewPanel({
               In the network, replace <span className="mono">{"{click_id}"}</span>,{" "}
               <span className="mono">{"{payout}"}</span> and <span className="mono">{"{status}"}</span>{" "}
               with the network&apos;s own macros (e.g. <span className="mono">{"cnv_id={aff_sub}"}</span>
-              ).{" "}
+              ). That replacement is for this incoming URL. The Adcash pixel, on the traffic source,
+              is <span className="mono">cid={"{external_id}"}</span>.{" "}
               <Link className="underline" to="/docs/networks">
                 Cheat sheet per network
               </Link>
@@ -882,10 +892,16 @@ function OverviewPanel({
             <Field
               label="Destination URL (optional)"
               type="url"
-              placeholder="Empty = route through paths"
+              placeholder={DESTINATION_EXAMPLE}
               value={draft.destination}
               onChange={(e) => setDraft({ ...draft, destination: e.target.value })}
             />
+            <p className="text-sm text-[var(--velo-muted)]">
+              Leave empty to route through paths. Copy <span className="mono">{"{click_id}"}</span> into the
+              network sub ID, as in the example. <span className="mono">[clickid]</span> stays on the
+              traffic-source link. The Adcash pixel on that source is{" "}
+              <span className="mono">cid={"{external_id}"}</span>.
+            </p>
             <SelectField
               label="Traffic source"
               value={draft.sourceId}

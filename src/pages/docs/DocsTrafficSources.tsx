@@ -48,6 +48,15 @@ export function DocsTrafficSources() {
         compare them with the source's tracking settings and edit the tokens in{" "}
         <strong>Traffic sources → Tokens & cost API</strong>.
       </p>
+      <div className="docs-callout">
+        <strong>Adcash pixel</strong>
+        <p>
+          On the traffic source, the outgoing URL is <code>cid={"{external_id}"}</code>. That is
+          Adcash's click id, from <code>clickid=[clickid]</code> on the campaign link.{" "}
+          <code>cid={"{click_id}"}</code> sends Capve's <code>clk_…</code> id, and Adcash does not
+          match the conversion. <code>{"{click_id}"}</code> belongs on the offer URL.
+        </p>
+      </div>
 
       <h2>Affiliate network templates</h2>
       <p>

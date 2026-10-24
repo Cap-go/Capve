@@ -5,8 +5,24 @@ import {
   setVisitorAssignment,
 } from "../db/routing";
 import type { Defer } from "./background";
+import { passthroughClickMacros } from "./source-templates";
 import { parseHttpUrl, withQueryParam } from "./urls";
 import { weightedItem } from "./rules";
+
+/**
+ * One source click macro. `encoded` matches that macro's percent-encoded form
+ * with either hex casing (`%5b` or `%5B`) and does not touch other escapes.
+ */
+const PASSTHROUGH_CLICK_MACROS = passthroughClickMacros().map((macro) => {
+  const encoded = encodeURIComponent(macro)
+    .replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    .replace(
+      /%([0-9a-f]{2})/gi,
+      (_, hex: string) =>
+        `%[${hex[0].toLowerCase()}${hex[0].toUpperCase()}][${hex[1].toLowerCase()}${hex[1].toUpperCase()}]`,
+    );
+  return { macro, encoded: new RegExp(encoded, "g") };
+});
 
 /** Weighted lander/offer of a path; falls back to the single legacy lander_id / offer_id. */
 function pickItem(
@@ -120,8 +136,21 @@ export async function selectPath(
   return weightedPick(paths);
 }
 
-/** Binom-style URL macros: values are URL-encoded; unknown macros are left untouched. */
+/**
+ * Binom-style URL macros: values are URL-encoded; unknown `{name}` macros are left untouched.
+ * A traffic source's own click placeholder (`[clickid]`, `${SUBID}`, …) is filled with the same
+ * click id as `{click_id}`, so a direct-link URL pasted into an offer still attributes.
+ * Those placeholders are replaced in the saved URL first. A value inserted afterwards, such as
+ * an `external_id` that itself contains `[clickid]`, is not scanned again.
+ */
 export function substituteMacros(url: string, ctx: RoutingContext): string {
+  const clickId = encodeURIComponent(ctx.click_id);
+  let next = url;
+  for (const { macro, encoded } of PASSTHROUGH_CLICK_MACROS) {
+    encoded.lastIndex = 0;
+    next = next.replace(encoded, clickId);
+    if (next.includes(macro)) next = next.replaceAll(macro, clickId);
+  }
   const values: Record<string, string> = {
     click_id: ctx.click_id,
     clickid: ctx.click_id,
@@ -137,7 +166,7 @@ export function substituteMacros(url: string, ctx: RoutingContext): string {
   for (let i = 1; i <= 10; i++) {
     values[`sub${i}`] = ctx.subs?.[`sub${i}`] ?? "";
   }
-  return url.replace(/\{([a-z0-9_]+)\}/gi, (match, name: string) => {
+  return next.replace(/\{([a-z0-9_]+)\}/gi, (match, name: string) => {
     const value = values[name.toLowerCase()];
     return value === undefined ? match : encodeURIComponent(value);
   });
