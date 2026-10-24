@@ -50,7 +50,6 @@ export const SOURCE_TEMPLATES: SourceTemplate[] = [
       { param: "clickid", name: "Click ID", slot: "external_id", macro: "[clickid]" },
     ],
     postback_url: "https://www.adcash.com/script/register_event.php?key=YOUR_KEY&cid={external_id}&payout={payout}",
-    cost_api: "adcash",
     verified: false,
     notes: "Pop/push. Replace YOUR_KEY with the conversion key from Adcash → Conversion tracking.",
   },

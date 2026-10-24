@@ -94,7 +94,7 @@ export function DocsNetworks() {
             &amp;…
           </div>
           <p>
-            Copy it from the campaign&apos;s <strong>Traffic source link &amp; cost</strong> card. Adcash fills its{" "}
+            Copy it from the campaign&apos;s <strong>Traffic source link</strong> card. Adcash fills its{" "}
             <code>[…]</code> macros.
           </p>
         </div>
