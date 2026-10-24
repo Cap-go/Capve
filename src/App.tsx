@@ -24,6 +24,8 @@ export function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
+          <Route path="/app/campaign/:section" element={<DashboardPage />} />
+          <Route path="/app/campaigns" element={<DashboardPage />} />
           <Route path="/app" element={<DashboardPage />} />
           <Route path="/docs" element={<DocsLayout />}>
             {Object.entries(DOC_CONTENT).map(([slug, Page]) =>
