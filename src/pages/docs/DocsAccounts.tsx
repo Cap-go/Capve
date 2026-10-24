@@ -27,6 +27,17 @@ export function DocsAccounts() {
         checked on every request, so removing someone or changing their role
         takes effect without waiting for their session to expire.
       </p>
+      <h2>Team and activity</h2>
+      <p>
+        Settings → Team lists everyone with access to the current account, including
+        the owner. The team id on that card is the account id. Copy it when someone
+        needs to know which account they are in.
+      </p>
+      <p>
+        Settings → Activity records who changed this account: invites, campaign
+        edits, settings, and support access. Click traffic and conversions stay in
+        the campaign logs.
+      </p>
       <h2>Open an account for support</h2>
       <ol role="list">
         <li>

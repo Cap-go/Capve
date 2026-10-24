@@ -15,9 +15,16 @@ export type TeamMember = {
   id: string;
   owner_user_id: string;
   email: string;
-  role: "admin" | "viewer";
+  role: "owner" | "admin" | "viewer";
   created_at: number;
   accepted_at: number | null;
+};
+
+export type AuditEntry = {
+  id: string;
+  actor_email: string;
+  action: string;
+  created_at: number;
 };
 
 export type PendingInvite = {

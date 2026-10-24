@@ -13,6 +13,7 @@ import {
 } from "../lib/account-context";
 import { getUserById } from "../db/queries";
 import { isSecureRequest } from "../lib/auth";
+import { recordAudit } from "../lib/audit";
 import { id } from "../lib/utils";
 
 export async function listAccessibleAccounts(
@@ -98,6 +99,12 @@ accounts.post("/switch-account", async (c) => {
       isSecureRequest(new URL(c.req.url)),
     ),
   );
+  await recordAudit(c.env.DB, {
+    accountId: account.account_id,
+    actorUserId: user.id,
+    actorEmail: user.email,
+    action: "Switched to this account",
+  });
   return c.json({ ok: true });
 });
 

@@ -39,9 +39,16 @@ export type TeamMember = {
   id: string;
   owner_user_id: string;
   email: string;
-  role: "admin" | "viewer";
+  role: "owner" | "admin" | "viewer";
   created_at: number;
   accepted_at: number | null;
+};
+
+export type AuditEntry = {
+  id: string;
+  actor_email: string;
+  action: string;
+  created_at: number;
 };
 
 export type PendingInvite = {
@@ -743,7 +750,9 @@ export const api = {
     }
     return request<{ by: string; rows: GroupedReportRow[] }>(`/api/reports/grouped?${params}`);
   },
-  team: () => request<{ members: TeamMember[]; role: TeamRole }>("/api/ops/team"),
+  team: () =>
+    request<{ members: TeamMember[]; role: TeamRole; account_id: string }>("/api/ops/team"),
+  auditLog: () => request<{ entries: AuditEntry[] }>("/api/ops/audit"),
   inviteMember: (email: string, role: "admin" | "viewer") =>
     request<{ member: TeamMember }>("/api/ops/team", {
       method: "POST",

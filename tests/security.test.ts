@@ -107,10 +107,11 @@ describe("security hardening", () => {
       );
       expect(decline.status).toBe(200);
 
-      const team = await json<{ members: unknown[] }>(
+      const team = await json<{ members: Array<{ email: string; role: string }> }>(
         await api("/api/ops/team", owner.authHeaders),
       );
-      expect(team.members).toHaveLength(0);
+      expect(team.members.map((member) => member.email)).toEqual([owner.email]);
+      expect(team.members[0]?.role).toBe("owner");
     });
   });
 

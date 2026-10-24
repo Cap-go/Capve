@@ -1217,10 +1217,19 @@ export const TOOLS: McpTool[] = [
   {
     name: "list_team",
     title: "List team",
-    description: "List team members and their roles.",
+    description: "List the account owner, invited teammates, and the team id (account id).",
     inputSchema: schema({}),
     annotations: read,
     call: () => ({ method: "GET", path: "/api/ops/team" }),
+  },
+  {
+    name: "list_activity",
+    title: "List activity",
+    description:
+      "List recent account activity: who changed campaigns, settings, team membership, and support access. Click traffic is not included.",
+    inputSchema: schema({}),
+    annotations: read,
+    call: () => ({ method: "GET", path: "/api/ops/audit" }),
   },
   {
     name: "invite_team_member",

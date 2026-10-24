@@ -75,9 +75,9 @@ export function AccountSettingsPanel({ canWrite }: { canWrite: boolean }) {
           Days in reports (date grouping, trends, date ranges) start at midnight in this timezone.
           The UTC offset is taken at the start of the report range.
         </p>
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-          <label className="block w-full max-w-sm space-y-2">
-            <span className="text-sm font-medium text-[var(--velo-muted)]">Timezone (IANA)</span>
+        <div className="settings-field-row">
+          <label className="block">
+            <span className="mb-2 block text-sm font-medium text-[var(--velo-muted)]">Timezone (IANA)</span>
             <input
               className="input"
               disabled={!canWrite}
@@ -85,11 +85,6 @@ export function AccountSettingsPanel({ canWrite }: { canWrite: boolean }) {
               value={timezone}
               onChange={(e) => setTimezone(e.target.value)}
             />
-            <datalist id="capve-timezones">
-              {zones.map((zone) => (
-                <option key={zone} value={zone} />
-              ))}
-            </datalist>
           </label>
           {canWrite && (
             <button className="btn btn-secondary" disabled={busy} type="submit">
@@ -97,6 +92,11 @@ export function AccountSettingsPanel({ canWrite }: { canWrite: boolean }) {
             </button>
           )}
         </div>
+        <datalist id="capve-timezones">
+          {zones.map((zone) => (
+            <option key={zone} value={zone} />
+          ))}
+        </datalist>
       </form>
 
       <div className="space-y-3">
@@ -131,7 +131,7 @@ export function AccountSettingsPanel({ canWrite }: { canWrite: boolean }) {
           ))}
         </ul>
         {canWrite && (
-          <form className="flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={addDomain}>
+          <form className="settings-field-row" onSubmit={addDomain}>
             <Field
               label="Hostname"
               placeholder="track.example.com"

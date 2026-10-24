@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { bulkUpdatePrograms, cloneProgram } from "../db/clone";
+import { listAuditLog, recordAudit } from "../lib/audit";
 import {
   acceptInvite,
   addTeamMember,
@@ -8,6 +9,8 @@ import {
   declineInvite,
   deleteNote,
   deleteTrigger,
+  findPendingInvite,
+  getTeamMember,
   listNotes,
   listPendingInvites,
   listTeamMembers,
@@ -31,11 +34,15 @@ const ops = new Hono<{ Bindings: Env }>();
 ops.get("/team", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
-  if (session.role === "viewer") {
-    return c.json({ members: [], role: session.role });
-  }
   const members = await listTeamMembers(c.env.DB, session.account_id);
-  return c.json({ members, role: session.role });
+  return c.json({ members, role: session.role, account_id: session.account_id });
+});
+
+ops.get("/audit", async (c) => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const entries = await listAuditLog(c.env.DB, session.account_id);
+  return c.json({ entries });
 });
 
 ops.post("/team", async (c) => {
@@ -51,6 +58,12 @@ ops.post("/team", async (c) => {
   }
 
   const member = await addTeamMember(c.env.DB, session.account_id, email, body.role);
+  await recordAudit(c.env.DB, {
+    accountId: session.account_id,
+    actorUserId: session.id,
+    actorEmail: session.email,
+    action: `Invited ${member.email} as ${member.role}`,
+  });
   return c.json({ member }, 201);
 });
 
@@ -67,8 +80,16 @@ ops.post("/invites/:id/accept", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
   if (!session.email_verified) return c.json({ error: "Verify your email first" }, 403);
+  const pending = await findPendingInvite(c.env.DB, c.req.param("id"), session.email);
+  if (!pending) return c.json({ error: "Not found" }, 404);
   const ok = await acceptInvite(c.env.DB, c.req.param("id"), session.email);
   if (!ok) return c.json({ error: "Not found" }, 404);
+  await recordAudit(c.env.DB, {
+    accountId: pending.owner_user_id,
+    actorUserId: session.id,
+    actorEmail: session.email,
+    action: "Accepted the team invite",
+  });
   return c.json({ ok: true });
 });
 
@@ -76,8 +97,16 @@ ops.post("/invites/:id/decline", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
   if (!session.email_verified) return c.json({ error: "Verify your email first" }, 403);
+  const pending = await findPendingInvite(c.env.DB, c.req.param("id"), session.email);
+  if (!pending) return c.json({ error: "Not found" }, 404);
   const ok = await declineInvite(c.env.DB, c.req.param("id"), session.email);
   if (!ok) return c.json({ error: "Not found" }, 404);
+  await recordAudit(c.env.DB, {
+    accountId: pending.owner_user_id,
+    actorUserId: session.id,
+    actorEmail: session.email,
+    action: "Declined the team invite",
+  });
   return c.json({ ok: true });
 });
 
@@ -114,8 +143,16 @@ ops.delete("/team/:id", async (c) => {
   if (session instanceof Response) return session;
   if (session.role !== "owner") return c.json({ error: "Only owners can remove members" }, 403);
 
-  const ok = await removeTeamMember(c.env.DB, c.req.param("id"), session.account_id);
+  const member = await getTeamMember(c.env.DB, c.req.param("id"), session.account_id);
+  if (!member) return c.json({ error: "Not found" }, 404);
+  const ok = await removeTeamMember(c.env.DB, member.id, session.account_id);
   if (!ok) return c.json({ error: "Not found" }, 404);
+  await recordAudit(c.env.DB, {
+    accountId: session.account_id,
+    actorUserId: session.id,
+    actorEmail: session.email,
+    action: `Removed ${member.email} from the team`,
+  });
   return c.json({ ok: true });
 });
 
