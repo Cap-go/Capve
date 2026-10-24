@@ -1,7 +1,6 @@
-import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
-import { Link, Navigate, useSearchParams } from "react-router-dom";
+import { FormEvent, useEffect, useRef, useState } from "react";
+import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AppShell, type AppNavItem } from "../components/AppShell";
-import { Icon } from "../components/Icon";
 import { AdminPanel } from "../components/AdminPanel";
 import { AccountSettingsPanel, TrackingDomainPicker } from "../components/AccountSettingsPanel";
 import { AutomationPanel } from "../components/AutomationPanel";
@@ -33,6 +32,7 @@ import {
   formatMoney,
   formatPercent,
   otherCurrencies,
+  type CampaignReportRow,
   type ClickLogRow,
   type ConversionLogRow,
   type Group,
@@ -47,8 +47,16 @@ import { useAuth } from "../lib/auth";
 import { appBaseUrl } from "../lib/constants";
 import { eventLabel, eventName, sortEvents } from "../lib/events";
 import { CampaignSourcePanel } from "../components/SourceTemplates";
+import { CampaignList } from "../components/CampaignList";
+import { CampaignPerformance } from "../components/CampaignPerformance";
+import {
+  CAMPAIGN_SECTIONS,
+  CAMPAIGNS_LIST_PATH,
+  campaignHref,
+  isCampaignSection,
+  type CampaignSection,
+} from "../lib/campaign-route";
 
-type Tab = "overview" | "clicklog" | "conversions";
 type EntityView =
   | "campaigns"
   | "reports"
@@ -114,14 +122,20 @@ function dayEnd(value: string): number | undefined {
 
 export function DashboardPage() {
   const { user, loading, logout } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const tab = (searchParams.get("tab") as Tab) || "overview";
-  const entity = (searchParams.get("entity") as EntityView) || "campaigns";
+  const navigate = useNavigate();
+  const location = useLocation();
+  const { section: sectionParam } = useParams();
+  const [searchParams] = useSearchParams();
+  const campaignId = searchParams.get("id") ?? "";
+  const section: CampaignSection = isCampaignSection(sectionParam) ? sectionParam : "performance";
+  const inCampaign = Boolean(sectionParam);
+  const entity = inCampaign ? "campaigns" : ((searchParams.get("entity") as EntityView) || "campaigns");
 
   const [programs, setPrograms] = useState<Program[]>([]);
+  const [programsLoaded, setProgramsLoaded] = useState(false);
   const [sources, setSources] = useState<TrafficSource[]>([]);
   const [groups, setGroups] = useState<Group[]>([]);
-  const [selectedId, setSelectedId] = useState<string>("");
+  const selectedId = campaignId;
   const [stats, setStats] = useState<ProgramStats | null>(null);
   const [tracking, setTracking] = useState<ProgramTracking | null>(null);
   const [programName, setProgramName] = useState("");
@@ -134,17 +148,26 @@ export function DashboardPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
-  const [campaignFilter, setCampaignFilter] = useState("");
+  const [reportRows, setReportRows] = useState<CampaignReportRow[] | null>(null);
 
   useEffect(() => {
     if (!user) return;
+    let cancelled = false;
+    setProgramsLoaded(false);
     api
       .programs()
       .then(({ programs: items }) => {
-        setPrograms(items);
-        if (items[0]) setSelectedId((current) => current || items[0].id);
+        if (!cancelled) setPrograms(items);
       })
-      .catch((err) => setError(err instanceof Error ? err.message : "Failed to load campaigns"));
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load campaigns");
+      })
+      .finally(() => {
+        if (!cancelled) setProgramsLoaded(true);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [user]);
 
   // Source and group pickers; reloaded when returning to campaigns so new entities show up.
@@ -154,10 +177,40 @@ export function DashboardPage() {
     api.groups().then(({ groups: items }) => setGroups(items)).catch(() => {});
   }, [user, entity]);
 
-  // A stale error from another section, tab or campaign must not linger.
+  // A stale error from another section or campaign must not linger.
   useEffect(() => {
     setError("");
-  }, [entity, tab, selectedId]);
+  }, [entity, sectionParam, selectedId]);
+
+  useEffect(() => {
+    if (sectionParam) return;
+    if (location.pathname === "/app" && !searchParams.get("entity")) {
+      navigate(CAMPAIGNS_LIST_PATH, { replace: true });
+    }
+  }, [sectionParam, location.pathname, searchParams, navigate]);
+
+  useEffect(() => {
+    if (!sectionParam) return;
+    if (!campaignId || !isCampaignSection(sectionParam)) {
+      navigate(campaignId ? campaignHref(campaignId) : CAMPAIGNS_LIST_PATH, { replace: true });
+    }
+  }, [sectionParam, campaignId, navigate]);
+
+  useEffect(() => {
+    if (!user || inCampaign || entity !== "campaigns") return;
+    let cancelled = false;
+    api
+      .campaignReports()
+      .then(({ campaigns }) => {
+        if (!cancelled) setReportRows(campaigns);
+      })
+      .catch(() => {
+        if (!cancelled) setReportRows([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [user, inCampaign, entity, programs]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -194,17 +247,11 @@ export function DashboardPage() {
   }, [selectedId]);
 
   function setEntity(next: EntityView) {
-    const params: Record<string, string> = {};
-    if (next !== "campaigns") params.entity = next;
-    if (tab !== "overview") params.tab = tab;
-    setSearchParams(params);
-  }
-
-  function setTab(next: Tab) {
-    const params: Record<string, string> = {};
-    if (entity !== "campaigns") params.entity = entity;
-    if (next !== "overview") params.tab = next;
-    setSearchParams(params);
+    if (next === "campaigns") {
+      navigate(CAMPAIGNS_LIST_PATH);
+      return;
+    }
+    navigate(`/app?entity=${next}`);
   }
 
   if (loading) {
@@ -233,8 +280,8 @@ export function DashboardPage() {
         group_id: newGroupId,
       });
       setPrograms((prev) => [program, ...prev]);
-      setSelectedId(program.id);
       setSecretOnce({ programId: program.id, secret: convert_secret });
+      navigate(campaignHref(program.id, "tracking"));
       setProgramName("");
       setDestinationUrl("");
       setNewSourceId("");
@@ -273,12 +320,14 @@ export function DashboardPage() {
 
   async function cloneSelectedProgram() {
     if (!selectedId) return;
+    const name = programs.find((p) => p.id === selectedId)?.name ?? "this campaign";
+    if (!window.confirm(`Clone campaign "${name}"?`)) return;
     setBusy(true);
     setError("");
     try {
       const { program } = await api.cloneProgram(selectedId);
       setPrograms((prev) => [program, ...prev]);
-      setSelectedId(program.id);
+      navigate(campaignHref(program.id, "general"));
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not clone campaign");
     } finally {
@@ -299,9 +348,8 @@ export function DashboardPage() {
     setError("");
     try {
       await api.deleteProgram(program.id);
-      const remaining = programs.filter((p) => p.id !== program.id);
-      setPrograms(remaining);
-      setSelectedId(remaining[0]?.id ?? "");
+      setPrograms((prev) => prev.filter((p) => p.id !== program.id));
+      navigate(CAMPAIGNS_LIST_PATH);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not delete campaign");
     } finally {
@@ -309,11 +357,10 @@ export function DashboardPage() {
     }
   }
 
-  const filterTerm = campaignFilter.toLowerCase().trim();
-  const visiblePrograms = filterTerm
-    ? programs.filter((p) => `${p.name} ${p.campaign_key ?? p.slug}`.toLowerCase().includes(filterTerm))
-    : programs;
-  const selectedProgram = programs.find((p) => p.id === selectedId) ?? stats?.program;
+  const selectedProgram = campaignId
+    ? (programs.find((p) => p.id === campaignId) ??
+      (stats?.program.id === campaignId ? stats.program : undefined))
+    : undefined;
   const visibleStats = stats && stats.program.id === selectedId ? stats : null;
 
   const navItems: AppNavItem<EntityView>[] = [
@@ -330,36 +377,14 @@ export function DashboardPage() {
       onSelect={setEntity}
       email={user.email}
       onSignOut={async () => {
+        if (!window.confirm("Sign out?")) return;
         await logout();
         window.location.href = "/login";
       }}
-      title={PAGE_COPY[entity].title}
-      description={PAGE_COPY[entity].description}
+      title={inCampaign ? undefined : PAGE_COPY[entity].title}
+      description={inCampaign ? undefined : PAGE_COPY[entity].description}
+      notice={user.email_verified === false ? <VerifyEmailBanner /> : undefined}
     >
-      {entity === "campaigns" && (
-        <nav className="app-tabs" aria-label="Campaign views">
-          {(
-            [
-              ["overview", "Overview"],
-              ["clicklog", "Clicklog"],
-              ["conversions", "Conversions"],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              className={tab === key ? "app-tab is-active" : "app-tab"}
-              aria-current={tab === key ? "page" : undefined}
-              onClick={() => setTab(key)}
-              type="button"
-            >
-              {label}
-            </button>
-          ))}
-        </nav>
-      )}
-
-      {user.email_verified === false ? <VerifyEmailBanner /> : null}
-
       <ErrorBox message={error} />
 
       {entity !== "campaigns" ? (
@@ -377,26 +402,57 @@ export function DashboardPage() {
         ) : (
           <EntityPanel kind={entity} canWrite={canWrite} />
         )
+      ) : campaignId && !programsLoaded && !selectedProgram ? (
+        <p className="text-sm text-[var(--velo-muted)]">Loading campaign…</p>
+      ) : campaignId && !selectedProgram ? (
+        <div className="card empty-state">
+          <h2>Campaign not found</h2>
+          <p>
+            Nothing in this account uses id <span className="mono">{campaignId}</span>.
+          </p>
+          <Link className="btn btn-secondary" to={CAMPAIGNS_LIST_PATH}>
+            All campaigns
+          </Link>
+        </div>
+      ) : campaignId && selectedProgram ? (
+        <OverviewPanel
+          key={selectedId}
+          section={section}
+          busy={busy}
+          canWrite={canWrite}
+          secretOnce={secretOnce?.programId === selectedId ? secretOnce.secret : ""}
+          lastLink={lastLink?.programId === selectedId ? lastLink.url : ""}
+          selectedId={selectedId}
+          selectedProgram={selectedProgram}
+          sources={sources}
+          groups={groups}
+          tracking={tracking}
+          visibleStats={visibleStats}
+          affiliateName={affiliateName}
+          onAffiliateNameChange={setAffiliateName}
+          onCreateAffiliate={createAffiliate}
+          onProgramSaved={replaceProgram}
+          onError={setError}
+          onClone={cloneSelectedProgram}
+          onDelete={() => deleteSelectedProgram(selectedProgram)}
+          onTrackingChanged={() =>
+            api
+              .tracking(selectedId)
+              .then(({ tracking: t }) => setTracking(t))
+              .catch(() => undefined)
+          }
+        />
       ) : (
-        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[300px_minmax(0,1fr)]">
-          <section className="card campaign-list min-w-0">
-            <div className="campaign-list-head">
-              <h2>
-                Campaigns <span>{programs.length}</span>
-              </h2>
-              {canWrite && programs.length > 0 && (
-                <button
-                  className={`btn ${creating ? "btn-secondary" : "btn-primary"}`}
-                  type="button"
-                  aria-expanded={creating}
-                  aria-controls="new-campaign"
-                  onClick={() => setCreating(!creating)}
-                >
-                  {creating ? "Cancel" : "+ New"}
-                </button>
-              )}
-            </div>
-            {canWrite && (creating || !programs.length) && (
+        <CampaignList
+          programs={programs}
+          reports={reportRows}
+          sources={sources}
+          loading={!programsLoaded}
+          canWrite={canWrite}
+          creating={creating}
+          onToggleCreate={() => setCreating((open) => !open)}
+          createForm={
+            canWrite && programsLoaded && (creating || programs.length === 0) ? (
               <form id="new-campaign" className="campaign-create space-y-3" onSubmit={createProgram}>
                 <Field
                   label="New campaign name"
@@ -433,134 +489,28 @@ export function DashboardPage() {
                     options={[{ value: "", label: "None" }, ...groups.map((g) => ({ value: g.id, label: g.name }))]}
                   />
                 </div>
-                <button className="btn btn-primary w-full" disabled={busy} type="submit">
+                <button className="btn btn-primary" disabled={busy} type="submit">
                   {busy ? "Creating…" : "Create campaign"}
                 </button>
+                {programs.length === 0 && (
+                  <p className="text-sm text-[var(--velo-muted)]">
+                    A campaign gives you a tracking link and a postback URL.{" "}
+                    <Link className="underline" to="/docs/campaigns">
+                      Read the campaign guide
+                    </Link>
+                  </p>
+                )}
               </form>
-            )}
-            {programs.length > 5 && (
-              <input
-                className="input campaign-filter"
-                type="search"
-                aria-label="Filter campaigns"
-                placeholder="Filter campaigns…"
-                value={campaignFilter}
-                onChange={(e) => setCampaignFilter(e.target.value)}
-              />
-            )}
-            <div className="campaign-items">
-              {programs.length === 0 && (
-                <p className="campaign-empty">No campaigns yet. Create one to get a tracking link.</p>
-              )}
-              {visiblePrograms.map((program) => (
-                <button
-                  key={program.id}
-                  className={selectedId === program.id ? "campaign-item is-active" : "campaign-item"}
-                  aria-current={selectedId === program.id ? "true" : undefined}
-                  onClick={() => setSelectedId(program.id)}
-                  type="button"
-                >
-                  <span className={`status-dot is-${program.status}`} title={program.status} />
-                  <span className="min-w-0 flex-1">
-                    <strong>{program.name}</strong>
-                    <small className="mono">{program.campaign_key ?? program.slug}</small>
-                  </span>
-                  {program.status !== "active" && <span className="status-badge">{program.status}</span>}
-                </button>
-              ))}
-            </div>
-          </section>
-
-          <section className="min-w-0 space-y-6">
-            {!selectedProgram ? (
-              <div className="card empty-state">
-                <span className="empty-state-icon" aria-hidden="true">
-                  <Icon name="campaigns" size={20} />
-                </span>
-                <h2>Create your first campaign</h2>
-                <p>A campaign gives you a tracking link, a postback URL, and live stats.</p>
-                <ol>
-                  <li>
-                    <span>
-                      <strong>Name the campaign</strong> and pick its traffic source.
-                    </span>
-                  </li>
-                  <li>
-                    <span>
-                      <strong>Copy the tracking link</strong> into your ad or partner placement.
-                    </span>
-                  </li>
-                  <li>
-                    <span>
-                      <strong>Add the postback URL</strong> in your affiliate network.
-                    </span>
-                  </li>
-                </ol>
-                <Link className="btn btn-secondary" to="/docs/campaigns">
-                  Read the campaign guide
-                </Link>
-              </div>
-            ) : tab === "clicklog" ? (
-              <ClicklogTable key={selectedId} programId={selectedId} onError={setError} />
-            ) : tab === "conversions" ? (
-              <ConversionsTable key={selectedId} programId={selectedId} onError={setError} />
-            ) : (
-              <OverviewPanel
-                key={selectedId}
-                busy={busy}
-                canWrite={canWrite}
-                secretOnce={secretOnce?.programId === selectedId ? secretOnce.secret : ""}
-                lastLink={lastLink?.programId === selectedId ? lastLink.url : ""}
-                selectedId={selectedId}
-                selectedProgram={selectedProgram}
-                sources={sources}
-                groups={groups}
-                tracking={tracking}
-                visibleStats={visibleStats}
-                affiliateName={affiliateName}
-                onAffiliateNameChange={setAffiliateName}
-                onCreateAffiliate={createAffiliate}
-                onProgramSaved={replaceProgram}
-                onError={setError}
-                onClone={cloneSelectedProgram}
-                onDelete={() => deleteSelectedProgram(selectedProgram)}
-                onTrackingChanged={() =>
-                  api
-                    .tracking(selectedId)
-                    .then(({ tracking: t }) => setTracking(t))
-                    .catch(() => undefined)
-                }
-              />
-            )}
-          </section>
-        </div>
+            ) : null
+          }
+        />
       )}
     </AppShell>
   );
 }
 
-function Section({
-  title,
-  defaultOpen,
-  children,
-}: {
-  title: string;
-  defaultOpen: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <details className="card group min-w-0 p-5" open={defaultOpen}>
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold">
-        {title}
-        <span className="text-sm font-normal text-[var(--velo-muted)] group-open:hidden">Show</span>
-        <span className="hidden text-sm font-normal text-[var(--velo-muted)] group-open:inline">Hide</span>
-      </summary>
-      <div className="mt-4">{children}</div>
-    </details>
-  );
-}
-
 function OverviewPanel({
+  section,
   busy,
   canWrite,
   secretOnce,
@@ -580,6 +530,7 @@ function OverviewPanel({
   onTrackingChanged,
   onDelete,
 }: {
+  section: CampaignSection;
   busy: boolean;
   canWrite: boolean;
   secretOnce: string;
@@ -602,8 +553,6 @@ function OverviewPanel({
   const base = appBaseUrl();
   const origin = trackingOrigin(tracking);
   const eventNames = sortEvents(Object.keys(visibleStats?.totals.events ?? {}));
-  // New campaigns open the setup sections; established ones lead with stats.
-  const isNew = visibleStats ? visibleStats.totals.clicks === 0 : false;
   const save = useSaveState();
   const statusSave = useSaveState();
   const [draft, setDraft] = useState({
@@ -632,12 +581,11 @@ function OverviewPanel({
     }
   }
 
-  async function toggleStatus() {
+  async function setStatus(next: "active" | "paused") {
+    if ((paused && next === "paused") || (!paused && next === "active")) return;
     onError("");
     try {
-      const { program } = await statusSave.run(() =>
-        api.updateProgram(selectedId, { status: paused ? "active" : "paused" }),
-      );
+      const { program } = await statusSave.run(() => api.updateProgram(selectedId, { status: next }));
       onProgramSaved(program);
     } catch (err) {
       onError(err instanceof Error ? err.message : "Could not update status");
@@ -649,46 +597,82 @@ function OverviewPanel({
   );
 
   return (
-    <>
-      <div className="card min-w-0 p-5">
-        <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0">
-            <h2 className="truncate text-lg font-semibold tracking-tight">{selectedProgram.name}</h2>
-            <p className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-[var(--velo-muted)]">
-              <span className={`status-pill is-${selectedProgram.status}`}>
-                <span className={`status-dot is-${selectedProgram.status}`} />
-                {selectedProgram.status}
-              </span>
-              <span className="mono">{selectedProgram.campaign_key ?? selectedProgram.slug}</span>
-              {paused && <span>Links return 404 until resumed.</span>}
-            </p>
-          </div>
-          {canWrite && (
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <SavedNote show={statusSave.saved} />
-              <button
-                className="btn btn-secondary text-sm"
-                disabled={statusSave.saving}
-                onClick={toggleStatus}
-                type="button"
-              >
-                {statusSave.saving ? "Saving…" : paused ? "Resume campaign" : "Pause campaign"}
-              </button>
-              <button className="btn btn-secondary text-sm" disabled={busy} onClick={onClone} type="button">
-                Clone
-              </button>
-              <button className="btn btn-secondary text-sm" disabled={busy} onClick={onDelete} type="button">
-                Delete
-              </button>
-            </div>
-          )}
+    <div className="campaign-edit">
+      <div className="campaign-edit-head">
+        <div className="campaign-edit-title">
+          <h1>
+            Edit: {selectedProgram.name} <span>(ID: {selectedProgram.id})</span>
+          </h1>
+          <p className="mono">{selectedProgram.campaign_key ?? selectedProgram.slug}</p>
         </div>
-        {secretOnce && (
-          <SecretBox title="Campaign secret (shown once — server-side only)" value={secretOnce} />
+        {canWrite ? (
+          <select
+            className={`status-select is-${selectedProgram.status}`}
+            aria-label="Campaign status"
+            disabled={statusSave.saving}
+            value={paused ? "paused" : "active"}
+            onChange={(e) => setStatus(e.target.value as "active" | "paused")}
+          >
+            <option value="active">Active</option>
+            <option value="paused">Paused</option>
+          </select>
+        ) : (
+          <span className={`status-pill is-${selectedProgram.status}`}>{selectedProgram.status}</span>
+        )}
+        {canWrite && (
+          <div className="campaign-edit-actions">
+            <SavedNote show={statusSave.saved} />
+            <button className="btn btn-secondary text-sm" disabled={busy} onClick={onClone} type="button">
+              Clone
+            </button>
+            <button className="btn btn-secondary text-sm" disabled={busy} onClick={onDelete} type="button">
+              Delete
+            </button>
+          </div>
         )}
       </div>
+      {paused && <p className="text-sm text-[var(--velo-muted)]">Links return 404 until resumed.</p>}
+      {secretOnce && (
+        <SecretBox title="Campaign secret (shown once — server-side only)" value={secretOnce} />
+      )}
+      <div className="campaign-steps-bar">
+        <nav className="campaign-steps" aria-label="Campaign settings">
+          {CAMPAIGN_SECTIONS.map((item, index) => (
+            <Link
+              key={item.key}
+              to={campaignHref(selectedId, item.key)}
+              className={section === item.key ? "is-active" : undefined}
+              aria-current={section === item.key ? "page" : undefined}
+            >
+              {index + 1}. {item.label}
+            </Link>
+          ))}
+          <Link
+            to={campaignHref(selectedId, "clicklog")}
+            className={section === "clicklog" ? "is-active" : undefined}
+            aria-current={section === "clicklog" ? "page" : undefined}
+          >
+            Clicklog
+          </Link>
+          <Link
+            to={campaignHref(selectedId, "conversions")}
+            className={section === "conversions" ? "is-active" : undefined}
+            aria-current={section === "conversions" ? "page" : undefined}
+          >
+            Conversions
+          </Link>
+        </nav>
+      </div>
 
-      {visibleStats && (
+      {section === "performance" && (
+        <CampaignPerformance
+          programId={selectedId}
+          currency={visibleStats?.currency ?? "USD"}
+          canWrite={canWrite}
+        />
+      )}
+
+      {section === "tracking" && visibleStats && (
         <>
           <div className="stat-grid">
             <div className="card stat">
@@ -793,7 +777,7 @@ function OverviewPanel({
         </>
       )}
 
-      {canWrite && (
+      {section === "tracking" && canWrite && (
         <div className="card min-w-0 p-5">
           <h2 className="font-semibold">Add affiliate</h2>
           <form className="mt-4 flex flex-col gap-3 sm:flex-row sm:items-end" onSubmit={onCreateAffiliate}>
@@ -819,12 +803,10 @@ function OverviewPanel({
         </div>
       )}
 
-      <h2 className="pt-2 text-sm font-semibold uppercase tracking-wide text-[var(--velo-muted)]">
-        Setup
-      </h2>
-
-      <Section title="Tracking & postback" defaultOpen={isNew}>
-        <div className="flex flex-wrap gap-3 text-sm">
+      {section === "tracking" && (
+      <div className="card min-w-0 p-5">
+        <h2 className="font-semibold">Tracking & postback</h2>
+        <div className="mt-3 flex flex-wrap gap-3 text-sm">
           <Link className="underline" to="/docs/postback">
             Postback docs
           </Link>
@@ -878,11 +860,13 @@ function OverviewPanel({
         ) : (
           <p className="mt-4 text-sm text-[var(--velo-muted)]">Loading tracking…</p>
         )}
-      </Section>
+      </div>
+      )}
 
-      {canWrite && (
-        <Section title="Campaign settings" defaultOpen={false}>
-          <form className="space-y-3" onSubmit={saveSettings}>
+      {section === "general" && canWrite && (
+        <div className="card min-w-0 p-5">
+          <h2 className="font-semibold">General information</h2>
+          <form className="mt-4 space-y-3" onSubmit={saveSettings}>
             <Field
               label="Campaign name"
               required
@@ -921,26 +905,50 @@ function OverviewPanel({
               <SavedNote show={save.saved} />
             </div>
           </form>
-        </Section>
+        </div>
+      )}
+      {section === "general" && !canWrite && (
+        <div className="card min-w-0 p-5 text-sm">
+          <h2 className="font-semibold">General information</h2>
+          <dl className="mt-4 space-y-2">
+            <div>
+              <dt className="text-[var(--velo-muted)]">Destination URL</dt>
+              <dd className="mono break-all">{selectedProgram.destination_url || "Routes through paths"}</dd>
+            </div>
+          </dl>
+        </div>
+      )}
+      {section === "general" && (
+        <NotesPanel canWrite={canWrite} entityId={selectedId} entityType="program" />
       )}
 
-      <Section title="Outgoing postbacks" defaultOpen={false}>
-        <PostbackList
-          owner={{ campaign_id: selectedId }}
-          canWrite={canWrite}
-          hint="Called on every conversion of this campaign, including status changes. Add one per event (registration, FTD, ...) to report each to your traffic source."
-        />
-      </Section>
+      {section === "tracking" && (
+        <div className="card min-w-0 p-5">
+          <h2 className="font-semibold">Outgoing postbacks</h2>
+          <div className="mt-4">
+            <PostbackList
+              owner={{ campaign_id: selectedId }}
+              canWrite={canWrite}
+              hint="Called on every conversion of this campaign, including status changes. Add one per event (registration, FTD, ...) to report each to your traffic source."
+            />
+          </div>
+        </div>
+      )}
 
-      <AutomationPanel campaignId={selectedId} canWrite={canWrite} />
-
-      <PathEditor programId={selectedId} trackingOrigin={origin} canWrite={canWrite} />
-      <RoutingRules programId={selectedId} canWrite={canWrite} />
-      <TrafficFilterPanel programId={selectedId} canWrite={canWrite} />
-      <CampaignSourcePanel programId={selectedId} canWrite={canWrite} />
-
-      <NotesPanel canWrite={canWrite} entityId={selectedId} entityType="program" />
-    </>
+      {section === "optimization" && <AutomationPanel campaignId={selectedId} canWrite={canWrite} />}
+      {section === "paths" && (
+        <PathEditor programId={selectedId} trackingOrigin={origin} canWrite={canWrite} />
+      )}
+      {section === "targeting" && (
+        <>
+          <RoutingRules programId={selectedId} canWrite={canWrite} />
+          <TrafficFilterPanel programId={selectedId} canWrite={canWrite} />
+        </>
+      )}
+      {section === "budget" && <CampaignSourcePanel programId={selectedId} canWrite={canWrite} />}
+      {section === "clicklog" && <ClicklogTable programId={selectedId} onError={onError} />}
+      {section === "conversions" && <ConversionsTable programId={selectedId} onError={onError} />}
+    </div>
   );
 }
 
@@ -1153,17 +1161,15 @@ function VerifyEmailBanner() {
   }
 
   return (
-    <div className="card flex flex-wrap items-center justify-between gap-3 p-4 text-sm">
+    <div className="verify-note">
       <p>
-        <span className="font-semibold">Verify your email.</span> Check your inbox for the link.
-        Team invites need a verified email.
+        <span className="font-semibold">Verify your email.</span> Check your inbox for the link. Team invites need a
+        verified email.
       </p>
-      <div className="flex items-center gap-3">
-        {message ? <span className="text-[var(--velo-muted)]">{message}</span> : null}
-        <button className="btn btn-secondary" disabled={busy} onClick={resend} type="button">
-          Resend email
-        </button>
-      </div>
+      {message ? <p className="verify-note-status">{message}</p> : null}
+      <button className="btn btn-secondary" disabled={busy} onClick={resend} type="button">
+        {busy ? "Sending…" : "Resend email"}
+      </button>
     </div>
   );
 }
