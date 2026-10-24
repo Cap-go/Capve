@@ -87,16 +87,28 @@ billing.post("/checkout", async (c) => {
   // Stripe limits subscription trials to 730 days. Longer courtesy trials stay in D1.
   if (attempt.trial_end && attempt.trial_end > Math.ceil(now / 1000) + 730 * 86400)
     return c.json({ error: "Your extended trial is already active. Subscribe closer to its end." }, 400);
-  const checkout = await stripe.checkout.sessions.create({
-    customer, mode: "subscription", client_reference_id: session.account_id,
-    line_items: [{ price: priceId, quantity: 1 }],
-    success_url: `${c.env.APP_URL}/app?entity=billing&checkout=success`,
-    cancel_url: `${c.env.APP_URL}/app?entity=billing`,
-    subscription_data: {
-      metadata: { capve_account_id: session.account_id },
-      ...(attempt.trial_end ? { trial_end: attempt.trial_end } : {}),
-    },
-  }, { idempotencyKey: `capve-checkout-${attempt.request_id}` });
+  let checkout: Stripe.Checkout.Session;
+  try {
+    checkout = await stripe.checkout.sessions.create({
+      customer, mode: "subscription", client_reference_id: session.account_id,
+      line_items: [{ price: priceId, quantity: 1 }],
+      success_url: `${c.env.APP_URL}/app?entity=billing&checkout=success`,
+      cancel_url: `${c.env.APP_URL}/app?entity=billing`,
+      subscription_data: {
+        metadata: { capve_account_id: session.account_id },
+        ...(attempt.trial_end ? { trial_end: attempt.trial_end } : {}),
+      },
+    }, { idempotencyKey: `capve-checkout-${attempt.request_id}` });
+  } catch (error) {
+    // Only a definitive validation rejection is safe to abandon. A missing response
+    // or server error may mean Stripe created the session; retain its retry key.
+    if (error instanceof Stripe.errors.StripeInvalidRequestError && error.statusCode === 400) {
+      await c.env.DB.prepare("DELETE FROM billing_checkouts WHERE account_id = ? AND request_id = ? AND session_id IS NULL")
+        .bind(session.account_id, attempt.request_id).run();
+      return c.json({ error: "Stripe rejected this checkout. Choose a plan and try again, or contact support." }, 400);
+    }
+    throw error;
+  }
   await c.env.DB.prepare("UPDATE billing_checkouts SET session_id = ? WHERE account_id = ? AND request_id = ?")
     .bind(checkout.id, session.account_id, attempt.request_id).run();
   return c.json({ url: checkout.url });

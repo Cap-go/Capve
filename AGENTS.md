@@ -48,7 +48,7 @@ Local dev uses email/password sessions (`/login`, `/register`). The local-dev `A
 5. Deploy workflow: migrations → `wrangler deploy --env production --var APP_URL:https://capve.app`
 6. Enable Cloudflare Email Service on `capve.app` and verify `noreply@capve.app` as a sender (see `send_email` binding in `wrangler.toml`).
 7. Smoke test at **https://capve.app**:
-   - `/` loads homepage with Deploy button
+   - `/` loads homepage with hosted pricing and trial links; no Cloudflare install button
    - `/r/:code` → merchant URL with `velo_ref=`
    - POST convert with `X-Program-Secret` + `affiliate_code` → stats update
    - `/app` works after sign-in (register at `/register`)

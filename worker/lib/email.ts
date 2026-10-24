@@ -6,6 +6,7 @@ type SendEmailInput = {
   subject: string;
   html: string;
   text: string;
+  disableTracking?: boolean;
 };
 
 function emailFrom(env: Env): string {
@@ -32,7 +33,10 @@ export async function sendEmail(env: Env, input: SendEmailInput): Promise<void> 
 
   if (bentoConfigured(env)) {
     await bentoRequest(env, "emails", [{
-      to: input.to, from, subject: input.subject, html_body: input.html, transactional: true,
+      to: input.to, from, subject: input.subject, html_body: input.disableTracking
+        ? '{{ "true" | disable_click }}{{ "true" | disable_open }}{{ "true" | disable_utms }}' + input.html
+        : input.html,
+      transactional: true,
     }]);
     return;
   }
@@ -59,6 +63,7 @@ export async function sendEmail(env: Env, input: SendEmailInput): Promise<void> 
 export function resetPasswordEmail(appUrl: string, token: string) {
   const link = `${appUrl}/reset-password?token=${encodeURIComponent(token)}`;
   return {
+    disableTracking: true,
     subject: "Reset your Capve password",
     text: `Reset your password: ${link}\n\nThis link expires in 1 hour. If you did not request this, ignore this email.\n\n— Capve`,
     html: `<p><a href="${link}">Reset your password</a></p><p>This link expires in 1 hour. If you did not request this, ignore this email.</p><p>— Capve</p>`,
@@ -68,6 +73,7 @@ export function resetPasswordEmail(appUrl: string, token: string) {
 export function verifyEmailEmail(appUrl: string, token: string) {
   const link = `${appUrl}/verify-email?token=${encodeURIComponent(token)}`;
   return {
+    disableTracking: true,
     subject: "Verify your Capve email",
     text: `Confirm your email address: ${link}\n\nThis link expires in 24 hours. If you did not create a Capve account, ignore this email.\n\n— Capve`,
     html: `<p><a href="${link}">Confirm your email address</a></p><p>This link expires in 24 hours. If you did not create a Capve account, ignore this email.</p><p>— Capve</p>`,

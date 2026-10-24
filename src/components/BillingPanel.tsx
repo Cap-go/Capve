@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import type { BillingStatus, PlanId } from "../../shared/billing";
 import { api } from "../lib/api";
@@ -16,6 +16,11 @@ export function ReportingLock({ showLink = true }: { showLink?: boolean }) {
 export function BillingPanel({ billing, owner }: { billing: BillingStatus | null; owner: boolean }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  useEffect(() => {
+    const reset = (event: PageTransitionEvent) => { if (event.persisted) setBusy(false); };
+    window.addEventListener("pageshow", reset);
+    return () => window.removeEventListener("pageshow", reset);
+  }, []);
   async function openStripe(plan?: PlanId) {
     setBusy(true); setError("");
     try {

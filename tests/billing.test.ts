@@ -1,3 +1,4 @@
+import { sendEmail, resetPasswordEmail, verifyEmailEmail } from "../worker/lib/email";
 import Stripe from "stripe";
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
@@ -108,7 +109,12 @@ describe("hosted billing", () => {
     async function webhook(created: number) {
       const payload = JSON.stringify({ id: `evt_${created}`, object: "event", created, type: "customer.subscription.updated", data: { object: subscription } });
       const signature = await stripe.webhooks.generateTestHeaderStringAsync({ payload, secret: "whsec_test", cryptoProvider: Stripe.createSubtleCryptoProvider() });
-      return call("/api/billing/webhook", { method: "POST", headers: { "stripe-signature": signature }, body: payload }, stripeEnv);
+      const ctx = createExecutionContext();
+      const response = await worker.fetch(new Request("http://localhost/api/billing/webhook", {
+        method: "POST", headers: { "stripe-signature": signature }, body: payload,
+      }), stripeEnv, ctx);
+      await waitOnExecutionContext(ctx);
+      return response;
     }
     expect((await webhook(200)).status).toBe(200);
     expect((await billingStatus(stripeEnv, accountId)).reportsAllowed).toBe(true);
@@ -166,6 +172,43 @@ describe("hosted billing", () => {
     const rows = await env.DB.prepare("SELECT delivered_at FROM billing_email_events WHERE account_id = ?").bind(accountId).all<{ delivered_at: number | null }>();
     expect(rows.results).toHaveLength(1);
     expect(rows.results[0].delivered_at).not.toBeNull();
+  });
+
+  it("disables Bento tracking on verification and password-reset emails", async () => {
+    const mailEnv = { ...billingEnv, BENTO_SITE_UUID: "test-site", BENTO_PUBLISHABLE_KEY: "test-public", BENTO_SECRET_KEY: "test-secret" };
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ results: 1 }));
+    for (const makeMail of [resetPasswordEmail, verifyEmailEmail]) {
+      await sendEmail(mailEnv, { to: "seed@example.com", ...makeMail("https://capve.app", "private-token") });
+    }
+    expect(fetch).toHaveBeenCalledTimes(2);
+    for (const [, init] of fetch.mock.calls) {
+      const payload = JSON.parse(String(init?.body));
+      expect(payload.emails[0].html_body).toContain('disable_click');
+      expect(payload.emails[0].html_body).toContain('disable_open');
+      expect(payload.emails[0].html_body).toContain('disable_utms');
+      expect(payload.emails[0].html_body).toContain('private-token');
+      expect(payload.emails[0].transactional).toBe(true);
+    }
+  });
+
+  it.each([400, 500])("releases only definitively rejected Stripe checkout reservations (HTTP %i)", async (status) => {
+    const configured = { ...billingEnv, STRIPE_SECRET_KEY: "sk_test_fake", STRIPE_PRICE_STARTER: "price_starter", STRIPE_PRICE_PRO: "price_pro" };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      const url = String(input);
+      if (url.includes("/customers")) return Response.json({ id: "cus_failed" });
+      if (url.includes("/subscriptions")) return Response.json({ data: [] });
+      return Response.json({ error: { type: status === 400 ? "invalid_request_error" : "api_error", message: "Checkout failed" } }, {
+        status, headers: { "Stripe-Should-Retry": "false" },
+      });
+    });
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const response = await call("/api/billing/checkout", { method: "POST", body: JSON.stringify({ plan: "starter" }) }, configured);
+    expect(response.status).toBe(status);
+    const attempt = await env.DB.prepare("SELECT request_id FROM billing_checkouts WHERE account_id = ?").bind(accountId).first();
+    expect(attempt === null).toBe(status === 400);
+    if (status === 500) {
+      expect((await call("/api/billing/checkout", { method: "POST", body: JSON.stringify({ plan: "pro" }) }, configured)).status).toBe(409);
+    }
   });
 
   it("rejects unsigned webhooks, invalid plans and cross-origin checkout", async () => {

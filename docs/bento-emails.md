@@ -6,7 +6,7 @@ Configure these flows manually in the Capve Bento site. This PR does not create 
 
 1. Create/select the Capve site. Authenticate `capve.app` DNS in Bento and add `noreply@capve.app` as an approved author. Set a monitored reply-to address in Bento.
 2. Set Worker secrets `BENTO_SITE_UUID`, `BENTO_PUBLISHABLE_KEY`, and `BENTO_SECRET_KEY` with `bunx wrangler secret put NAME --env production`. Do not put them in git. The client uses Basic auth, a server-side User-Agent, and site_uuid on `/api/v1/batch/events` and `/api/v1/batch/emails`.
-3. When all three are set, password reset, email verification and operational alert emails use Bento's transactional API. Existing Cloudflare EMAIL remains a fallback for self-hosted installs with no Bento configuration. Auth mail is sent immediately, not through a sequence. Do not create a second verification or reset flow. Disable click/open tracking for auth mail in Bento.
+3. When all three are set, password reset, email verification and operational alert emails use Bento's transactional API. Existing Cloudflare EMAIL remains a fallback for self-hosted installs with no Bento configuration. Auth mail is sent immediately, not through a sequence. Do not create a second verification or reset flow. Authentication emails include per-send directives disabling click rewriting, open tracking, and UTMs.
 4. Lifecycle events run every 15 minutes when billing is enabled. They only target verified account owners, not team members. This means an unverified signup may not get a trial email until verification. The trial clock still starts at signup.
 
 ## Fields
