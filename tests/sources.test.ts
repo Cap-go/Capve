@@ -28,7 +28,7 @@ async function api<T>(method: string, path: string, body?: unknown, status = 200
 async function adcashCampaign() {
   const { traffic_source, settings, postback } = await api<{
     traffic_source: { id: string; cost_type: string };
-    settings: { tokens: Array<{ param: string; slot: string }>; api_provider: string | null };
+    settings: { tokens: Array<{ param: string; slot: string; macro?: string }>; api_provider: string | null };
     postback: { url: string } | null;
   }>("POST", "/api/sources/from-template", { template_id: "adcash", name: "Adcash pops" }, 201);
   const { program } = await api<{ program: { id: string; campaign_key: string } }>(
@@ -93,7 +93,8 @@ describe("traffic source templates, tokens and cost", () => {
   it("creates a traffic source from a template with tokens and postback", async () => {
     const { source, settings, postback } = await adcashCampaign();
     expect(source.cost_type).toBe("cpm");
-    expect(settings.api_provider).toBe("adcash");
+    expect(settings.api_provider).toBeNull();
+    expect(settings.tokens.find((t) => t.slot === "cost")?.macro).toBe("[redirection_cost]");
     expect(settings.tokens.find((t) => t.param === "zoneid")?.slot).toBe("sub1");
     expect(postback?.url).toContain("{external_id}");
   });
@@ -236,7 +237,7 @@ describe("traffic source templates, tokens and cost", () => {
     const { source, program } = await adcashCampaign();
     const z1 = await click(program.campaign_key, "zoneid=123&campaignid=77&clickid=s1");
     const z2 = await click(program.campaign_key, "zoneid=456&campaignid=77&clickid=s2");
-    await api("PUT", `/api/sources/${source.id}/settings`, { api_key: "k" });
+    await api("PUT", `/api/sources/${source.id}/settings`, { api_provider: "adcash", api_key: "k" });
 
     const day = today();
     const row = (await getSourceSettingsRow(env.DB, source.id))!;

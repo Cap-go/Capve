@@ -38,7 +38,7 @@ export function DocsTrafficSources() {
       </table>
       <p>
         Campaigns using the source get a tracking URL with the source's macros appended (campaign
-        view → <em>Traffic source link & cost</em>):
+        view → <em>Traffic source link</em>):
       </p>
       <CodeBlock>{`${base}/c/casino_ab12cd34?zoneid=[zone]&campaignid=[campaign]&country=[country]&cost=[redirection_cost]&clickid=[clickid]`}</CodeBlock>
       <p>
@@ -46,7 +46,7 @@ export function DocsTrafficSources() {
         works in reports and <code>{"{external_id}"}</code> in the outgoing postback returns the
         source's click id. Templates marked <em>check macros</em> use names we could not verify:
         compare them with the source's tracking settings and edit the tokens in{" "}
-        <strong>Traffic sources → Tokens & cost API</strong>.
+        <strong>Traffic sources → URL parameters</strong>.
       </p>
       <div className="docs-callout">
         <strong>Adcash pixel</strong>
@@ -98,9 +98,9 @@ export function DocsTrafficSources() {
       <p>
         The traffic-source link carries the price of each visit. That does not need an API key.
         Adcash fills <code>cost=[redirection_cost]</code> with the price of that redirect, in the
-        wallet currency. In <strong>Tokens & cost API</strong>, the Cost row's source macro is{" "}
+        wallet currency. In <strong>URL parameters</strong>, the Cost row's source macro is{" "}
         <code>[redirection_cost]</code>. Save, then paste each campaign's{" "}
-        <strong>Traffic source link & cost</strong> URL into the Adcash campaign. Adcash keeps
+        <strong>Traffic source link</strong> into the Adcash campaign. Adcash keeps
         calling the previous URL until you paste the new one.
       </p>
       <p>
@@ -121,7 +121,7 @@ export function DocsTrafficSources() {
         edits campaigns inside Adcash. Capve does not call it.
       </p>
       <p>
-        In <strong>Traffic sources → Tokens & cost API</strong>, set Cost API to Adcash and paste
+        In <strong>Traffic sources → Spending API</strong>, set Cost API to Adcash and paste
         the Reporting API token. The key is encrypted with <code>AUTH_SECRET</code> and never
         returned; after rotating <code>AUTH_SECRET</code>, enter it again. An hourly cron pulls
         yesterday's and today's spend and writes it onto the clicks of every campaign using that
