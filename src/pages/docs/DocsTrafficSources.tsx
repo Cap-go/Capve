@@ -104,10 +104,9 @@ export function DocsTrafficSources() {
         calling the previous URL until you paste the new one.
       </p>
       <p>
-        Capve stores that price in whole cents. A visit under half a cent is stored as 0, which is
-        normal for cheap pop. The campaign total then stays 0. For those campaigns, enter the
-        spending Adcash shows on the campaign's <strong>Traffic source link & cost</strong> card,
-        or pull the total with the Reporting API below.
+        Capve stores that price on the click, including a fraction of a cent. A pop at €0.001 is
+        kept and the report total is the sum of the visits. Clicks already saved with no price
+        stay at 0. The Reporting API below copies Adcash's spending total instead.
       </p>
 
       <h2>Cost from the traffic source API</h2>
