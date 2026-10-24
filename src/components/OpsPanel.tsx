@@ -247,7 +247,7 @@ function TeamPanel({ role }: { role: TeamRole }) {
           <label className="block text-sm">
             <span className="mb-1 block font-medium">Role</span>
             <select
-              className="w-full rounded-md border border-[var(--velo-border)] bg-transparent px-3 py-2"
+              className="input"
               value={memberRole}
               onChange={(e) => setMemberRole(e.target.value as "admin" | "viewer")}
             >
@@ -354,7 +354,7 @@ function TriggersPanel() {
         <label className="block text-sm">
           <span className="mb-1 block font-medium">Event</span>
           <select
-            className="w-full rounded-md border border-[var(--velo-border)] bg-transparent px-3 py-2"
+            className="input"
             value={event}
             onChange={(e) => setEvent(e.target.value as "conversion" | "click")}
           >
