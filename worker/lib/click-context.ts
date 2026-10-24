@@ -52,12 +52,15 @@ function param(url: URL, ...names: string[]): string | null {
   return null;
 }
 
-/** `cost` is in currency units (e.g. 0.05) → integer cents. */
+/**
+ * `cost` is in currency units (e.g. 0.05, or 0.001 for a pop) → cents.
+ * Fractions of a cent are kept. Rounding to a whole cent stored €0.001 as 0.
+ */
 export function parseCostCents(raw: string | null): number | null {
   if (!raw) return null;
   const value = Number(raw);
   if (!Number.isFinite(value) || value < 0) return null;
-  return Math.round(value * 100);
+  return Math.round(value * 100 * 1_000_000) / 1_000_000;
 }
 
 function referrerDomain(raw: string | null): string | null {

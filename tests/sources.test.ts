@@ -3,6 +3,7 @@ import { beforeAll, describe, expect, it } from "vitest";
 import { adcashProvider } from "../worker/cron/cost-providers";
 import { syncSourceCost } from "../worker/cron/cost-sync";
 import { getSourceSettingsRow } from "../worker/db/sources";
+import { parseCostCents } from "../worker/lib/click-context";
 import { applySourceTokens, parseTokens, SOURCE_TEMPLATES } from "../worker/lib/source-templates";
 import { registerTestUser } from "./helpers";
 import { initSql } from "./schema";
@@ -131,6 +132,19 @@ describe("traffic source templates, tokens and cost", () => {
       { sub1: "raw", sub2: null, sub3: null, sub4: null, sub5: null, sub6: null, sub7: null, sub8: null, sub9: null, sub10: null, external_id: null, cost_cents: null },
     );
     expect(out.sub1).toBe("1");
+  });
+
+  it("stores a sub-cent visit price and sums it on the campaign", async () => {
+    expect(parseCostCents("0.001")).toBeCloseTo(0.1, 6);
+    expect(parseCostCents("0.05")).toBe(5);
+    const { program } = await adcashCampaign();
+    const ids: string[] = [];
+    for (let i = 0; i < 10; i++) ids.push(await click(program.campaign_key, `clickid=pop${i}&cost=0.001`));
+    expect((await clickRow(ids[0]))!.cost_cents).toBeCloseTo(0.1, 6);
+    const { campaigns } = await api<{
+      campaigns: Array<{ id: string; metrics: { cost_cents: number } }>;
+    }>("GET", "/api/reports/campaigns");
+    expect(campaigns.find((row) => row.id === program.id)!.metrics.cost_cents).toBe(1);
   });
 
   it("cost update spreads total over matching clicks and drives report cost/ROI", async () => {
