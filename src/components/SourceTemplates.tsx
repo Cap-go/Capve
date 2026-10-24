@@ -368,6 +368,15 @@ export function SourceSettingsPanel({
               onChange={(e) => setApiKey(e.target.value)}
             />
           </div>
+          {apiProvider === "adcash" ? (
+            <p className="text-sm text-[var(--velo-muted)]">
+              Optional. Per-visit cost comes from <span className="mono">cost=[redirection_cost]</span> on
+              the campaign URL and needs no key. To copy Adcash's spending total, turn on{" "}
+              <strong>Reporting API</strong> in Adcash → Settings → API Tokens (“Get your campaign data
+              through the Reporting API”) and paste that token. Client API is for creating campaigns;
+              Capve does not use it.
+            </p>
+          ) : null}
           {settings.last_sync_at && (
             <p className="text-sm text-[var(--velo-muted)]">
               Last sync {new Date(settings.last_sync_at).toLocaleString()}

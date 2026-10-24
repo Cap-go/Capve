@@ -40,7 +40,7 @@ export function DocsTrafficSources() {
         Campaigns using the source get a tracking URL with the source's macros appended (campaign
         view → <em>Traffic source link & cost</em>):
       </p>
-      <CodeBlock>{`${base}/c/casino_ab12cd34?zoneid=[zone]&campaignid=[campaign]&country=[country]&cost=[cpm]&clickid=[clickid]`}</CodeBlock>
+      <CodeBlock>{`${base}/c/casino_ab12cd34?zoneid=[zone]&campaignid=[campaign]&country=[country]&cost=[redirection_cost]&clickid=[clickid]`}</CodeBlock>
       <p>
         On each click the mapped params are copied into their slot, so <code>Group by → Zone (sub1)</code>{" "}
         works in reports and <code>{"{external_id}"}</code> in the outgoing postback returns the
@@ -94,13 +94,39 @@ export function DocsTrafficSources() {
         a path; a paused path gets no new traffic and keeps its stats.
       </p>
 
+      <h2>Cost on the campaign URL</h2>
+      <p>
+        The traffic-source link carries the price of each visit. That does not need an API key.
+        Adcash fills <code>cost=[redirection_cost]</code> with the price of that redirect, in the
+        wallet currency. In <strong>Tokens & cost API</strong>, the Cost row's source macro is{" "}
+        <code>[redirection_cost]</code>. Save, then paste each campaign's{" "}
+        <strong>Traffic source link & cost</strong> URL into the Adcash campaign. Adcash keeps
+        calling the previous URL until you paste the new one.
+      </p>
+      <p>
+        Capve stores that price in whole cents. A visit under half a cent is stored as 0, which is
+        normal for cheap pop. The campaign total then stays 0. For those campaigns, enter the
+        spending Adcash shows on the campaign's <strong>Traffic source link & cost</strong> card,
+        or pull the total with the Reporting API below.
+      </p>
+
       <h2>Cost from the traffic source API</h2>
       <p>
-        In <strong>Traffic sources → Tokens & cost API</strong> pick a cost API (Adcash) and paste
-        its API key. The key is encrypted with <code>AUTH_SECRET</code> and never returned; after
-        rotating <code>AUTH_SECRET</code>, enter it again. An hourly cron pulls yesterday's and
-        today's spend and writes it onto the clicks of every campaign using that source, matched by
-        the tokens marked <em>Source campaign id</em> and <em>Zone id</em>. Use{" "}
+        The API key is optional. It copies Adcash's reported spending onto the clicks, which is
+        the campaign total rather than the per-visit price.
+      </p>
+      <p>
+        In Adcash, open <strong>Settings → API Tokens</strong>. Turn on <strong>Reporting API</strong>,
+        the row labeled “Get your campaign data through the Reporting API,” and copy that token.{" "}
+        <strong>Client API</strong>, “Create and manage campaigns with our Client API,” creates and
+        edits campaigns inside Adcash. Capve does not call it.
+      </p>
+      <p>
+        In <strong>Traffic sources → Tokens & cost API</strong>, set Cost API to Adcash and paste
+        the Reporting API token. The key is encrypted with <code>AUTH_SECRET</code> and never
+        returned; after rotating <code>AUTH_SECRET</code>, enter it again. An hourly cron pulls
+        yesterday's and today's spend and writes it onto the clicks of every campaign using that
+        source, matched by the tokens marked <em>Source campaign id</em> and <em>Zone id</em>. Use{" "}
         <strong>Sync cost now</strong> (or <code>POST /api/sources/:id/sync-cost</code>) to run it
         on demand.
       </p>
