@@ -1,3 +1,4 @@
+import { bentoConfigured, bentoRequest } from "./bento";
 import type { Env } from "../types";
 
 type SendEmailInput = {
@@ -28,6 +29,13 @@ export function isLocalDev(env: Env): boolean {
 
 export async function sendEmail(env: Env, input: SendEmailInput): Promise<void> {
   const from = emailFrom(env);
+
+  if (bentoConfigured(env)) {
+    await bentoRequest(env, "emails", [{
+      to: input.to, from, subject: input.subject, html_body: input.html, transactional: true,
+    }]);
+    return;
+  }
 
   if (!env.EMAIL) {
     // Bodies contain reset/verify links: only print them on a local dev install.

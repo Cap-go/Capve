@@ -1,3 +1,5 @@
+import { isPlanId } from "../../shared/billing";
+import { billingRow } from "../lib/billing";
 import { Hono } from "hono";
 import { ACCOUNT_CONTEXT_COOKIE } from "../lib/account-context";
 import type { SessionUser } from "../types-ops";
@@ -79,6 +81,7 @@ auth.post("/register", async (c) => {
     email?: string;
     password?: string;
     name?: string;
+    plan?: unknown;
   } | null;
   const email = body?.email?.trim().toLowerCase() ?? "";
   const password = body?.password ?? "";
@@ -105,6 +108,9 @@ auth.post("/register", async (c) => {
     throw error;
   }
 
+  await billingRow(c.env, userId);
+  if (isPlanId(body?.plan)) await c.env.DB.prepare("UPDATE account_billing SET plan = ? WHERE account_id = ?")
+    .bind(body.plan, userId).run();
   await sendVerification(c.env, { id: userId, email });
 
   const token = await signSession(c.env, { sub: userId, email, sv: 0 });

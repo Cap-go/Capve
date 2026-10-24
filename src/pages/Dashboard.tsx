@@ -1,3 +1,5 @@
+import type { BillingStatus } from "../../shared/billing";
+import { BillingPanel, ReportingLock } from "../components/BillingPanel";
 import { FormEvent, useEffect, useRef, useState, type ReactNode } from "react";
 import { Link, Navigate, useSearchParams } from "react-router-dom";
 import { AppShell, type AppNavItem } from "../components/AppShell";
@@ -59,7 +61,8 @@ type EntityView =
   | "groups"
   | "settings"
   | "mcp"
-  | "admin";
+  | "admin"
+  | "billing";
 
 const ENTITY_NAV: AppNavItem<EntityView>[] = [
   { key: "campaigns", label: "Campaigns", icon: "campaigns", group: "Tracking" },
@@ -69,11 +72,13 @@ const ENTITY_NAV: AppNavItem<EntityView>[] = [
   { key: "offers", label: "Offers", icon: "offers", group: "Inventory" },
   { key: "landers", label: "Landers", icon: "landers", group: "Inventory" },
   { key: "groups", label: "Groups", icon: "groups", group: "Inventory" },
+  { key: "billing", label: "Billing", icon: "settings", group: "Workspace" },
   { key: "settings", label: "Settings", icon: "settings", group: "Workspace" },
   { key: "mcp", label: "AI / MCP", icon: "mcp", group: "Workspace" },
 ];
 
 const PAGE_COPY: Record<EntityView, { title: string; description: string }> = {
+  billing: { title: "Billing", description: "Plan, trial, traffic allowance, and subscription." },
   campaigns: { title: "Campaigns", description: "Tracking links, paths, postbacks, and live stats per campaign." },
   reports: { title: "Reports", description: "Compare campaigns, drill into dimensions, and export data." },
   sources: { title: "Traffic sources", description: "Where clicks come from, their tokens, cost model, and postbacks." },
@@ -117,6 +122,24 @@ export function DashboardPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const tab = (searchParams.get("tab") as Tab) || "overview";
   const entity = (searchParams.get("entity") as EntityView) || "campaigns";
+
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
+  const reportsLocked = billing?.reportsAllowed === false;
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    setBilling(null);
+    const refresh = () => api.billing().then((value) => { if (!cancelled) setBilling(value); }).catch(() => {});
+    void refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("capve:billing-changed", refresh);
+    return () => {
+      cancelled = true; window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("capve:billing-changed", refresh);
+    };
+  }, [user]);
 
   const [programs, setPrograms] = useState<Program[]>([]);
   const [sources, setSources] = useState<TrafficSource[]>([]);
@@ -170,7 +193,7 @@ export function DashboardPage() {
     setStats(null);
     setTracking(null);
 
-    api
+    if (!reportsLocked) api
       .stats(selectedId)
       .then((data) => {
         if (!cancelled) setStats(data);
@@ -191,7 +214,7 @@ export function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId]);
+  }, [selectedId, reportsLocked]);
 
   function setEntity(next: EntityView) {
     const params: Record<string, string> = {};
@@ -262,6 +285,7 @@ export function DashboardPage() {
       const { tracking_url } = await api.createAffiliate(programId, affiliateName);
       setAffiliateName("");
       setLastLink({ programId, url: tracking_url });
+      if (reportsLocked) return;
       const nextStats = await api.stats(programId);
       setStats((prev) => (prev && prev.program.id !== programId ? prev : nextStats));
     } catch (err) {
@@ -314,7 +338,7 @@ export function DashboardPage() {
     ? programs.filter((p) => `${p.name} ${p.campaign_key ?? p.slug}`.toLowerCase().includes(filterTerm))
     : programs;
   const selectedProgram = programs.find((p) => p.id === selectedId) ?? stats?.program;
-  const visibleStats = stats && stats.program.id === selectedId ? stats : null;
+  const visibleStats = !reportsLocked && stats && stats.program.id === selectedId ? stats : null;
 
   const navItems: AppNavItem<EntityView>[] = [
     ...ENTITY_NAV.filter(({ key }) => !user.impersonating || key !== "mcp"),
@@ -360,13 +384,16 @@ export function DashboardPage() {
 
       {user.email_verified === false ? <VerifyEmailBanner /> : null}
 
+      {reportsLocked && entity !== "billing" && <ReportingLock />}
       <ErrorBox message={error} />
 
       {entity !== "campaigns" ? (
-        entity === "admin" ? (
+        entity === "billing" ? (
+          <BillingPanel billing={billing} owner={user.role === "owner" && !user.impersonating} />
+        ) : entity === "admin" ? (
           <AdminPanel />
         ) : entity === "reports" ? (
-          <CampaignReportPanel canWrite={canWrite} />
+          reportsLocked ? null : <CampaignReportPanel canWrite={canWrite} />
         ) : entity === "settings" ? (
           <div className="space-y-6">
             <AccountSettingsPanel canWrite={(user.role ?? "owner") !== "viewer"} />
@@ -500,7 +527,7 @@ export function DashboardPage() {
                   Read the campaign guide
                 </Link>
               </div>
-            ) : tab === "clicklog" ? (
+            ) : reportsLocked && tab !== "overview" ? null : tab === "clicklog" ? (
               <ClicklogTable key={selectedId} programId={selectedId} onError={setError} />
             ) : tab === "conversions" ? (
               <ConversionsTable key={selectedId} programId={selectedId} onError={setError} />

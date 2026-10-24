@@ -10,8 +10,16 @@ export type EmailBinding = {
 };
 
 export type Env = {
+  BILLING_ENABLED?: string;
+  STRIPE_SECRET_KEY?: string;
+  STRIPE_WEBHOOK_SECRET?: string;
+  STRIPE_PRICE_STARTER?: string;
+  STRIPE_PRICE_PRO?: string;
+  BENTO_SITE_UUID?: string;
+  BENTO_PUBLISHABLE_KEY?: string;
+  BENTO_SECRET_KEY?: string;
   DB: D1Database;
-  ASSETS: Fetcher;
+  ASSETS?: Fetcher;
   APP_URL: string;
   AUTH_SECRET: string;
   EMAIL?: EmailBinding;

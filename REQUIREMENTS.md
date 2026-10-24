@@ -1,6 +1,6 @@
 # Capve requirements
 
-Capve is an **open-source alternative to Binom**: a campaign and affiliate tracker that runs on Cloudflare Workers + D1. Anyone can deploy it on their own Cloudflare account; `capve.app` is this repo's demo install. It is **not** Capgo's Affonso program and does not replace it.
+Capve is an **open-source alternative to Binom**: a campaign and affiliate tracker that runs on Cloudflare Workers + D1. Anyone can deploy it on their own Cloudflare account; `capve.app` is the hosted install. It is **not** Capgo's Affonso program and does not replace it.
 
 ## Product
 
@@ -85,11 +85,21 @@ Must pass in CI: tracking flow, redirect security, CORS, session auth, security 
 
 GitHub org secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` are already set at Cap-go org level.
 
+## Hosted billing
+
+Hosted billing is explicitly requested. See [billing setup](docs/billing-setup.md) and [Bento flow instructions and copy](docs/bento-emails.md).
+
+- Starter $74.50/month, 1M clicks per UTC calendar month; Pro $149.50/month, 60M clicks. Prices are half Binom's listed v2/Cloud monthly prices, with different click allowances.
+- New accounts receive a 14-day no-card trial. Existing accounts start a fresh 14-day trial when the billing migration runs. D1 stores account-specific trial overrides, including Medialab's three-year courtesy trial once its exact identity is confirmed.
+- Trial/subscription expiry and traffic overage lock reporting API reads, charts, logs and CSV exports, including MCP, while redirects, postbacks, conversion ingestion and campaign editing continue.
+- Stripe Checkout, verified subscription webhooks and the customer portal manage hosted subscriptions. Verified owner sessions only for checkout/portal; billing status is available to the selected account's team and MCP.
+- Bento sends authentication/operational mail when configured, plus event-driven trial and subscription notices. Self-hosted installs can keep Cloudflare email and leave billing disabled.
+- `BILLING_ENABLED` is opt-in. Set Stripe price IDs, secrets and Bento flows before enabling on capve.app. Martin handles production deployment and the exact Medialab DB override.
+
 ## Out of scope
 
 Do **not** build these unless explicitly requested:
 
-- Stripe / billing / pricing tiers
 - Social login
 - Affiliate payouts
 - Replacing or integrating with **Affonso**

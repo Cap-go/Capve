@@ -1,3 +1,4 @@
+import { billingEmails } from "./billing-emails";
 import type { Env } from "../types";
 import { runRetention } from "../lib/retention";
 import { automationJob } from "./alerts";
@@ -17,7 +18,7 @@ export type ScheduledJob = {
  */
 export const CRON_JOBS: Record<string, ScheduledJob[]> = {
   // Every 15 minutes: automation rules (zone blacklist, ROI/spend alerts).
-  "*/15 * * * *": [automationJob],
+  "*/15 * * * *": [automationJob, { name: "billing-emails", run: (env) => billingEmails(env) }],
   // Hourly: pull today's and yesterday's spend from traffic source cost APIs (Adcash, ...).
   "17 * * * *": [{ name: "cost-sync", run: (env) => syncAllSourceCosts(env) }],
   // Daily: postback delivery log pruning and optional raw click retention.

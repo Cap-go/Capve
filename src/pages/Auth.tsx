@@ -1,3 +1,4 @@
+import { isPlanId } from "../../shared/billing";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { ErrorBox, Field, Shell } from "../components/ui";
@@ -61,6 +62,8 @@ export function LoginPage() {
 export function RegisterPage() {
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
+  const selectedPlan = new URLSearchParams(window.location.search).get("plan");
+  const plan = isPlanId(selectedPlan) ? selectedPlan : "starter";
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -74,7 +77,7 @@ export function RegisterPage() {
     setBusy(true);
     setError("");
     try {
-      const { user: next } = await api.register({ email, password, name: name || undefined });
+      const { user: next } = await api.register({ email, password, name: name || undefined, plan });
       setUser(next);
       navigate("/app");
     } catch (err) {
@@ -94,7 +97,7 @@ export function RegisterPage() {
     >
       <div className="mx-auto max-w-md px-6 py-16">
         <h1 className="text-3xl font-semibold">Create account</h1>
-        <p className="mt-2 text-[var(--velo-muted)]">Start tracking campaigns in minutes.</p>
+        <p className="mt-2 text-[var(--velo-muted)]">Try {plan === "pro" ? "Pro" : "Starter"} free for 14 days. No card required.</p>
         <form className="card mt-8 space-y-4 p-6" onSubmit={onSubmit}>
           <Field label="Name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
           <Field label="Email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
