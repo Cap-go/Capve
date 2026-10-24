@@ -46,7 +46,7 @@ export const SOURCE_TEMPLATES: SourceTemplate[] = [
       { param: "zoneid", name: "Zone", slot: "sub1", macro: "[zone]", kind: "zone" },
       { param: "campaignid", name: "Campaign", slot: "sub2", macro: "[campaign]", kind: "campaign" },
       { param: "country", name: "Country", slot: "sub3", macro: "[country]" },
-      { param: "cost", name: "Cost", slot: "cost", macro: "[cpm]" },
+      { param: "cost", name: "Cost", slot: "cost", macro: "[redirection_cost]" },
       { param: "clickid", name: "Click ID", slot: "external_id", macro: "[clickid]" },
     ],
     postback_url: "https://www.adcash.com/script/register_event.php?key=YOUR_KEY&cid={external_id}&payout={payout}",
