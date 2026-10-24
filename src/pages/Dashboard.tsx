@@ -25,6 +25,9 @@ import {
   useSaveState,
 } from "../components/ui";
 import { snippetScriptTag } from "../lib/integration-examples";
+
+/** Shown in the destination field, same idea as the outgoing-postback placeholder. */
+const DESTINATION_EXAMPLE = "https://network.example/offer?subid1={click_id}";
 import {
   api,
   formatMoney,
@@ -406,10 +409,15 @@ export function DashboardPage() {
                 <Field
                   label="Destination URL (optional)"
                   type="url"
-                  placeholder="Empty = route through paths"
+                  placeholder={DESTINATION_EXAMPLE}
                   value={destinationUrl}
                   onChange={(e) => setDestinationUrl(e.target.value)}
                 />
+                <p className="text-sm text-[var(--velo-muted)]">
+                  Leave empty to route through paths. Copy <span className="mono">{"{click_id}"}</span> into
+                  the network sub ID, as in the example. <span className="mono">[clickid]</span> belongs on
+                  the traffic-source link.
+                </p>
                 <div className="grid grid-cols-2 gap-3">
                   <SelectField
                     label="Traffic source"
@@ -882,10 +890,15 @@ function OverviewPanel({
             <Field
               label="Destination URL (optional)"
               type="url"
-              placeholder="Empty = route through paths"
+              placeholder={DESTINATION_EXAMPLE}
               value={draft.destination}
               onChange={(e) => setDraft({ ...draft, destination: e.target.value })}
             />
+            <p className="text-sm text-[var(--velo-muted)]">
+              Leave empty to route through paths. Copy <span className="mono">{"{click_id}"}</span> into the
+              network sub ID, as in the example. <span className="mono">[clickid]</span> belongs on the
+              traffic-source link.
+            </p>
             <SelectField
               label="Traffic source"
               value={draft.sourceId}

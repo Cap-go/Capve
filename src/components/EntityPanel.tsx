@@ -284,10 +284,10 @@ export function EntityPanel({ kind, canWrite = true }: { kind: EntityKind; canWr
             )}
             {kind === "offers" && (
               <p className="text-sm text-[var(--velo-muted)]">
-                Paste the network link as is, and put <span className="mono">{"{click_id}"}</span> in its
-                sub ID field, e.g. <span className="mono">{"?subid1={click_id}"}</span>. Not the traffic
-                source&apos;s macro (<span className="mono">[clickid]</span>): that one goes in the
-                campaign link.{" "}
+                Paste the network link as is. Put <span className="mono">{"{click_id}"}</span> in its sub
+                ID field, e.g. <span className="mono">{"?subid1={click_id}"}</span>. A pasted source click
+                macro (<span className="mono">[clickid]</span>) works too: Capve fills it with the same
+                click id. The source macro on the campaign link is separate.{" "}
                 <a className="underline" href="/docs/networks" target="_blank" rel="noreferrer">
                   Example
                 </a>

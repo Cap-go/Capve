@@ -147,6 +147,30 @@ describe("campaign routing", () => {
     expect(location).toContain("merchant.example.com/lander");
   });
 
+  it("fills a pasted [clickid] on the campaign destination with the Capve click id", async () => {
+    const programRes = await SELF.fetch("http://localhost/api/programs", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({
+        name: "YesPlay pasted macro",
+        destination_url: "https://goyesplay.com/yavzamcgc?subid1=[clickid]",
+      }),
+    });
+    expect(programRes.status).toBe(201);
+    const { program } = await json<{ program: { campaign_key: string } }>(programRes);
+
+    const clickRes = await SELF.fetch(
+      `http://localhost/c/${program.campaign_key}?clickid=adcash123`,
+      { redirect: "manual" },
+    );
+    expect(clickRes.status).toBe(302);
+    const url = new URL(clickRes.headers.get("Location")!);
+    const clickId = url.searchParams.get("click_id");
+    expect(clickId).toMatch(/^clk_/);
+    expect(url.searchParams.get("subid1")).toBe(clickId);
+    expect(url.searchParams.get("subid1")).not.toBe("[clickid]");
+  });
+
   it("falls back to destination when no paths configured", async () => {
     const { affiliate } = await setupProgram();
 

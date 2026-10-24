@@ -5,8 +5,15 @@ import {
   setVisitorAssignment,
 } from "../db/routing";
 import type { Defer } from "./background";
+import { passthroughClickMacros } from "./source-templates";
 import { parseHttpUrl, withQueryParam } from "./urls";
 import { weightedItem } from "./rules";
+
+/** Source click macros, plus the same strings percent-encoded in a stored URL. */
+const PASSTHROUGH_CLICK_MACROS = passthroughClickMacros().flatMap((macro) => {
+  const encoded = encodeURIComponent(macro);
+  return encoded === macro ? [macro] : [macro, encoded];
+});
 
 /** Weighted lander/offer of a path; falls back to the single legacy lander_id / offer_id. */
 function pickItem(
@@ -120,7 +127,11 @@ export async function selectPath(
   return weightedPick(paths);
 }
 
-/** Binom-style URL macros: values are URL-encoded; unknown macros are left untouched. */
+/**
+ * Binom-style URL macros: values are URL-encoded; unknown `{name}` macros are left untouched.
+ * A traffic source's own click placeholder (`[clickid]`, `${SUBID}`, …) is filled with the same
+ * click id as `{click_id}`, so a direct-link URL pasted into an offer still attributes.
+ */
 export function substituteMacros(url: string, ctx: RoutingContext): string {
   const values: Record<string, string> = {
     click_id: ctx.click_id,
@@ -137,10 +148,15 @@ export function substituteMacros(url: string, ctx: RoutingContext): string {
   for (let i = 1; i <= 10; i++) {
     values[`sub${i}`] = ctx.subs?.[`sub${i}`] ?? "";
   }
-  return url.replace(/\{([a-z0-9_]+)\}/gi, (match, name: string) => {
+  let next = url.replace(/\{([a-z0-9_]+)\}/gi, (match, name: string) => {
     const value = values[name.toLowerCase()];
     return value === undefined ? match : encodeURIComponent(value);
   });
+  const clickId = encodeURIComponent(ctx.click_id);
+  for (const macro of PASSTHROUGH_CLICK_MACROS) {
+    if (next.includes(macro)) next = next.replaceAll(macro, clickId);
+  }
+  return next;
 }
 
 export function resolvePathDestination(

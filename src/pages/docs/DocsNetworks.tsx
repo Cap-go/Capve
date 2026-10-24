@@ -81,8 +81,10 @@ export function DocsNetworks() {
       </div>
       <p>
         Capve sits in the middle, so that one URL becomes <strong>two</strong>. Copy the network
-        link into Capve as an offer, keep everything as is (<code>ysrbgh8c2</code> is your
-        network's link code, leave it), and only swap the macro after <code>subid1=</code>:
+        link into Capve as an offer and keep the link code (<code>ysrbgh8c2</code> is your
+        network's code). <code>[clickid]</code> can stay: Capve fills it with its own click id,
+        the same value as <code>{"{click_id}"}</code>. Swapping to <code>{"{click_id}"}</code> is
+        the same result, and reads more clearly.
       </p>
       <div className="docs-pair">
         <div>
@@ -102,7 +104,7 @@ export function DocsNetworks() {
             https://goyesplay.com/ysrbgh8c2?<Net>subid1</Net>=<Macro>{"{click_id}"}</Macro>
           </div>
           <p>
-            <code>[clickid]</code> → <code>{"{click_id}"}</code>. Capve fills it with its own ID.
+            <code>[clickid]</code> or <code>{"{click_id}"}</code>. Capve fills either one with its own ID.
           </p>
         </div>
       </div>
@@ -112,9 +114,10 @@ export function DocsNetworks() {
           Capve campaign has its own key; the network link stays exactly the same inside the offer.
         </li>
         <li>
-          <strong>Do not</strong> leave <code>[clickid]</code> in the offer URL. Only Adcash
-          understands it, and Adcash never sees that URL. Capve still keeps Adcash's ID (stored as{" "}
-          <code>external_id</code>) to report conversions back to Adcash.
+          Leaving <code>[clickid]</code> (or another source click macro such as <code>{"${SUBID}"}</code>) in
+          the offer URL is fine. Capve replaces it with its own click id before the redirect. Capve still
+          keeps Adcash's ID (stored as <code>external_id</code>) and the postback to Adcash uses{" "}
+          <code>{"{external_id}"}</code>, not <code>{"{click_id}"}</code>.
         </li>
         <li>
           In the network's postback, use the macro that returns <code>subid1</code>:{" "}
