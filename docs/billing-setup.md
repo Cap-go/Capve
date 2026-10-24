@@ -29,15 +29,13 @@ Stripe prices are the charging source of truth. Verify that the configured IDs a
 
 ## Medialab's three-year trial
 
-An exact account ID or owner email is required. Display names are not unique. No production account has been modified by this PR.
+Medialab's confirmed account is `usr_f26ae7acc0337df4`, owned by `team.mediapath@gmail.com`.
 
-After migration, look up the account using a read-only D1 query and review its ID and email. Then run:
+Migration `0025_medialab_trial.sql` sets its trial start to the migration time and its end to three calendar years later. Both ID and email must match. It does not change other accounts or the plan's click allowance. The migration runs once through the normal deployment workflow. No production account has been modified by this PR.
 
-```sh
-bun scripts/extend-trial.mjs --account=usr_EXACT_REVIEWED_ID --remote
-```
+After deployment, verify the stored trial end for this account before enabling billing. Review whether Medialab needs Pro's allowance before enabling enforcement.
 
-The script sets `account_billing.trial_started_at` to now and `trial_ends_at` to the same UTC date three calendar years later, then prints the account email and resulting end date. It defaults to local D1 unless `--remote` is explicitly supplied. Run once; running again grants a fresh three years. It does not modify the click allowance. Review whether Medialab needs Pro's allowance before enabling enforcement.
+For any later, explicitly authorized extension, `scripts/extend-trial.mjs` accepts an exact reviewed account ID. It defaults to local D1; `--remote` explicitly targets production. It exits nonzero if the account does not exist. Running it again grants a fresh three years, so it is not part of routine deployment.
 
 This date override survives deployments. Reminder scheduling uses the stored interval, so Medialab's midpoint is around 18 months, not day 7. Extending a trial changes its event keys and suppresses old expiry schedules because Bento flows below have no delayed steps.
 

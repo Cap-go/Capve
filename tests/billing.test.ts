@@ -4,12 +4,13 @@ import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:
 import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
 import worker from "../worker";
 import type { Env } from "../worker/types";
-import { billingStatus } from "../worker/lib/billing";
+import { billingRow, billingStatus } from "../worker/lib/billing";
 import { billingEmails } from "../worker/cron/billing-emails";
 import type { BillingStatus } from "../shared/billing";
 import { initSql } from "./schema";
 import { registerTestUser } from "./helpers";
 import migration from "../migrations/0024_billing.sql?raw";
+import medialabMigration from "../migrations/0025_medialab_trial.sql?raw";
 
 const billingEnv: Env = { ...env, APP_URL: "http://localhost:5173", BILLING_ENABLED: "true" };
 let headers: Record<string, string>;
@@ -209,6 +210,21 @@ describe("hosted billing", () => {
     if (status === 500) {
       expect((await call("/api/billing/checkout", { method: "POST", body: JSON.stringify({ plan: "pro" }) }, configured)).status).toBe(409);
     }
+  });
+
+  it("grants the Medialab migration only to its confirmed ID and email", async () => {
+    const id = "usr_f26ae7acc0337df4";
+    await env.DB.prepare("INSERT INTO users (id, email, created_at) VALUES (?, 'other@example.com', ?)").bind(id, Date.now()).run();
+    const original = await billingRow(billingEnv, id);
+    await env.DB.prepare(medialabMigration).run();
+    expect((await billingRow(billingEnv, id)).trial_ends_at).toBe(original.trial_ends_at);
+    await env.DB.prepare("UPDATE users SET email = 'team.mediapath@gmail.com' WHERE id = ?").bind(id).run();
+    const unaffected = await billingRow(billingEnv, accountId);
+    await env.DB.prepare(medialabMigration).run();
+    const updated = await billingRow(billingEnv, id);
+    const expected = new Date(updated.trial_started_at); expected.setUTCFullYear(expected.getUTCFullYear() + 3);
+    expect(updated.trial_ends_at).toBe(expected.getTime());
+    expect((await billingRow(billingEnv, accountId)).trial_ends_at).toBe(unaffected.trial_ends_at);
   });
 
   it("rejects unsigned webhooks, invalid plans and cross-origin checkout", async () => {
