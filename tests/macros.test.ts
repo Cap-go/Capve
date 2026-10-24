@@ -14,9 +14,27 @@ describe("offer URL click macros", () => {
     const curly = substituteMacros("https://goyesplay.com/yavzamcgc?subid1={click_id}", ctx);
     const brackets = substituteMacros("https://goyesplay.com/yavzamcgc?subid1=[clickid]", ctx);
     const encoded = substituteMacros("https://goyesplay.com/yavzamcgc?subid1=%5Bclickid%5D", ctx);
+    const lower = substituteMacros("https://goyesplay.com/yavzamcgc?subid1=%5bclickid%5d", ctx);
     expect(curly).toBe("https://goyesplay.com/yavzamcgc?subid1=clk_abc");
     expect(brackets).toBe(curly);
     expect(encoded).toBe(curly);
+    expect(lower).toBe(curly);
+    expect(substituteMacros("https://goyesplay.com/yavzamcgc?subid1=%5bclickid%5d", ctx)).toBe(curly);
+  });
+
+  it("leaves unrelated percent-escapes in place", () => {
+    expect(
+      substituteMacros("https://go.example/?subid1=%5bclickid%5d&sig=%2fkeep%5bzone%5d", ctx),
+    ).toBe("https://go.example/?subid1=clk_abc&sig=%2fkeep%5bzone%5d");
+  });
+
+  it("does not rewrite a source id that contains a click macro", () => {
+    expect(
+      substituteMacros("https://go.example/?ext={external_id}&subid1=[clickid]", {
+        ...ctx,
+        external_id: "src_[clickid]",
+      }),
+    ).toBe("https://go.example/?ext=src_%5Bclickid%5D&subid1=clk_abc");
   });
 
   it("fills other source click macros and leaves zone and external_id alone", () => {
