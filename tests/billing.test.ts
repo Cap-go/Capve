@@ -51,6 +51,9 @@ describe("hosted billing", () => {
     }
     expect((await call("/api/programs")).status).toBe(200);
     expect((await call(`/api/programs/${programId}/tracking`)).status).toBe(200);
+    const affiliates = await call(`/api/programs/${programId}/affiliates`);
+    expect(affiliates.status).toBe(200);
+    expect(await affiliates.json()).toMatchObject({ affiliates: [{ name: "Partner", code: affiliateCode }] });
     const click = await call(`/r/${affiliateCode}`, { redirect: "manual" });
     expect(click.status).toBe(302);
     const convert = await call("/api/v1/convert", { method: "POST", headers: { "X-Program-Secret": secret }, body: JSON.stringify({ affiliate_code: affiliateCode, order_id: "billing-test", amount: 1 }) });

@@ -34,6 +34,7 @@ import {
   formatMoney,
   formatPercent,
   otherCurrencies,
+  type Affiliate,
   type CampaignReportRow,
   type ClickLogRow,
   type ConversionLogRow,
@@ -584,6 +585,18 @@ function OverviewPanel({
   onTrackingChanged: () => void;
   onDelete: () => void;
 }) {
+  const [affiliates, setAffiliates] = useState<Affiliate[] | null>(null);
+  useEffect(() => {
+    if (section !== "tracking") return;
+    let cancelled = false;
+    setAffiliates(null);
+    api.affiliates(selectedId)
+      .then(({ affiliates: items }) => { if (!cancelled) setAffiliates(items); })
+      .catch((error) => { if (!cancelled) onError(error instanceof Error ? error.message : "Could not load affiliates"); });
+    return () => { cancelled = true; };
+  }, [selectedId, section, lastLink, onError]);
+  const affiliateRows = affiliates ?? visibleStats?.affiliates ?? [];
+  const affiliateMetrics = new Map(visibleStats?.affiliates.map((affiliate) => [affiliate.id, affiliate]));
   const base = appBaseUrl();
   const origin = trackingOrigin(tracking);
   const eventNames = sortEvents(Object.keys(visibleStats?.totals.events ?? {}));
@@ -626,7 +639,7 @@ function OverviewPanel({
     }
   }
 
-  const hasHiddenCampaignAffiliate = visibleStats?.affiliates.some(
+  const hasHiddenCampaignAffiliate = affiliateRows.some(
     (a) => a.name === "Campaign traffic",
   );
 
@@ -751,64 +764,77 @@ function OverviewPanel({
               </div>
             ))}
           </div>
-
-          <div className="card min-w-0 overflow-hidden p-5">
-            <h2 className="font-semibold">Affiliates</h2>
-            <div className="mt-4 overflow-x-auto">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Tracking URL</th>
-                    <th>Clicks</th>
-                    <th>Conversions</th>
-                    {eventNames.map((name) => (
-                      <th key={name}>{eventLabel(name)}</th>
-                    ))}
-                    <th>Revenue</th>
-                    <th>CR</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleStats.affiliates.length === 0 && (
-                    <tr>
-                      <td colSpan={6 + eventNames.length} className="text-[var(--velo-muted)]">
-                        No affiliates yet. Add one below to get a tracking link.
-                      </td>
-                    </tr>
-                  )}
-                  {visibleStats.affiliates.map((affiliate) => {
-                    const url = `${origin}/r/${affiliate.code}`;
-                    return (
-                      <tr key={affiliate.id}>
-                        <td>{affiliate.name}</td>
-                        <td>
-                          <div className="flex items-center gap-2">
-                            <span className="mono whitespace-nowrap text-xs">{url}</span>
-                            <CopyButton text={url} />
-                          </div>
-                        </td>
-                        <td>{affiliate.clicks}</td>
-                        <td>{affiliate.conversions}</td>
-                        {eventNames.map((name) => (
-                          <td key={name}>{affiliate.events[name] ?? 0}</td>
-                        ))}
-                        <td>{formatMoney(affiliate.revenue_cents, visibleStats.currency)}</td>
-                        <td>{formatPercent(affiliate.conversion_rate)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {hasHiddenCampaignAffiliate && (
-              <p className="mt-3 text-xs text-[var(--velo-muted)]">
-                "Campaign traffic" is created automatically: it collects clicks on the campaign link (
-                <span className="mono">/c/…</span>) that do not come from a specific affiliate.
-              </p>
-            )}
-          </div>
         </>
+      )}
+
+      {section === "tracking" && (
+        <div className="card min-w-0 overflow-hidden p-5">
+          <h2 className="font-semibold">Affiliates</h2>
+          <div className="mt-4 overflow-x-auto">
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Tracking URL</th>
+                  {visibleStats && (
+                    <>
+                      <th>Clicks</th>
+                      <th>Conversions</th>
+                      {eventNames.map((name) => (
+                        <th key={name}>{eventLabel(name)}</th>
+                      ))}
+                      <th>Revenue</th>
+                      <th>CR</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {affiliates === null && !visibleStats ? (
+                  <tr><td colSpan={2}>Loading affiliates…</td></tr>
+                ) : affiliateRows.length === 0 && (
+                  <tr>
+                    <td colSpan={visibleStats ? 6 + eventNames.length : 2} className="text-[var(--velo-muted)]">
+                      No affiliates yet. Add one below to get a tracking link.
+                    </td>
+                  </tr>
+                )}
+                {affiliateRows.map((affiliate) => {
+                  const metrics = affiliateMetrics.get(affiliate.id);
+                  const url = `${origin}/r/${affiliate.code}`;
+                  return (
+                    <tr key={affiliate.id}>
+                      <td>{affiliate.name}</td>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <span className="mono whitespace-nowrap text-xs">{url}</span>
+                          <CopyButton text={url} />
+                        </div>
+                      </td>
+                      {visibleStats && (
+                        <>
+                          <td>{metrics?.clicks ?? "—"}</td>
+                          <td>{metrics?.conversions ?? "—"}</td>
+                          {eventNames.map((name) => (
+                            <td key={name}>{metrics?.events[name] ?? 0}</td>
+                          ))}
+                          <td>{metrics ? formatMoney(metrics.revenue_cents, visibleStats.currency) : "—"}</td>
+                          <td>{metrics ? formatPercent(metrics.conversion_rate) : "—"}</td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {hasHiddenCampaignAffiliate && (
+            <p className="mt-3 text-xs text-[var(--velo-muted)]">
+              "Campaign traffic" is created automatically: it collects clicks on the campaign link (
+              <span className="mono">/c/…</span>) that do not come from a specific affiliate.
+            </p>
+          )}
+        </div>
       )}
 
       {section === "tracking" && canWrite && (

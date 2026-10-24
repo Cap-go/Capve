@@ -520,6 +520,7 @@ export const api = {
     request<{ conversions: ConversionLogRow[] }>(
       `/api/programs/${programId}/conversions${logQuery(page)}`,
     ),
+  affiliates: (programId: string) => request<{ affiliates: Affiliate[] }>(`/api/programs/${programId}/affiliates`),
   stats: (programId: string) => request<ProgramStats>(`/api/programs/${programId}/stats`),
   createAffiliate: (programId: string, name: string) =>
     request<{ affiliate: Affiliate; tracking_url: string }>(
