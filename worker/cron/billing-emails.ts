@@ -2,16 +2,27 @@ import type { Env } from "../types";
 import { bentoConfigured, bentoRequest } from "../lib/bento";
 import { billingRow, billingStatus } from "../lib/billing";
 
+// At most two event types per account: a lifecycle notice and an overage notice.
+// 50 accounts use at most 600 D1 queries, plus fixed cursor/lease overhead.
+export const BILLING_EMAIL_BATCH_SIZE = 50;
+const RUN_BUDGET_MS = 20_000;
+
 /** Event scheduling uses the stored trial dates, including manual extensions. */
 export async function billingEmails(env: Env, now = Date.now()) {
   if (env.BILLING_ENABLED !== "true" || !bentoConfigured(env)) return;
-  let cursor = "";
-  while (true) {
-    const page = await env.DB.prepare("SELECT id, email FROM users WHERE id > ? AND email_verified = 1 ORDER BY id LIMIT 100")
-      .bind(cursor).all<{ id: string; email: string }>();
-    if (!page.results.length) break;
+  const startedAt = Date.now();
+  const lease = crypto.randomUUID();
+  const progress = await env.DB.prepare(`UPDATE billing_email_progress SET lease_token = ?, lease_until = ?
+    WHERE id = 1 AND lease_until <= ? RETURNING cursor`)
+    .bind(lease, startedAt + 5 * 60_000, startedAt).first<{ cursor: string }>();
+  if (!progress) return;
+  let cursor = progress.cursor;
+  try {
+    const page = await env.DB.prepare("SELECT id, email FROM users WHERE id > ? AND email_verified = 1 ORDER BY id LIMIT ?")
+      .bind(cursor, BILLING_EMAIL_BATCH_SIZE).all<{ id: string; email: string }>();
+    let processed = 0;
     for (const user of page.results) {
-      cursor = user.id;
+      if (Date.now() - startedAt >= RUN_BUDGET_MS) break;
       const row = await billingRow(env, user.id);
       const status = await billingStatus(env, user.id, now);
       const subscribed = status.subscriptionStatus === "active";
@@ -57,6 +68,14 @@ export async function billingEmails(env: Env, now = Date.now()) {
           console.error("[billing-email] Event delivery failed", { accountId: user.id, event: event.type, error });
         }
       }
+      cursor = user.id;
+      processed++;
+      await env.DB.prepare("UPDATE billing_email_progress SET cursor = ? WHERE id = 1 AND lease_token = ?")
+        .bind(cursor, lease).run();
     }
+    if (processed === page.results.length && page.results.length < BILLING_EMAIL_BATCH_SIZE) cursor = "";
+  } finally {
+    await env.DB.prepare(`UPDATE billing_email_progress SET cursor = ?, lease_token = NULL, lease_until = 0
+      WHERE id = 1 AND lease_token = ?`).bind(cursor, lease).run();
   }
 }

@@ -5,7 +5,7 @@ import { beforeAll, describe, expect, it, vi, afterEach } from "vitest";
 import worker from "../worker";
 import type { Env } from "../worker/types";
 import { billingRow, billingStatus } from "../worker/lib/billing";
-import { billingEmails } from "../worker/cron/billing-emails";
+import { billingEmails, BILLING_EMAIL_BATCH_SIZE } from "../worker/cron/billing-emails";
 import type { BillingStatus } from "../shared/billing";
 import { initSql } from "./schema";
 import { registerTestUser } from "./helpers";
@@ -225,6 +225,25 @@ describe("hosted billing", () => {
     const expected = new Date(updated.trial_started_at); expected.setUTCFullYear(expected.getUTCFullYear() + 3);
     expect(updated.trial_ends_at).toBe(expected.getTime());
     expect((await billingRow(billingEnv, accountId)).trial_ends_at).toBe(unaffected.trial_ends_at);
+  });
+
+  it("bounds billing-email scans and resumes with a durable cursor across invocations", async () => {
+    await env.DB.prepare("UPDATE users SET email_verified = 0").run();
+    const now = Date.now();
+    await env.DB.batch(Array.from({ length: BILLING_EMAIL_BATCH_SIZE + 1 }, (_, i) =>
+      env.DB.prepare("INSERT INTO users (id, email, email_verified, created_at) VALUES (?, ?, 1, ?)")
+        .bind(`usr_batch_${String(i).padStart(3, "0")}`, `batch-${i}@example.com`, now)));
+    const mailEnv = { ...billingEnv, BENTO_SITE_UUID: "test-site", BENTO_PUBLISHABLE_KEY: "test-public", BENTO_SECRET_KEY: "test-secret" };
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ results: 1 }));
+    await billingEmails(mailEnv, now);
+    expect(fetch).toHaveBeenCalledTimes(BILLING_EMAIL_BATCH_SIZE);
+    const progress = await env.DB.prepare("SELECT cursor, lease_token FROM billing_email_progress WHERE id = 1").first();
+    expect(progress).toMatchObject({ cursor: "usr_batch_049", lease_token: null });
+    await billingEmails(mailEnv, now);
+    expect(fetch).toHaveBeenCalledTimes(BILLING_EMAIL_BATCH_SIZE + 1);
+    expect(await env.DB.prepare("SELECT cursor FROM billing_email_progress WHERE id = 1").first()).toEqual({ cursor: "" });
+    await billingEmails(mailEnv, now);
+    expect(fetch).toHaveBeenCalledTimes(BILLING_EMAIL_BATCH_SIZE + 1);
   });
 
   it("rejects unsigned webhooks, invalid plans and cross-origin checkout", async () => {

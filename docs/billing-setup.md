@@ -46,4 +46,4 @@ This date override survives deployments. Reminder scheduling uses the stored int
 - Set trial expiry in the test DB. Confirm charts, logs, CSV and MCP report calls return 402 while `/r`, `/c`, `/lp`, `/click`, and convert continue recording.
 - Cross the allowance, upgrade, and verify reports unlock after webhook confirmation. Verify next UTC month's allowance resets without restarting an expired trial.
 - Confirm selected team accounts use the owner's subscription and allowance. Only a verified owner session can open Checkout or the portal; team members, API tokens and support impersonation cannot.
-- Confirm Bento receives each event and sends the configured email, including recovery after an API failure. Trial email cron runs every 15 minutes and sends only to verified owners.
+- Confirm Bento receives each event and sends the configured email, including recovery after an API failure. Trial email cron runs every 15 minutes in separate invocations, processes at most 50 verified owners per invocation, and persists its cursor. Delivery timing depends on the full scan duration.

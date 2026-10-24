@@ -7,7 +7,7 @@ Configure these flows manually in the Capve Bento site. This PR does not create 
 1. Create/select the Capve site. Authenticate `capve.app` DNS in Bento and add `noreply@capve.app` as an approved author. Set a monitored reply-to address in Bento.
 2. Set Worker secrets `BENTO_SITE_UUID`, `BENTO_PUBLISHABLE_KEY`, and `BENTO_SECRET_KEY` with `bunx wrangler secret put NAME --env production`. Do not put them in git. The client uses Basic auth, a server-side User-Agent, and site_uuid on `/api/v1/batch/events` and `/api/v1/batch/emails`.
 3. When all three are set, password reset, email verification and operational alert emails use Bento's transactional API. Existing Cloudflare EMAIL remains a fallback for self-hosted installs with no Bento configuration. Auth mail is sent immediately, not through a sequence. Do not create a second verification or reset flow. Authentication emails include per-send directives disabling click rewriting, open tracking, and UTMs.
-4. Lifecycle events run every 15 minutes when billing is enabled. They only target verified account owners, not team members. This means an unverified signup may not get a trial email until verification. The trial clock still starts at signup.
+4. Lifecycle scans run at minutes 2, 17, 32 and 47 of each hour when billing is enabled, in a separate invocation from automation. Each invocation processes at most 50 verified accounts and stops starting another account after 20 seconds. D1 stores the scan cursor and an overlap lease. A complete scan takes approximately `ceil(verified accounts / 50) × 15 minutes`, or longer if the time budget stops a batch early. They only target verified account owners, not team members. This means an unverified signup may not get a trial email until verification. The trial clock still starts at signup.
 
 ## Fields
 
@@ -22,7 +22,7 @@ Each event updates these flat subscriber fields:
 - `capve_monthly_clicks`
 - `capve_billing_url`
 
-The event details include `event_key`, `period` and `unique.key`. D1 stores delivery acceptance and leases to avoid concurrent sends. Failed deliveries retry at the next cron. A timeout after Bento accepts an event can still cause a retry; add a Bento guard against the same event_key where supported. Do not assume purchase-unique-event reporting guarantees exactly-once workflow email delivery.
+The event details include `event_key`, `period` and `unique.key`. D1 stores delivery acceptance and leases to avoid concurrent sends. Failed deliveries retry when the scan next reaches that account. A timeout after Bento accepts an event can still cause a retry; add a Bento guard against the same event_key where supported. Do not assume purchase-unique-event reporting guarantees exactly-once workflow email delivery.
 
 ## Flow rules
 
