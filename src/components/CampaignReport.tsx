@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { DateRangePicker } from "./DateRangePicker";
 import {
   api,
   formatMoney,
@@ -11,7 +12,7 @@ import {
   type TrafficSource,
   type TrendPoint,
 } from "../lib/api";
-import { ErrorBox, Field } from "./ui";
+import { ErrorBox } from "./ui";
 import { DrilldownPanel } from "./Drilldown";
 import { useReportRowActions } from "./ReportRowActions";
 import { eventLabel, sortEvents } from "../lib/events";
@@ -131,6 +132,7 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
   const [preset, setPreset] = useState<DatePreset>("30d");
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
+  const [rangeOpen, setRangeOpen] = useState(false);
   const [groupId, setGroupId] = useState("");
   const [sourceId, setSourceId] = useState("");
   const [status, setStatus] = useState("");
@@ -297,26 +299,32 @@ export function CampaignReportPanel({ canWrite = true }: { canWrite?: boolean })
           <FilterSelect
             label="Date range"
             value={preset}
-            onChange={(v) => setPreset(v as DatePreset)}
+            onChange={(v) => {
+              if (v === "custom") {
+                setRangeOpen(true);
+                return;
+              }
+              setPreset(v as DatePreset);
+            }}
             options={DATE_PRESETS}
           />
           {preset === "custom" && (
-            <>
-              <Field
-                label="From"
-                type="date"
-                value={customFrom}
-                max={customTo || undefined}
-                onChange={(e) => setCustomFrom(e.target.value)}
-              />
-              <Field
-                label="To"
-                type="date"
-                value={customTo}
-                min={customFrom || undefined}
-                onChange={(e) => setCustomTo(e.target.value)}
-              />
-            </>
+            <button className="btn btn-secondary text-sm self-end" type="button" onClick={() => setRangeOpen(true)}>
+              {customFrom && customTo ? `${customFrom} – ${customTo}` : "Choose dates"}
+            </button>
+          )}
+          {rangeOpen && (
+            <DateRangePicker
+              from={customFrom}
+              to={customTo}
+              onClose={() => setRangeOpen(false)}
+              onApply={(from, to) => {
+                setCustomFrom(from);
+                setCustomTo(to);
+                setPreset("custom");
+                setRangeOpen(false);
+              }}
+            />
           )}
           <FilterSelect
             label="Group"
