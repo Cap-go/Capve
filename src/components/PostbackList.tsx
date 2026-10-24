@@ -5,6 +5,7 @@ import { api, type Postback, type PostbackDelivery, type PostbackOwner } from ".
 export const COMMON_EVENTS = ["registration", "ftd", "deposit", "lead", "sale"];
 
 const MACROS = "{click_id} {external_id} {payout} {status} {event} {currency} {order_id}";
+const SOURCE_MACROS = "{external_id} {payout} {status} {event} {currency} {order_id}";
 
 /** Last delivery attempts of one postback (status code or error). */
 function DeliveryLog({ postbackId }: { postbackId: string }) {
@@ -113,9 +114,22 @@ export function PostbackList({
     }, false);
   }
 
+  const forSource = "traffic_source_id" in owner;
+  const urlPlaceholder = forSource
+    ? "https://source.example/postback?cid={external_id}&value={payout}"
+    : "https://source.com/postback?cid={click_id}&payout={payout}";
+
   return (
     <div className="space-y-3">
       <p className="text-sm text-[var(--velo-muted)]">{hint}</p>
+      {forSource ? (
+        <p className="text-sm text-[var(--velo-muted)]">
+          Adcash pixel: <span className="mono">cid={"{external_id}"}</span>. That is Adcash's click
+          id, and it is the value Adcash matches. <span className="mono">cid={"{click_id}"}</span>{" "}
+          sends Capve's <span className="mono">clk_…</span> id, so the conversion does not show in
+          Adcash. <span className="mono">{"{click_id}"}</span> belongs on the offer URL.
+        </p>
+      ) : null}
       <ErrorBox message={error} />
       <datalist id="postback-events">
         {COMMON_EVENTS.map((name) => (
@@ -237,7 +251,7 @@ export function PostbackList({
             aria-label="Postback URL"
             className="input mono text-xs"
             type="url"
-            placeholder="https://source.com/postback?cid={click_id}&payout={payout}"
+            placeholder={urlPlaceholder}
             required
             value={url}
             onChange={(e) => setUrl(e.target.value)}
@@ -249,7 +263,7 @@ export function PostbackList({
       )}
       <SavedNote show={save.saved} />
       <p className="text-xs text-[var(--velo-muted)]">
-        Macros: <span className="mono">{MACROS}</span>. Leave event empty to fire on every
+        Macros: <span className="mono">{forSource ? SOURCE_MACROS : MACROS}</span>. Leave event empty to fire on every
         conversion. <span className="mono">{"{status}"}</span> is the conversion status:{" "}
         <span className="mono">lead</span> unless the incoming postback sent{" "}
         <span className="mono">cnv_status</span>.

@@ -415,8 +415,9 @@ export function DashboardPage() {
                 />
                 <p className="text-sm text-[var(--velo-muted)]">
                   Leave empty to route through paths. Copy <span className="mono">{"{click_id}"}</span> into
-                  the network sub ID, as in the example. <span className="mono">[clickid]</span> belongs on
-                  the traffic-source link.
+                  the network sub ID, as in the example. <span className="mono">[clickid]</span> stays on
+                  the traffic-source link. The Adcash pixel on that source is{" "}
+                  <span className="mono">cid={"{external_id}"}</span>.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
                   <SelectField
@@ -851,7 +852,8 @@ function OverviewPanel({
               In the network, replace <span className="mono">{"{click_id}"}</span>,{" "}
               <span className="mono">{"{payout}"}</span> and <span className="mono">{"{status}"}</span>{" "}
               with the network&apos;s own macros (e.g. <span className="mono">{"cnv_id={aff_sub}"}</span>
-              ).{" "}
+              ). That replacement is for this incoming URL. The Adcash pixel, on the traffic source,
+              is <span className="mono">cid={"{external_id}"}</span>.{" "}
               <Link className="underline" to="/docs/networks">
                 Cheat sheet per network
               </Link>
@@ -896,8 +898,9 @@ function OverviewPanel({
             />
             <p className="text-sm text-[var(--velo-muted)]">
               Leave empty to route through paths. Copy <span className="mono">{"{click_id}"}</span> into the
-              network sub ID, as in the example. <span className="mono">[clickid]</span> belongs on the
-              traffic-source link.
+              network sub ID, as in the example. <span className="mono">[clickid]</span> stays on the
+              traffic-source link. The Adcash pixel on that source is{" "}
+              <span className="mono">cid={"{external_id}"}</span>.
             </p>
             <SelectField
               label="Traffic source"
