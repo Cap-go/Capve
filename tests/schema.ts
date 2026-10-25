@@ -451,4 +451,15 @@ CREATE INDEX IF NOT EXISTS idx_paths_rule ON paths(rule_id);
 CREATE INDEX IF NOT EXISTS idx_path_landers_path ON path_landers(path_id);
 CREATE INDEX IF NOT EXISTS idx_path_offers_path ON path_offers(path_id);
 CREATE INDEX IF NOT EXISTS idx_blocklist_user ON blocklist_entries(user_id);
+
+CREATE TABLE IF NOT EXISTS audit_log (
+  id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
+  actor_user_id TEXT NOT NULL,
+  actor_email TEXT NOT NULL,
+  action TEXT NOT NULL,
+  created_at INTEGER NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_audit_log_account ON audit_log(account_id, created_at);
 `;

@@ -1,16 +1,17 @@
 import { FormEvent, useEffect, useState } from "react";
 import {
   api,
+  type AuditEntry,
   type EntityNote,
   type PendingInvite,
   type TeamMember,
   type TeamRole,
   type Trigger,
 } from "../lib/api";
-import { ErrorBox, Field, confirmDelete } from "./ui";
+import { ErrorBox, Field, CopyButton, confirmDelete } from "./ui";
 
-export function OpsPanel({ role }: { role: TeamRole }) {
-  const [tab, setTab] = useState<"team" | "triggers">("team");
+export function OpsPanel({ role, accountId }: { role: TeamRole; accountId: string }) {
+  const [tab, setTab] = useState<"team" | "activity" | "triggers">("team");
 
   return (
     <div className="space-y-6">
@@ -23,6 +24,13 @@ export function OpsPanel({ role }: { role: TeamRole }) {
           Team
         </button>
         <button
+          className={`btn text-sm ${tab === "activity" ? "btn-primary" : "btn-secondary"}`}
+          onClick={() => setTab("activity")}
+          type="button"
+        >
+          Activity
+        </button>
+        <button
           className={`btn text-sm ${tab === "triggers" ? "btn-primary" : "btn-secondary"}`}
           onClick={() => setTab("triggers")}
           type="button"
@@ -33,8 +41,10 @@ export function OpsPanel({ role }: { role: TeamRole }) {
       {tab === "team" ? (
         <>
           <PendingInvitesPanel />
-          <TeamPanel role={role} />
+          <TeamPanel role={role} accountId={accountId} />
         </>
+      ) : tab === "activity" ? (
+        <ActivityPanel />
       ) : (
         <TriggersPanel />
       )}
@@ -149,7 +159,72 @@ function PendingInvitesPanel() {
   );
 }
 
-function TeamPanel({ role }: { role: TeamRole }) {
+function ActivityPanel() {
+  const [entries, setEntries] = useState<AuditEntry[] | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    api
+      .auditLog()
+      .then(({ entries: rows }) => setEntries(rows))
+      .catch((err) => {
+        setEntries([]);
+        setError(err instanceof Error ? err.message : "Could not load activity");
+      });
+  }, []);
+
+  return (
+    <div className="card p-5">
+      <h2 className="font-semibold">Activity</h2>
+      <p className="mt-1 text-sm text-[var(--velo-muted)]">
+        Who changed this account. Click traffic and conversions stay in the campaign logs.
+      </p>
+      <ErrorBox message={error} />
+      <table className="table mt-4">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Who</th>
+            <th>What</th>
+          </tr>
+        </thead>
+        <tbody>
+          {entries === null && (
+            <tr>
+              <td colSpan={3} className="text-[var(--velo-muted)]">
+                Loading activity…
+              </td>
+            </tr>
+          )}
+          {entries?.length === 0 && (
+            <tr>
+              <td colSpan={3} className="text-[var(--velo-muted)]">
+                No activity yet.
+              </td>
+            </tr>
+          )}
+          {entries?.map((entry) => (
+            <tr key={entry.id}>
+              <td className="whitespace-nowrap">
+                {new Date(entry.created_at).toLocaleString(undefined, {
+                  year: "numeric",
+                  month: "short",
+                  day: "numeric",
+                  hour: "2-digit",
+                  minute: "2-digit",
+                })}
+              </td>
+              <td className="mono">{entry.actor_email}</td>
+              <td>{entry.action}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function TeamPanel({ role, accountId }: { role: TeamRole; accountId: string }) {
   const [members, setMembers] = useState<TeamMember[]>([]);
   const [email, setEmail] = useState("");
   const [memberRole, setMemberRole] = useState<"admin" | "viewer">("viewer");
@@ -195,7 +270,13 @@ function TeamPanel({ role }: { role: TeamRole }) {
       <h2 className="font-semibold">Team members</h2>
       <p className="mt-1 text-sm text-[var(--velo-muted)]">
         Your role: <strong>{role}</strong>. Viewers can read dashboards; admins can edit.
+        The owner is listed with everyone invited to this account.
       </p>
+      <div className="team-id">
+        <span className="text-sm font-medium text-[var(--velo-muted)]">Team ID</span>
+        <code className="mono">{accountId}</code>
+        <CopyButton text={accountId} />
+      </div>
       <ErrorBox message={error} />
       <table className="table mt-4">
         <thead>
@@ -221,14 +302,16 @@ function TeamPanel({ role }: { role: TeamRole }) {
               <td>{member.accepted_at ? "active" : "pending"}</td>
               {role === "owner" && (
                 <td>
-                  <button
-                    className="btn btn-secondary text-xs"
-                    disabled={busy}
-                    onClick={() => remove(member.id, member.email)}
-                    type="button"
-                  >
-                    Remove
-                  </button>
+                  {member.role !== "owner" && (
+                    <button
+                      className="btn btn-secondary text-xs"
+                      disabled={busy}
+                      onClick={() => remove(member.id, member.email)}
+                      type="button"
+                    >
+                      Remove
+                    </button>
+                  )}
                 </td>
               )}
             </tr>

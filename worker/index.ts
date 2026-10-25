@@ -17,7 +17,9 @@ import { campaign, lp, redirect } from "./routes/redirect";
 import { routing } from "./routes/routing";
 import { campaignCosts, sources } from "./routes/sources";
 import { tokens } from "./routes/tokens";
+import { auditMutation } from "./lib/audit";
 import { readBearerToken, requireUser } from "./lib/access";
+import type { SessionUser } from "./types-ops";
 import { handleMcpRequest } from "./mcp/server";
 import { automation } from "./routes/automation";
 import { drilldown } from "./routes/drilldown";
@@ -35,6 +37,27 @@ app.use("*", async (c, next) => {
 
 // Custom tracking domains serve only /r, /c, /lp, /click; unknown hosts get 404.
 app.use("*", hostGate);
+
+app.use("/api/*", async (c, next) => {
+  const method = c.req.method.toUpperCase();
+  const audits = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
+  // Read the actor first. logout-all bumps session_version inside the handler,
+  // so a lookup after next() no longer sees this request's session.
+  let actor: SessionUser | null = null;
+  if (audits) {
+    try {
+      actor = await requireUser(c);
+    } catch {
+      actor = null;
+    }
+  }
+  await next();
+  if (!audits || !actor) return;
+  if (c.res.status < 200 || c.res.status >= 300) return;
+  await auditMutation(c.env.DB, actor, method, new URL(c.req.url).pathname, {
+    viaApi: Boolean(c.req.header("authorization")),
+  });
+});
 
 app.get("/api/health", (c) => c.json({ ok: true, service: "capve" }));
 

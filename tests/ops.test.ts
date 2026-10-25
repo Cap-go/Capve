@@ -1,6 +1,7 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
-import { registerTestUser } from "./helpers";
+import { ACCOUNT_CONTEXT_COOKIE } from "../worker/lib/account-context";
+import { cookieFrom, registerTestUser } from "./helpers";
 import { initSql } from "./schema";
 
 let authHeaders: Record<string, string>;
@@ -144,9 +145,153 @@ describe("phase 5 ops", () => {
     });
     expect(inviteRes.status).toBe(201);
 
-    const team = await json<{ members: Array<{ email: string }> }>(
+    const team = await json<{ members: Array<{ email: string; role: string }> }>(
       await SELF.fetch("http://localhost/api/ops/team", { headers }),
     );
     expect(team.members.some((m) => m.email === "viewer@example.com")).toBe(true);
+    expect(team.members.some((m) => m.role === "owner")).toBe(true);
+  });
+
+  it("shows the owner to someone who joined, and records who did it", async () => {
+    const owner = await registerTestUser();
+    const invitee = await registerTestUser();
+    const inviteRes = await SELF.fetch("http://localhost/api/ops/team", {
+      method: "POST",
+      headers: owner.authHeaders,
+      body: JSON.stringify({ email: invitee.email, role: "admin" }),
+    });
+    expect(inviteRes.status).toBe(201);
+
+    const { invites } = await json<{ invites: Array<{ id: string }> }>(
+      await SELF.fetch("http://localhost/api/ops/invites", { headers: invitee.authHeaders }),
+    );
+    const accept = await SELF.fetch(`http://localhost/api/ops/invites/${invites[0]!.id}/accept`, {
+      method: "POST",
+      headers: invitee.authHeaders,
+    });
+    expect(accept.status).toBe(200);
+
+    const me = await json<{ user: { id: string; email: string } }>(
+      await SELF.fetch("http://localhost/api/auth/me", { headers: owner.authHeaders }),
+    );
+    const team = await json<{
+      account_id: string;
+      role: string;
+      members: Array<{ email: string; role: string }>;
+    }>(await SELF.fetch("http://localhost/api/ops/team", { headers: invitee.authHeaders }));
+    expect(team.role).toBe("admin");
+    expect(team.account_id).toBe(me.user.id);
+    expect(team.members.map((member) => member.email).sort()).toEqual(
+      [owner.email, invitee.email].sort(),
+    );
+    expect(team.members.find((member) => member.email === owner.email)?.role).toBe("owner");
+
+    const audit = await json<{ entries: Array<{ actor_email: string; action: string }> }>(
+      await SELF.fetch("http://localhost/api/ops/audit", { headers: owner.authHeaders }),
+    );
+    expect(
+      audit.entries.some(
+        (entry) => entry.actor_email === owner.email && entry.action === `Invited ${invitee.email} as admin`,
+      ),
+    ).toBe(true);
+    expect(
+      audit.entries.some(
+        (entry) => entry.actor_email === invitee.email && entry.action === "Accepted the team invite",
+      ),
+    ).toBe(true);
+
+    const created = await SELF.fetch("http://localhost/api/programs", {
+      method: "POST",
+      headers: owner.authHeaders,
+      body: JSON.stringify({ name: "Audited", destination_url: MERCHANT }),
+    });
+    expect(created.status).toBe(201);
+    const after = await json<{ entries: Array<{ actor_email: string; action: string }> }>(
+      await SELF.fetch("http://localhost/api/ops/audit", { headers: invitee.authHeaders }),
+    );
+    expect(
+      after.entries.some(
+        (entry) => entry.actor_email === owner.email && entry.action === "Created a campaign",
+      ),
+    ).toBe(true);
+  });
+
+  it("records sign-out everywhere after the session is revoked", async () => {
+    const user = await registerTestUser();
+    const out = await SELF.fetch("http://localhost/api/auth/logout-all", {
+      method: "POST",
+      headers: user.authHeaders,
+    });
+    expect(out.status).toBe(200);
+
+    const login = await SELF.fetch("http://localhost/api/auth/login", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email: user.email, password: "test-password-12" }),
+    });
+    expect(login.status).toBe(200);
+    const session = cookieFrom(login, "capve_session");
+    const audit = await json<{ entries: Array<{ action: string }> }>(
+      await SELF.fetch("http://localhost/api/ops/audit", {
+        headers: { Cookie: `capve_session=${encodeURIComponent(session!)}` },
+      }),
+    );
+    expect(audit.entries.some((entry) => entry.action === "Signed out everywhere")).toBe(true);
+  });
+
+  it("records personal API tokens on the owner, not the team they are viewing", async () => {
+    const owner = await registerTestUser();
+    const member = await registerTestUser();
+    const inviteRes = await SELF.fetch("http://localhost/api/ops/team", {
+      method: "POST",
+      headers: owner.authHeaders,
+      body: JSON.stringify({ email: member.email, role: "admin" }),
+    });
+    expect(inviteRes.status).toBe(201);
+    const { invites } = await json<{ invites: Array<{ id: string }> }>(
+      await SELF.fetch("http://localhost/api/ops/invites", { headers: member.authHeaders }),
+    );
+    const accept = await SELF.fetch(`http://localhost/api/ops/invites/${invites[0]!.id}/accept`, {
+      method: "POST",
+      headers: member.authHeaders,
+    });
+    expect(accept.status).toBe(200);
+
+    const me = await json<{ user: { id: string; account_id: string } }>(
+      await SELF.fetch("http://localhost/api/auth/me", { headers: member.authHeaders }),
+    );
+    expect(me.user.account_id).not.toBe(me.user.id);
+
+    const created = await SELF.fetch("http://localhost/api/tokens", {
+      method: "POST",
+      headers: member.authHeaders,
+      body: JSON.stringify({ name: "Personal" }),
+    });
+    expect(created.status).toBe(201);
+
+    const teamAudit = await json<{ entries: Array<{ action: string }> }>(
+      await SELF.fetch("http://localhost/api/ops/audit", { headers: owner.authHeaders }),
+    );
+    expect(teamAudit.entries.some((entry) => entry.action === "Created an API token")).toBe(false);
+
+    const switched = await SELF.fetch("http://localhost/api/auth/switch-account", {
+      method: "POST",
+      headers: member.authHeaders,
+      body: JSON.stringify({ account_id: me.user.id }),
+    });
+    expect(switched.status).toBe(200);
+    const context = cookieFrom(switched, ACCOUNT_CONTEXT_COOKIE);
+    const personalAudit = await json<{ entries: Array<{ actor_email: string; action: string }> }>(
+      await SELF.fetch("http://localhost/api/ops/audit", {
+        headers: {
+          Cookie: `${member.authHeaders.Cookie}; ${ACCOUNT_CONTEXT_COOKIE}=${encodeURIComponent(context!)}`,
+        },
+      }),
+    );
+    expect(
+      personalAudit.entries.some(
+        (entry) => entry.actor_email === member.email && entry.action === "Created an API token",
+      ),
+    ).toBe(true);
   });
 });

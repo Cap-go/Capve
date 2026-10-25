@@ -427,7 +427,7 @@ export function DashboardPage() {
         ) : entity === "settings" ? (
           <div className="space-y-6">
             <AccountSettingsPanel canWrite={(user.role ?? "owner") !== "viewer"} />
-            <OpsPanel role={user.role ?? "owner"} />
+            <OpsPanel role={user.role ?? "owner"} accountId={user.account_id ?? user.id} />
           </div>
         ) : entity === "mcp" ? (
           <McpPanel />

@@ -143,6 +143,46 @@ textarea {
   box-shadow: 0 0 0 3px #1111110f;
 }
 
+/* Label sits above the field; the action sits on the field's row at the same height. */
+.settings-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 12px;
+}
+
+.settings-field-row > label {
+  flex: 1 1 16rem;
+  max-width: 24rem;
+}
+
+.settings-field-row .input,
+.settings-field-row > .btn {
+  height: 36px;
+  min-height: 36px;
+  box-sizing: border-box;
+}
+
+.settings-field-row > .btn {
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.team-id {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.team-id code {
+  padding: 2px 8px;
+  border: 1px solid var(--velo-border);
+  border-radius: 6px;
+  background: #fafaf9;
+}
+
 /* macOS draws a divider and an empty arrow well inside a native select.
    Drop that chrome everywhere and paint one chevron. The status pill keeps
    its own colored mark. Later rules can still replace the image. */

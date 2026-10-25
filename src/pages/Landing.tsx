@@ -132,7 +132,7 @@ export function LandingPage() {
           <div className="min-w-0 self-start">
             <CodeBlock>{claudeCodeCommand(appBaseUrl())}</CodeBlock>
             <p className="mt-3 text-sm text-[var(--velo-muted)]">
-              91 tools: campaigns, paths, routing rules, anti-fraud, offers, landers, postbacks, traffic sources, cost updates, reports, drilldown, zone rules, alerts, tracking domains, team.
+              92 tools: campaigns, paths, routing rules, anti-fraud, offers, landers, postbacks, traffic sources, cost updates, reports, drilldown, zone rules, alerts, tracking domains, team, activity.
             </p>
           </div>
         </div>

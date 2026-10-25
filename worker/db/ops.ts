@@ -63,13 +63,55 @@ export async function listTeamMembers(
   db: D1Database,
   ownerUserId: string,
 ): Promise<TeamMember[]> {
+  const owner = await db
+    .prepare("SELECT id, email, created_at FROM users WHERE id = ?")
+    .bind(ownerUserId)
+    .first<{ id: string; email: string; created_at: number }>();
   const { results } = await db
     .prepare(
       "SELECT id, owner_user_id, email, role, created_at, accepted_at FROM team_members WHERE owner_user_id = ? ORDER BY created_at ASC",
     )
     .bind(ownerUserId)
     .all<TeamMember>();
-  return results ?? [];
+  const members = results ?? [];
+  if (!owner) return members;
+  return [
+    {
+      id: owner.id,
+      owner_user_id: owner.id,
+      email: owner.email,
+      role: "owner",
+      created_at: owner.created_at,
+      accepted_at: owner.created_at,
+    },
+    ...members,
+  ];
+}
+
+export async function getTeamMember(
+  db: D1Database,
+  memberId: string,
+  ownerUserId: string,
+): Promise<TeamMember | null> {
+  return db
+    .prepare(
+      "SELECT id, owner_user_id, email, role, created_at, accepted_at FROM team_members WHERE id = ? AND owner_user_id = ?",
+    )
+    .bind(memberId, ownerUserId)
+    .first<TeamMember>();
+}
+
+export async function findPendingInvite(
+  db: D1Database,
+  inviteId: string,
+  email: string,
+): Promise<{ owner_user_id: string } | null> {
+  return db
+    .prepare(
+      "SELECT owner_user_id FROM team_members WHERE id = ? AND email = ? AND accepted_at IS NULL",
+    )
+    .bind(inviteId, email.toLowerCase())
+    .first<{ owner_user_id: string }>();
 }
 
 export async function addTeamMember(

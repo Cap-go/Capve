@@ -49,7 +49,7 @@ Cursor / VS Code / Windsurf (`mcp.json`):
 { "mcpServers": { "capve": { "url": "https://capve.app/mcp", "headers": { "Authorization": "Bearer capve_YOUR_TOKEN" } } } }
 ```
 
-91 tools cover campaigns, affiliates, paths and rotation, routing rules, anti-fraud blocklists, postbacks, traffic sources (templates, tokens, cost sync), networks, offers, landers, groups, cost updates, reports (incl. drilldown), triggers, zone blacklist rules and alerts, settings, tracking domains, notes and team. Each tool replays the matching `/api` route with the token, so validation and team roles are identical to the dashboard. Full docs: `/docs/mcp`. Code: `worker/mcp/`.
+92 tools cover campaigns, affiliates, paths and rotation, routing rules, anti-fraud blocklists, postbacks, traffic sources (templates, tokens, cost sync), networks, offers, landers, groups, cost updates, reports (incl. drilldown), triggers, zone blacklist rules and alerts, settings, tracking domains, notes, team, and activity. Each tool replays the matching `/api` route with the token, so validation and team roles are identical to the dashboard. Full docs: `/docs/mcp`. Code: `worker/mcp/`.
 
 Tokens act as the user who created them, can be revoked from the dashboard, and cannot create more tokens. Only a SHA-256 hash is stored.
 

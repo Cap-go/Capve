@@ -129,7 +129,7 @@ const TOOL_GROUPS: Array<[string, string[]]> = [
       "set_campaign_tracking_domain",
     ],
   ],
-  ["Team", ["whoami", "list_team", "invite_team_member", "remove_team_member"]],
+  ["Team", ["whoami", "list_team", "invite_team_member", "remove_team_member", "list_activity"]],
 ];
 
 export function DocsMcp() {
