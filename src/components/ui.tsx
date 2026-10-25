@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { BRAND_NAME } from "../lib/constants";
+import { SiteFooter } from "./SiteFooter";
 
 export function Shell({
   children,
@@ -26,6 +27,7 @@ export function Shell({
         <nav className="flex items-center gap-3">{cta}</nav>
       </header>
       <main>{children}</main>
+      <SiteFooter />
     </div>
   );
 }

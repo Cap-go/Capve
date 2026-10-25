@@ -103,6 +103,17 @@ export function RegisterPage() {
           <Field label="Email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           <Field label="Password" type="password" autoComplete="new-password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
           <ErrorBox message={error} />
+          <p className="text-sm text-[var(--velo-muted)]">
+            By creating an account, you agree to the{" "}
+            <Link className="underline" to="/terms">
+              Terms of Service
+            </Link>{" "}
+            and{" "}
+            <Link className="underline" to="/privacy">
+              Privacy Policy
+            </Link>
+            .
+          </p>
           <button className="btn btn-primary w-full" type="submit" disabled={busy}>
             {busy ? "Creating…" : "Create account"}
           </button>

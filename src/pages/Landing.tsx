@@ -3,11 +3,7 @@ import { Link } from "react-router-dom";
 import { CodeBlock } from "../components/CodeBlock";
 import { Shell } from "../components/ui";
 import { useAuth } from "../lib/auth";
-import {
-  GITHUB_REPO_URL,
-  PRODUCTION_APP_URL,
-  appBaseUrl,
-} from "../lib/constants";
+import { appBaseUrl } from "../lib/constants";
 import { MCP_EXAMPLE_PROMPTS, claudeCodeCommand } from "../lib/mcp";
 
 const features = [
@@ -139,20 +135,6 @@ export function LandingPage() {
       </section>
 
       <Pricing />
-
-      <footer className="mx-auto max-w-6xl px-6 text-sm text-[var(--velo-muted)]">
-        <div className="border-t border-[var(--velo-border)] py-8">
-          Capve at{" "}
-          <a className="underline" href={PRODUCTION_APP_URL}>
-            capve.app
-          </a>
-          . Source on{" "}
-          <a className="underline" href={GITHUB_REPO_URL} target="_blank" rel="noreferrer">
-            GitHub
-          </a>
-          .
-        </div>
-      </footer>
     </Shell>
   );
 }
