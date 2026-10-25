@@ -161,7 +161,12 @@ export function DocsLayout() {
             </nav>
           )}
           <footer className="docs-footer">
-            <span>Capve documentation · Open-source campaign tracking</span>
+            <span>
+              Capve documentation · Open-source campaign tracking ·{" "}
+              <Link to="/privacy">Privacy</Link>
+              {" · "}
+              <Link to="/terms">Terms</Link>
+            </span>
             <a href={`${GITHUB_REPO_URL}/tree/main/src/pages/docs`}>Suggest an edit on GitHub ↗</a>
           </footer>
         </main>
