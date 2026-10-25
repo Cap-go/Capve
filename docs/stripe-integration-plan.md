@@ -25,3 +25,9 @@ The MCP connection cannot issue a restricted runtime API key or install Worker s
 No active Tax registrations were recorded in Stripe. Existing merchant origin and tax defaults were preserved. Merchant confirmation of actual registrations, product category and price tax treatment is required before automatic tax activation. Sandbox coverage and an actual tax calculation are required before launch; mocked tests do not establish live tax collection.
 
 Configure Smart Retries, Stripe payment emails and operational alerts in the Dashboard. Bento remains responsible for Capve trial and reporting-access notices. Operators handle refund/dispute/fraud decisions in Stripe. See the full activation and verification checklist in [billing setup](billing-setup.md).
+
+## Legal information follow-up
+
+Stripe's `company.name` confirms CodepushGo, LLC. Its US company address and public support email/phone are the source for the website's Privacy Policy, Terms and new imprint. The previous Digital Shift OÜ details were incorrect and have been removed from the legal pages. No company registration number or tax identifier was inferred or published. Estonia-specific establishment, retention and exclusive-court claims were removed; applicable-law and mandatory consumer rights wording remains.
+
+The live Capve portal now links to the Privacy Policy at `https://capve.app/privacy` and Terms at `https://capve.app/terms`. Account-level review also found the `CAPGO` statement descriptor, an empty support URL and outstanding Atlas requirements. Those account settings are readable but no update operation is exposed through this MCP connection. See [billing setup](billing-setup.md) for the verified findings and activation requirements.

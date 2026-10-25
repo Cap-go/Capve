@@ -11,7 +11,7 @@ import {
   VerifyEmailPage,
 } from "./pages/Auth";
 import { LandingPage } from "./pages/Landing";
-import { PrivacyPage, TermsPage } from "./pages/Legal";
+import { ImprintPage, PrivacyPage, TermsPage } from "./pages/Legal";
 import { NotFoundPage } from "./pages/NotFound";
 
 export function App() {
@@ -20,6 +20,7 @@ export function App() {
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<LandingPage />} />
+          <Route path="/imprint" element={<ImprintPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/login" element={<LoginPage />} />
