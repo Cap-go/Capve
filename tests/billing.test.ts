@@ -185,6 +185,44 @@ describe("hosted billing", () => {
     expect((await billingStatus(configured, accountId)).reportsAllowed).toBe(false);
   });
 
+  it.each(["invoice.paid", "checkout.session.completed"].flatMap((type) => [
+    { type, older: "active", latest: "past_due" },
+    { type, older: "past_due", latest: "active" },
+  ]))("retries overlapping $type snapshots from $older to $latest", async ({ type, older, latest }) => {
+    await env.DB.prepare(`UPDATE account_billing SET stripe_customer_id = 'cus_overlap',
+      stripe_subscription_id = 'sub_overlap', stripe_event_created = 500, trial_ends_at = 1,
+      reconciliation_revision = 0 WHERE account_id = ?`).bind(accountId).run();
+    const configured = { ...billingEnv, STRIPE_SECRET_KEY: "sk_test_fake", STRIPE_WEBHOOK_SECRET: "whsec_test", STRIPE_PRICE_PRO: "price_pro" };
+    const stripe = new Stripe("sk_test_fake");
+    async function deliver(eventType: string, eventId: string) {
+      const object = eventType.startsWith("invoice.") ? { id: "in_overlap", object: "invoice", customer: "cus_overlap",
+        parent: { subscription_details: { subscription: "sub_overlap" } } } :
+        { id: "cs_overlap", object: "checkout.session", mode: "subscription", customer: "cus_overlap", subscription: "sub_overlap" };
+      const payload = JSON.stringify({ id: eventId, object: "event", created: 900, type: eventType, data: { object } });
+      const signature = await stripe.webhooks.generateTestHeaderStringAsync({ payload, secret: "whsec_test", cryptoProvider: Stripe.createSubtleCryptoProvider() });
+      return call("/api/billing/webhook", { method: "POST", headers: { "stripe-signature": signature }, body: payload }, configured);
+    }
+    let retrievals = 0;
+    let competingResponse: Response | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      const first = ++retrievals === 1;
+      // A second handler commits its newer snapshot while the first retrieval is in flight.
+      if (first) competingResponse = await deliver("invoice.paid", "evt_newer_snapshot");
+      return Response.json({ id: "sub_overlap", object: "subscription", customer: "cus_overlap", status: first ? older : latest,
+        trial_end: null, items: { data: [{ price: { id: "price_pro" }, current_period_end: Math.floor(Date.now() / 1000) + 86400 }] } });
+    });
+    expect((await deliver(type, "evt_older_snapshot")).status).toBe(503);
+    expect(competingResponse?.status).toBe(200);
+    expect((await billingRow(configured, accountId)).subscription_status).toBe(latest);
+    expect((await billingStatus(configured, accountId)).reportsAllowed).toBe(latest === "active");
+    expect(await env.DB.prepare("SELECT stripe_event_created, reconciliation_revision FROM account_billing WHERE account_id = ?")
+      .bind(accountId).first()).toEqual({ stripe_event_created: 500, reconciliation_revision: 1 });
+    expect((await deliver(type, "evt_older_snapshot")).status).toBe(200);
+    expect((await billingStatus(configured, accountId)).reportsAllowed).toBe(latest === "active");
+    expect(await env.DB.prepare("SELECT stripe_event_created, reconciliation_revision FROM account_billing WHERE account_id = ?")
+      .bind(accountId).first()).toEqual({ stripe_event_created: 500, reconciliation_revision: 2 });
+  });
+
   it("does not grant access from Checkout completion when the subscription is incomplete", async () => {
     await env.DB.prepare("UPDATE account_billing SET stripe_customer_id = 'cus_checkout', trial_ends_at = 1 WHERE account_id = ?").bind(accountId).run();
     const configured = { ...billingEnv, STRIPE_SECRET_KEY: "sk_test_fake", STRIPE_WEBHOOK_SECRET: "whsec_test", STRIPE_PRICE_PRO: "price_pro" };

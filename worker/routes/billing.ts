@@ -182,8 +182,8 @@ billing.post("/webhook", async (c) => {
       return c.json({ received: true });
   }
   if (!subscriptionId || !eventCustomerId) return c.json({ received: true });
-  const known = await c.env.DB.prepare("SELECT account_id, stripe_subscription_id, subscription_status, stripe_event_created FROM account_billing WHERE stripe_customer_id = ?")
-    .bind(eventCustomerId).first<{ account_id: string; stripe_subscription_id: string | null; subscription_status: string | null; stripe_event_created: number }>();
+  const known = await c.env.DB.prepare("SELECT account_id, stripe_subscription_id, subscription_status, stripe_event_created, reconciliation_revision FROM account_billing WHERE stripe_customer_id = ?")
+    .bind(eventCustomerId).first<{ account_id: string; stripe_subscription_id: string | null; subscription_status: string | null; stripe_event_created: number; reconciliation_revision: number }>();
   if (!known) return c.json({ received: true });
   // Retrieve current state: a paid invoice or Checkout completion alone never grants access.
   const sub = await stripe.subscriptions.retrieve(subscriptionId);
@@ -200,14 +200,16 @@ billing.post("/webhook", async (c) => {
   const updated = await c.env.DB.prepare(`UPDATE account_billing SET
     plan = COALESCE(?, plan), stripe_subscription_id = ?, subscription_status = ?,
     subscription_ends_at = ?, stripe_event_created = MAX(stripe_event_created, ?),
+    reconciliation_revision = reconciliation_revision + 1,
     trial_ends_at = CASE WHEN ? IS NOT NULL AND ? > trial_ends_at THEN ? ELSE trial_ends_at END
     WHERE account_id = ? AND stripe_event_created <= ?
       AND (? = 1 OR stripe_event_created = ?)
-      AND COALESCE(stripe_subscription_id, '') = COALESCE(?, '')`)
+      AND COALESCE(stripe_subscription_id, '') = COALESCE(?, '')
+      AND reconciliation_revision = ?`)
     .bind(plan, sub.id, plan ? sub.status : "unrecognized_price", endsAt ? endsAt * 1000 : null,
       subscriptionEvent ? event.created : 0, sub.trial_end, (sub.trial_end ?? 0) * 1000, (sub.trial_end ?? 0) * 1000,
       known.account_id, subscriptionEvent ? event.created : known.stripe_event_created,
-      subscriptionEvent ? 1 : 0, known.stripe_event_created, known.stripe_subscription_id).run();
+      subscriptionEvent ? 1 : 0, known.stripe_event_created, known.stripe_subscription_id, known.reconciliation_revision).run();
   // Retry a lost race, but acknowledge a genuinely stale subscription event.
   if (!updated.meta.changes && (!subscriptionEvent || known.stripe_event_created <= event.created))
     return c.json({ error: "Subscription changed; retry event" }, 503);
