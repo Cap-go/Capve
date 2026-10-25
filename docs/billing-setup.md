@@ -17,15 +17,32 @@ After trial expiry, an active or trialing Stripe subscription with an unexpired 
 
 ## Stripe, before enabling billing
 
-1. Select the Stripe account that owns Capve. Start in test mode, then repeat the setup in live mode. Keep test and live IDs/keys separate.
-2. Create two products, `Capve Starter` and `Capve Pro`, with **monthly recurring USD prices**, $74.50 and $149.50. Do not create usage-based prices or overage charges. Trial timing comes from Capve, not a second 14-day Stripe promotion.
-3. In Stripe's customer portal settings, allow payment method updates, cancellation at period end, and switching between these two prices. Apply plan changes immediately with proration so an upgrade restores reports on the confirmed subscription update. Disable unrelated prices and quantities. Keep payment collection enabled for trial Checkout.
-4. Add webhook `https://capve.app/api/billing/webhook` for `customer.subscription.created`, `customer.subscription.updated`, and `customer.subscription.deleted`. Select the API version matching the installed Stripe SDK, currently 2026-09-30.endive. The handler verifies the raw payload signature, then retrieves the current subscription before updating D1. Do not use a Checkout success redirect as proof of payment.
-5. Set Worker secrets with `bunx wrangler secret put NAME --env production` for `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET`. Never paste them into chat or git. Keep CI/deploy credentials at Cap-go org level.
-6. Set non-secret production vars `STRIPE_PRICE_STARTER` and `STRIPE_PRICE_PRO` to the two price IDs. Add `BILLING_ENABLED = "true"` only after Stripe and Bento setup is complete. These vars must be included in `env.production.vars` in wrangler.toml for later deployments to retain them.
-7. Apply migrations through the normal deployment workflow after review and merge. Coordinate the initial migration and billing activation; if activation is delayed, follow the existing-account correction below. Before launch, follow the Medialab steps below. Martin performs deployment; agents must not deploy.
+Live resources are already created in **CodepushGo, LLC** (`acct_1UUFFLPth1byRSsb`), October 25, 2026. Do not duplicate them:
 
-Stripe prices are the charging source of truth. Verify that the configured IDs are the correct account, currency, amount and monthly interval. Changing `shared/billing.ts` alone does not change Stripe charges. Configure Stripe's failed-payment retries and receipts; Capve sends the reporting-access notices through Bento.
+| Resource | ID |
+| --- | --- |
+| Starter Product / monthly USD 74.50 Price | `capve_starter` / `price_1UUFc0Pth1byRSsbw73wF7yf` |
+| Pro Product / monthly USD 149.50 Price | `capve_pro` / `price_1UUFcCPth1byRSsbOwrw6lvS` |
+| Capve portal configuration | `bpc_1UUFeHPth1byRSsb0svtijZb` |
+| Webhook endpoint (disabled pending launch) | `we_1UUFfqPth1byRSsblazybdxg` |
+
+Production Price IDs and portal configuration are committed in `wrangler.toml`. **Billing and automatic tax remain explicitly disabled.** Self-hosters supply their own account's resources. Local development and CI must use mocks or separate sandbox resources; never use these live IDs with sandbox keys.
+
+1. Create a restricted runtime API key in Stripe's Dashboard. Allow Customer write, Checkout Session write (including retrieval/expiration), Subscription read and Customer Portal Session write. Verify dependencies and permissions with sandbox Checkout, subscription retrieval and portal creation before launch. The Stripe MCP OAuth connection configures the merchant account but cannot issue or install a Worker runtime key.
+2. Set Worker secrets using `bunx wrangler secret put STRIPE_SECRET_KEY --env production` and `bunx wrangler secret put STRIPE_WEBHOOK_SECRET --env production`. Retrieve this endpoint's signing secret in Stripe Workbench. Enter secrets privately, never in git or chat. Keep CI/deploy credentials at Cap-go org level.
+3. Review and merge this integration, then Martin deploys through the normal workflow. The endpoint URL is `https://capve.app/api/billing/webhook`, API version `2026-09-30.endive`. Enable the existing endpoint after the handler and secrets are ready. It subscribes to `customer.subscription.created`, `.updated`, `.deleted`; `checkout.session.completed`, `.async_payment_succeeded`, `.async_payment_failed`; and `invoice.paid`, `.payment_failed`, `.payment_action_required`, `.finalization_failed`.
+4. Configure Stripe payment recovery emails, failed-payment retries and operational notifications. Capve logs event/account/subscription references for invoice failures and action/finalization issues. Bento's existing cron sends subscription/report-access notices; it does not send a separate email for each invoice attempt. Monitor Stripe Workbench failed deliveries and Worker warnings. Refunds, disputes and fraud warnings require operator review in Stripe; Capve does not automatically refund, cancel or interrupt tracking in response.
+5. Complete the sandbox verification below, Bento setup and delayed-rollout trial correction. Confirm Medialab's stored date. Only then set `BILLING_ENABLED = "true"` for Martin's activation deployment.
+
+The Capve portal allows billing address/name/email/tax-ID updates, payment method changes, invoice history/downloads, and switching only between Capve's two prices. Upgrades are prorated and invoiced immediately; downgrades and cancellations take effect at period end. Plan changes during a trial preserve the trial. Subscription Billing generates invoices automatically; do not create a second invoice for a subscription charge.
+
+Checkout collects a billing address and business tax ID, saves the Customer's address/name, uses flexible subscription billing and preserves the existing remaining trial. The signed webhook retrieves current subscription state before updating access. A paid invoice, Checkout completion, or success redirect alone cannot unlock reporting. Invoice/Checkout reconciliation does not advance the subscription-event timestamp, so those independent event streams cannot suppress later subscription updates. Migration 0028 adds a separate reconciliation revision: every successful webhook update increments it, and handlers retry if another handler has changed the revision since they read the account. This also prevents invoice/Checkout snapshots from overwriting one another. Apply the migration before deploying the updated handler.
+
+### Tax activation
+
+Stripe Tax Settings already have an active head-office configuration and account default tax code. No tax registrations were recorded when inspected. The existing account-wide settings were preserved. Both new Prices have unspecified tax behavior and the Products inherit the existing account tax category; confirm that classification and tax-inclusive/exclusive treatment before collecting tax. Creating these resources does not establish tax compliance.
+
+Keep `STRIPE_AUTOMATIC_TAX = "false"` until the merchant confirms its actual registrations, product category and advertised price tax treatment. Recording a registration in Stripe does not register the business with a tax authority. Once confirmed, add the appropriate existing registrations, validate a sandbox tax calculation and its `taxability_reason`, then enable automatic tax in a separate reviewed deployment. No registration was invented or added by this setup.
 
 ## Existing-account activation and delayed rollout
 

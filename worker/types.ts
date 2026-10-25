@@ -15,6 +15,8 @@ export type Env = {
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_PRICE_STARTER?: string;
   STRIPE_PRICE_PRO?: string;
+  STRIPE_PORTAL_CONFIGURATION?: string;
+  STRIPE_AUTOMATIC_TAX?: string;
   BENTO_SITE_UUID?: string;
   BENTO_PUBLISHABLE_KEY?: string;
   BENTO_SECRET_KEY?: string;

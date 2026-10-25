@@ -128,8 +128,127 @@ describe("hosted billing", () => {
     expect((await billingStatus(stripeEnv, accountId)).reportsAllowed).toBe(false);
   });
 
-  it("reuses an open Checkout on retry and preserves the remaining trial", async () => {
-    const configured = { ...billingEnv, STRIPE_SECRET_KEY: "sk_test_fake", STRIPE_PRICE_STARTER: "price_starter" };
+  it("reconciles invoice recovery and failed payments without advancing the subscription event watermark", async () => {
+    await env.DB.prepare(`UPDATE account_billing SET stripe_customer_id = 'cus_invoice',
+      stripe_subscription_id = 'sub_invoice', stripe_event_created = 500, trial_ends_at = 1,
+      subscription_status = 'past_due' WHERE account_id = ?`).bind(accountId).run();
+    const configured = { ...billingEnv, STRIPE_SECRET_KEY: "sk_test_fake", STRIPE_WEBHOOK_SECRET: "whsec_test", STRIPE_PRICE_PRO: "price_pro" };
+    let subscription = { id: "sub_invoice", object: "subscription", customer: "cus_invoice", status: "active", trial_end: null,
+      items: { data: [{ price: { id: "price_pro" }, current_period_end: Math.floor(Date.now() / 1000) + 86400 }] } };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json(subscription));
+    const stripe = new Stripe("sk_test_fake");
+    async function deliver(type: string, customer = "cus_invoice") {
+      const payload = JSON.stringify({ id: "evt_invoice", object: "event", created: 900, type,
+        data: { object: { id: "in_test", object: "invoice", customer,
+          parent: { type: "subscription_details", subscription_details: { subscription: "sub_invoice" } } } } });
+      const signature = await stripe.webhooks.generateTestHeaderStringAsync({ payload, secret: "whsec_test", cryptoProvider: Stripe.createSubtleCryptoProvider() });
+      return call("/api/billing/webhook", { method: "POST", headers: { "stripe-signature": signature }, body: payload }, configured);
+    }
+    expect((await deliver("invoice.paid")).status).toBe(200);
+    expect((await billingStatus(configured, accountId)).reportsAllowed).toBe(true);
+    expect((await env.DB.prepare("SELECT stripe_event_created FROM account_billing WHERE account_id = ?").bind(accountId)
+      .first<{ stripe_event_created: number }>())?.stripe_event_created).toBe(500);
+    subscription = { ...subscription, status: "past_due" };
+    expect((await deliver("invoice.payment_failed")).status).toBe(200);
+    expect((await billingStatus(configured, accountId)).reportsAllowed).toBe(false);
+    // A delayed paid invoice cannot reactivate a currently past-due subscription.
+    expect((await deliver("invoice.paid")).status).toBe(200);
+    expect((await billingStatus(configured, accountId)).reportsAllowed).toBe(false);
+    subscription = { ...subscription, status: "active" };
+    expect((await deliver("invoice.payment_action_required")).status).toBe(200);
+    expect((await deliver("invoice.finalization_failed")).status).toBe(200);
+    expect((await deliver("invoice.paid", "cus_other")).status).toBe(200);
+    subscription = { ...subscription, customer: "cus_other" };
+    expect((await deliver("invoice.paid")).status).toBe(400);
+    subscription = { ...subscription, customer: "cus_invoice" };
+    subscription = { ...subscription, items: { data: [{ ...subscription.items.data[0], price: { id: "price_unrelated" } }] } };
+    expect((await deliver("invoice.paid")).status).toBe(200);
+    expect((await billingStatus(configured, accountId)).reportsAllowed).toBe(false);
+  });
+
+  it.each(["invoice.paid", "customer.subscription.updated"])("retries %s if another webhook wins the subscription-ID race", async (type) => {
+    await env.DB.prepare(`UPDATE account_billing SET stripe_customer_id = 'cus_race',
+      stripe_subscription_id = NULL, stripe_event_created = 500, trial_ends_at = 1 WHERE account_id = ?`).bind(accountId).run();
+    const configured = { ...billingEnv, STRIPE_SECRET_KEY: "sk_test_fake", STRIPE_WEBHOOK_SECRET: "whsec_test", STRIPE_PRICE_PRO: "price_pro" };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      await env.DB.prepare("UPDATE account_billing SET stripe_event_created = 600, stripe_subscription_id = 'sub_race', subscription_status = 'canceled' WHERE account_id = ?").bind(accountId).run();
+      return Response.json({ id: "sub_race", customer: "cus_race", status: "active", trial_end: null,
+        items: { data: [{ price: { id: "price_pro" }, current_period_end: Math.floor(Date.now() / 1000) + 86400 }] } });
+    });
+    const payload = JSON.stringify({ id: "evt_race", object: "event", created: 900, type,
+      data: { object: type === "invoice.paid" ? { id: "in_race", object: "invoice", customer: "cus_race",
+        parent: { subscription_details: { subscription: "sub_race" } } } :
+        { id: "sub_race", object: "subscription", customer: "cus_race" } } });
+    const signature = await new Stripe("sk_test_fake").webhooks.generateTestHeaderStringAsync({ payload, secret: "whsec_test", cryptoProvider: Stripe.createSubtleCryptoProvider() });
+    expect((await call("/api/billing/webhook", { method: "POST", headers: { "stripe-signature": signature }, body: payload }, configured)).status).toBe(503);
+    expect((await billingRow(configured, accountId)).subscription_status).toBe("canceled");
+    expect((await billingStatus(configured, accountId)).reportsAllowed).toBe(false);
+  });
+
+  it.each(["invoice.paid", "checkout.session.completed"].flatMap((type) => [
+    { type, older: "active", latest: "past_due" },
+    { type, older: "past_due", latest: "active" },
+  ]))("retries overlapping $type snapshots from $older to $latest", async ({ type, older, latest }) => {
+    await env.DB.prepare(`UPDATE account_billing SET stripe_customer_id = 'cus_overlap',
+      stripe_subscription_id = 'sub_overlap', stripe_event_created = 500, trial_ends_at = 1,
+      reconciliation_revision = 0 WHERE account_id = ?`).bind(accountId).run();
+    const configured = { ...billingEnv, STRIPE_SECRET_KEY: "sk_test_fake", STRIPE_WEBHOOK_SECRET: "whsec_test", STRIPE_PRICE_PRO: "price_pro" };
+    const stripe = new Stripe("sk_test_fake");
+    async function deliver(eventType: string, eventId: string) {
+      const object = eventType.startsWith("invoice.") ? { id: "in_overlap", object: "invoice", customer: "cus_overlap",
+        parent: { subscription_details: { subscription: "sub_overlap" } } } :
+        { id: "cs_overlap", object: "checkout.session", mode: "subscription", customer: "cus_overlap", subscription: "sub_overlap" };
+      const payload = JSON.stringify({ id: eventId, object: "event", created: 900, type: eventType, data: { object } });
+      const signature = await stripe.webhooks.generateTestHeaderStringAsync({ payload, secret: "whsec_test", cryptoProvider: Stripe.createSubtleCryptoProvider() });
+      return call("/api/billing/webhook", { method: "POST", headers: { "stripe-signature": signature }, body: payload }, configured);
+    }
+    let retrievals = 0;
+    let competingResponse: Response | undefined;
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      const first = ++retrievals === 1;
+      // A second handler commits its newer snapshot while the first retrieval is in flight.
+      if (first) competingResponse = await deliver("invoice.paid", "evt_newer_snapshot");
+      return Response.json({ id: "sub_overlap", object: "subscription", customer: "cus_overlap", status: first ? older : latest,
+        trial_end: null, items: { data: [{ price: { id: "price_pro" }, current_period_end: Math.floor(Date.now() / 1000) + 86400 }] } });
+    });
+    expect((await deliver(type, "evt_older_snapshot")).status).toBe(503);
+    expect(competingResponse?.status).toBe(200);
+    expect((await billingRow(configured, accountId)).subscription_status).toBe(latest);
+    expect((await billingStatus(configured, accountId)).reportsAllowed).toBe(latest === "active");
+    expect(await env.DB.prepare("SELECT stripe_event_created, reconciliation_revision FROM account_billing WHERE account_id = ?")
+      .bind(accountId).first()).toEqual({ stripe_event_created: 500, reconciliation_revision: 1 });
+    expect((await deliver(type, "evt_older_snapshot")).status).toBe(200);
+    expect((await billingStatus(configured, accountId)).reportsAllowed).toBe(latest === "active");
+    expect(await env.DB.prepare("SELECT stripe_event_created, reconciliation_revision FROM account_billing WHERE account_id = ?")
+      .bind(accountId).first()).toEqual({ stripe_event_created: 500, reconciliation_revision: 2 });
+  });
+
+  it("does not grant access from Checkout completion when the subscription is incomplete", async () => {
+    await env.DB.prepare("UPDATE account_billing SET stripe_customer_id = 'cus_checkout', trial_ends_at = 1 WHERE account_id = ?").bind(accountId).run();
+    const configured = { ...billingEnv, STRIPE_SECRET_KEY: "sk_test_fake", STRIPE_WEBHOOK_SECRET: "whsec_test", STRIPE_PRICE_PRO: "price_pro" };
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ id: "sub_checkout", object: "subscription",
+      customer: "cus_checkout", status: "incomplete", trial_end: null,
+      items: { data: [{ price: { id: "price_pro" }, current_period_end: Math.floor(Date.now() / 1000) + 86400 }] } }));
+    for (const type of ["checkout.session.completed", "checkout.session.async_payment_succeeded", "checkout.session.async_payment_failed"]) {
+      const payload = JSON.stringify({ id: "evt_checkout", object: "event", created: 900, type,
+        data: { object: { id: "cs_test", object: "checkout.session", mode: "subscription", customer: "cus_checkout", subscription: "sub_checkout" } } });
+      const signature = await new Stripe("sk_test_fake").webhooks.generateTestHeaderStringAsync({ payload, secret: "whsec_test", cryptoProvider: Stripe.createSubtleCryptoProvider() });
+      expect((await call("/api/billing/webhook", { method: "POST", headers: { "stripe-signature": signature }, body: payload }, configured)).status).toBe(200);
+      expect((await billingStatus(configured, accountId)).reportsAllowed).toBe(false);
+    }
+  });
+
+  it("uses the dedicated portal configuration for invoice and subscription self-service", async () => {
+    await env.DB.prepare("UPDATE account_billing SET stripe_customer_id = 'cus_portal' WHERE account_id = ?").bind(accountId).run();
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(Response.json({ url: "https://billing.stripe.com/session" }));
+    const response = await call("/api/billing/portal", { method: "POST" }, { ...billingEnv,
+      STRIPE_SECRET_KEY: "sk_test_fake", STRIPE_PORTAL_CONFIGURATION: "bpc_capve" });
+    expect(response.status).toBe(200);
+    expect(new URLSearchParams(String(fetch.mock.calls[0][1]?.body)).get("configuration")).toBe("bpc_capve");
+  });
+
+  it.each(["false", "true"])("reuses Checkout, preserves the trial and honors automatic tax=%s", async (automaticTax) => {
+    const configured = { ...billingEnv, STRIPE_SECRET_KEY: "sk_test_fake", STRIPE_PRICE_STARTER: "price_starter", STRIPE_AUTOMATIC_TAX: automaticTax };
     const checkoutBodies: string[] = [];
     vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
       const url = String(input);
@@ -144,6 +263,14 @@ describe("hosted billing", () => {
     expect(checkoutBodies).toHaveLength(1);
     expect(checkoutBodies[0]).toContain("trial_end");
     expect(checkoutBodies[0]).toContain("price_starter");
+    const params = new URLSearchParams(checkoutBodies[0]);
+    expect(params.get("billing_address_collection")).toBe("required");
+    expect(params.get("customer_update[address]")).toBe("auto");
+    expect(params.get("tax_id_collection[enabled]")).toBe("true");
+    expect(params.get("automatic_tax[enabled]")).toBe(automaticTax);
+    expect(params.get("subscription_data[billing_mode][type]")).toBe("flexible");
+    expect(params.get("integration_identifier")).toMatch(/^capve_checkout_[a-z]{8}$/);
+    expect(params.has("payment_method_types")).toBe(false);
   });
 
   it("allows subscribing again after a completed Checkout's subscription was canceled", async () => {
