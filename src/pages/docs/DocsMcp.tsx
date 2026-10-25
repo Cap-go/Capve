@@ -10,6 +10,7 @@ import {
 } from "../../lib/mcp";
 
 const TOOL_GROUPS: Array<[string, string[]]> = [
+  ["Billing", ["get_billing_status"]],
   [
     "Campaigns",
     [

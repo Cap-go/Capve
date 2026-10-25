@@ -1,4 +1,50 @@
 export const initSql = `
+CREATE TABLE billing_email_progress (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  cursor TEXT NOT NULL DEFAULT '',
+  lease_token TEXT,
+  lease_until INTEGER NOT NULL DEFAULT 0
+);
+INSERT INTO billing_email_progress (id) VALUES (1);
+
+CREATE TABLE billing_checkouts (
+  account_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  request_id TEXT NOT NULL,
+  plan TEXT NOT NULL,
+  trial_end INTEGER,
+  expires_at INTEGER NOT NULL,
+  session_id TEXT
+);
+
+CREATE TABLE billing_rollout_accounts (
+  account_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE account_billing (
+  account_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  plan TEXT NOT NULL DEFAULT 'starter' CHECK (plan IN ('starter', 'pro')),
+  trial_started_at INTEGER NOT NULL,
+  trial_ends_at INTEGER NOT NULL,
+  stripe_customer_id TEXT UNIQUE,
+  stripe_subscription_id TEXT UNIQUE,
+  subscription_status TEXT,
+  subscription_ends_at INTEGER,
+  stripe_event_created INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE billing_usage (
+  account_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  period TEXT NOT NULL,
+  clicks INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY (account_id, period)
+);
+CREATE TABLE billing_email_events (
+  event_key TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,
+  delivered_at INTEGER,
+  claimed_until INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS account_access_log (id TEXT PRIMARY KEY, actor_user_id TEXT NOT NULL, account_id TEXT NOT NULL, action TEXT NOT NULL, created_at INTEGER NOT NULL);
 
 CREATE TABLE IF NOT EXISTS users (

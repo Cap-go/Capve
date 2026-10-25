@@ -2,7 +2,7 @@
 
 Read **[REQUIREMENTS.md](./REQUIREMENTS.md)** first. It defines what Capve is, what “done” means, and what is out of scope.
 
-Capve = **open-source Binom alternative**: campaign and affiliate tracking on Cloudflare (Worker + D1). Self-hostable; capve.app is the demo install. **Not** Capgo Affonso. No pricing or billing.
+Capve = **open-source Binom alternative**: campaign and affiliate tracking on Cloudflare (Worker + D1). Self-hostable; capve.app is the demo install. **Not** Capgo Affonso. Hosted pricing and billing are opt-in. See `docs/billing-setup.md`.
 
 ## Repo map
 
@@ -48,7 +48,7 @@ Local dev uses email/password sessions (`/login`, `/register`). The local-dev `A
 5. Deploy workflow: migrations → `wrangler deploy --env production --var APP_URL:https://capve.app`
 6. Enable Cloudflare Email Service on `capve.app` and verify `noreply@capve.app` as a sender (see `send_email` binding in `wrangler.toml`).
 7. Smoke test at **https://capve.app**:
-   - `/` loads homepage with Deploy button
+   - `/` loads homepage with hosted pricing and trial links; no Cloudflare install button
    - `/r/:code` → merchant URL with `velo_ref=`
    - POST convert with `X-Program-Secret` + `affiliate_code` → stats update
    - `/app` works after sign-in (register at `/register`)
@@ -56,7 +56,7 @@ Local dev uses email/password sessions (`/login`, `/register`). The local-dev `A
 ## Rules when changing code
 
 - Match existing patterns; minimal diff
-- Do not add Stripe, pricing, payouts, social login, or Affonso integration unless asked
+- Hosted Stripe pricing/trials and Bento email are authorized; see REQUIREMENTS.md. Do not add payouts, social login, or Affonso integration unless asked
 - Keep redirect allowlist logic — never redirect to arbitrary hosts
 - Conversions: `affiliate_code` + `X-Program-Secret` (server-only); CORS on convert
 - Dashboard APIs require a valid session cookie or API token (`worker/lib/access.ts`)

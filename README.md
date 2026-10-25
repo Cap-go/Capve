@@ -49,7 +49,7 @@ Cursor / VS Code / Windsurf (`mcp.json`):
 { "mcpServers": { "capve": { "url": "https://capve.app/mcp", "headers": { "Authorization": "Bearer capve_YOUR_TOKEN" } } } }
 ```
 
-90 tools cover campaigns, affiliates, paths and rotation, routing rules, anti-fraud blocklists, postbacks, traffic sources (templates, tokens, cost sync), networks, offers, landers, groups, cost updates, reports (incl. drilldown), triggers, zone blacklist rules and alerts, settings, tracking domains, notes and team. Each tool replays the matching `/api` route with the token, so validation and team roles are identical to the dashboard. Full docs: `/docs/mcp`. Code: `worker/mcp/`.
+91 tools cover campaigns, affiliates, paths and rotation, routing rules, anti-fraud blocklists, postbacks, traffic sources (templates, tokens, cost sync), networks, offers, landers, groups, cost updates, reports (incl. drilldown), triggers, zone blacklist rules and alerts, settings, tracking domains, notes and team. Each tool replays the matching `/api` route with the token, so validation and team roles are identical to the dashboard. Full docs: `/docs/mcp`. Code: `worker/mcp/`.
 
 Tokens act as the user who created them, can be revoked from the dashboard, and cannot create more tokens. Only a SHA-256 hash is stored.
 
@@ -139,3 +139,9 @@ The browser snippet at `/api/v1/snippet` stores `velo_ref` from the query string
 ## License
 
 Open source — see [github.com/Cap-go/Capve](https://github.com/Cap-go/Capve).
+
+## Hosted billing and email
+
+Hosted plans, trials, Stripe setup and reporting limits are documented in [billing setup](docs/billing-setup.md). Billing is disabled unless `BILLING_ENABLED=true`. Self-hosted installations keep unrestricted reports.
+
+Copy-ready Bento flow instructions and emails are in [Bento emails](docs/bento-emails.md). Production activation requires the Stripe account configuration, Worker secrets, reviewed Medialab account ID and Martin's deployment.
