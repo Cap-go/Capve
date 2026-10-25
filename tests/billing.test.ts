@@ -166,18 +166,19 @@ describe("hosted billing", () => {
     expect((await billingStatus(configured, accountId)).reportsAllowed).toBe(false);
   });
 
-  it("retries an invoice reconciliation if a subscription webhook wins the race", async () => {
+  it.each(["invoice.paid", "customer.subscription.updated"])("retries %s if another webhook wins the subscription-ID race", async (type) => {
     await env.DB.prepare(`UPDATE account_billing SET stripe_customer_id = 'cus_race',
-      stripe_subscription_id = 'sub_race', stripe_event_created = 500, trial_ends_at = 1 WHERE account_id = ?`).bind(accountId).run();
+      stripe_subscription_id = NULL, stripe_event_created = 500, trial_ends_at = 1 WHERE account_id = ?`).bind(accountId).run();
     const configured = { ...billingEnv, STRIPE_SECRET_KEY: "sk_test_fake", STRIPE_WEBHOOK_SECRET: "whsec_test", STRIPE_PRICE_PRO: "price_pro" };
     vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
-      await env.DB.prepare("UPDATE account_billing SET stripe_event_created = 600, subscription_status = 'canceled' WHERE account_id = ?").bind(accountId).run();
+      await env.DB.prepare("UPDATE account_billing SET stripe_event_created = 600, stripe_subscription_id = 'sub_race', subscription_status = 'canceled' WHERE account_id = ?").bind(accountId).run();
       return Response.json({ id: "sub_race", customer: "cus_race", status: "active", trial_end: null,
         items: { data: [{ price: { id: "price_pro" }, current_period_end: Math.floor(Date.now() / 1000) + 86400 }] } });
     });
-    const payload = JSON.stringify({ id: "evt_race", object: "event", created: 900, type: "invoice.paid",
-      data: { object: { id: "in_race", object: "invoice", customer: "cus_race",
-        parent: { subscription_details: { subscription: "sub_race" } } } } });
+    const payload = JSON.stringify({ id: "evt_race", object: "event", created: 900, type,
+      data: { object: type === "invoice.paid" ? { id: "in_race", object: "invoice", customer: "cus_race",
+        parent: { subscription_details: { subscription: "sub_race" } } } :
+        { id: "sub_race", object: "subscription", customer: "cus_race" } } });
     const signature = await new Stripe("sk_test_fake").webhooks.generateTestHeaderStringAsync({ payload, secret: "whsec_test", cryptoProvider: Stripe.createSubtleCryptoProvider() });
     expect((await call("/api/billing/webhook", { method: "POST", headers: { "stripe-signature": signature }, body: payload }, configured)).status).toBe(503);
     expect((await billingRow(configured, accountId)).subscription_status).toBe("canceled");

@@ -208,8 +208,9 @@ billing.post("/webhook", async (c) => {
       subscriptionEvent ? event.created : 0, sub.trial_end, (sub.trial_end ?? 0) * 1000, (sub.trial_end ?? 0) * 1000,
       known.account_id, subscriptionEvent ? event.created : known.stripe_event_created,
       subscriptionEvent ? 1 : 0, known.stripe_event_created, known.stripe_subscription_id).run();
-  // Retry independent-stream reconciliation if a subscription event won the race.
-  if (!updated.meta.changes && !subscriptionEvent) return c.json({ error: "Subscription changed; retry event" }, 503);
+  // Retry a lost race, but acknowledge a genuinely stale subscription event.
+  if (!updated.meta.changes && (!subscriptionEvent || known.stripe_event_created <= event.created))
+    return c.json({ error: "Subscription changed; retry event" }, 503);
   if (["invoice.payment_failed", "invoice.payment_action_required", "invoice.finalization_failed"].includes(event.type)) {
     // Stripe owns payment recovery; log references only, never invoice details or payment URLs.
     console.warn("Capve billing invoice requires attention", { eventId: event.id, type: event.type,
