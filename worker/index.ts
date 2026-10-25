@@ -17,6 +17,7 @@ import { campaignCosts, sources } from "./routes/sources";
 import { tokens } from "./routes/tokens";
 import { auditMutation } from "./lib/audit";
 import { readBearerToken, requireUser } from "./lib/access";
+import type { SessionUser } from "./types-ops";
 import { handleMcpRequest } from "./mcp/server";
 import { automation } from "./routes/automation";
 import { drilldown } from "./routes/drilldown";
@@ -36,18 +37,22 @@ app.use("*", async (c, next) => {
 app.use("*", hostGate);
 
 app.use("/api/*", async (c, next) => {
-  await next();
   const method = c.req.method.toUpperCase();
-  if (method === "GET" || method === "HEAD" || method === "OPTIONS") return;
-  if (c.res.status < 200 || c.res.status >= 300) return;
-  let session;
-  try {
-    session = await requireUser(c);
-  } catch {
-    return;
+  const audits = method !== "GET" && method !== "HEAD" && method !== "OPTIONS";
+  // Read the actor first. logout-all bumps session_version inside the handler,
+  // so a lookup after next() no longer sees this request's session.
+  let actor: SessionUser | null = null;
+  if (audits) {
+    try {
+      actor = await requireUser(c);
+    } catch {
+      actor = null;
+    }
   }
-  if (!session) return;
-  await auditMutation(c.env.DB, session, c.req.method, new URL(c.req.url).pathname, {
+  await next();
+  if (!audits || !actor) return;
+  if (c.res.status < 200 || c.res.status >= 300) return;
+  await auditMutation(c.env.DB, actor, method, new URL(c.req.url).pathname, {
     viaApi: Boolean(c.req.header("authorization")),
   });
 });

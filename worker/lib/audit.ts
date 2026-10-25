@@ -79,11 +79,18 @@ export async function auditMutation(
   if (options.viaApi) action += " via API";
   if (actor.impersonating) action += " (support access)";
   await recordAudit(db, {
-    accountId: actor.account_id,
+    accountId: accountForMutation(actor, pathname),
     actorUserId: actor.id,
     actorEmail: actor.email,
     action,
   });
+}
+
+/** Personal API tokens belong to the user, even while they are viewing a team. */
+function accountForMutation(actor: Actor, pathname: string): string {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  if (path === "/api/tokens" || path.startsWith("/api/tokens/")) return actor.id;
+  return actor.account_id;
 }
 
 export async function listAuditLog(
