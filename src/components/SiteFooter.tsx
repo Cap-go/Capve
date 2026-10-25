@@ -16,7 +16,10 @@ export function SiteFooter() {
           </a>
           .
         </p>
-        <nav aria-label="Legal" className="flex gap-4">
+        <nav aria-label="Legal" className="flex flex-wrap gap-4">
+          <Link className="underline" to="/imprint">
+            Imprint
+          </Link>
           <Link className="underline" to="/privacy">
             Privacy
           </Link>

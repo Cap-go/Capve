@@ -4,12 +4,12 @@ import { PLANS } from "../../shared/billing";
 import { Shell } from "../components/ui";
 
 const UPDATED = "October 25, 2026";
-const SUPPORT_EMAIL = "support@capve.app";
+const SUPPORT_EMAIL = "support@capgo.app";
 
 const COMPANY = {
-  name: "Digital Shift OÜ",
-  registry: "14236508",
-  address: "Sepapaja 6, 15551 Tallinn, Estonia",
+  name: "CodepushGo, LLC",
+  address: "131 Continental Dr, Suite 305, Newark, DE 19713, United States",
+  phone: "+17759865200",
 };
 
 function LegalLayout({ title, children }: { title: string; children: ReactNode }) {
@@ -49,13 +49,47 @@ function Mail() {
   );
 }
 
+export function ImprintPage() {
+  return (
+    <LegalLayout title="Imprint">
+      <h2>Website operator</h2>
+      <p>
+        <strong>{COMPANY.name}</strong>
+        <br />
+        US limited liability company
+        <br />
+        Business address: {COMPANY.address}
+      </p>
+
+      <h2>Contact</h2>
+      <p>
+        For questions about Capve, your account, billing, or this website, email <Mail />.
+        Telephone: <a href={`tel:${COMPANY.phone}`}>{COMPANY.phone}</a>.
+      </p>
+
+      <h2>Hosted service</h2>
+      <p>
+        This imprint applies to the hosted Capve service at capve.app. Capve provides campaign and
+        affiliate tracking and analytics. If you run your own copy of the open-source software, you
+        are responsible for that installation and its legal notices.
+      </p>
+
+      <h2>Privacy and terms</h2>
+      <p>
+        Our <Link to="/privacy">Privacy Policy</Link> explains how we handle personal data. Our{" "}
+        <Link to="/terms">Terms of Service</Link> describe the hosted service, subscriptions, and
+        your responsibilities.
+      </p>
+    </LegalLayout>
+  );
+}
+
 export function PrivacyPage() {
   return (
     <LegalLayout title="Privacy Policy">
       <p>
         This policy explains how {COMPANY.name} ("Capve", "we") handles personal data when you use
-        the hosted Capve service at capve.app. {COMPANY.name} is an Estonian private limited company,
-        registry code {COMPANY.registry}, {COMPANY.address}.
+        the hosted Capve service at capve.app. {COMPANY.name} is a US limited liability company at {COMPANY.address}.
       </p>
       <p>
         Capve is a campaign and affiliate analytics service. It records clicks and conversions,
@@ -191,7 +225,7 @@ export function PrivacyPage() {
           finish deletion, resolve a dispute, or meet a legal hold.
         </li>
         <li>
-          Billing records are kept for as long as Estonian accounting law requires.
+          Billing records are kept for as long as applicable tax and accounting laws require.
         </li>
         <li>
           Click and conversion records are kept for the life of the account. If we set a shorter
@@ -234,7 +268,7 @@ export function PrivacyPage() {
 
       <h2>8. International transfers</h2>
       <p>
-        We are established in Estonia. Cloudflare processes requests on a global edge network, so
+        We are a US company. Cloudflare processes requests on a global edge network, so
         personal data may be processed outside the European Economic Area. Where the law requires a
         transfer tool, we use one the European Commission has approved, such as its standard
         contractual clauses, or we rely on an adequacy decision that covers the recipient.
@@ -244,12 +278,8 @@ export function PrivacyPage() {
       <p>
         If you are in the EEA, the United Kingdom, or Switzerland, you can ask us to access, correct,
         delete, or restrict your account data, to object to processing based on legitimate interest,
-        and to receive a portable copy. You can also complain to the Estonian Data Protection
-        Inspectorate (Andmekaitse Inspektsioon),{" "}
-        <a href="https://www.aki.ee/" target="_blank" rel="noreferrer">
-          aki.ee
-        </a>
-        , or to your local authority.
+        and to receive a portable copy. You can also complain to the competent data protection
+        authority where you live or work, or where an alleged infringement occurred.
       </p>
       <p>
         For tracking data, the controller is the Capve customer who ran the campaign. Direct requests
@@ -291,7 +321,7 @@ export function PrivacyPage() {
 
       <h2>13. Contact</h2>
       <p>
-        {COMPANY.name}, {COMPANY.address}. Registry code {COMPANY.registry}. Email <Mail />.
+        {COMPANY.name}, {COMPANY.address}. Email <Mail />.
       </p>
     </LegalLayout>
   );
@@ -302,8 +332,7 @@ export function TermsPage() {
     <LegalLayout title="Terms of Service">
       <p>
         These terms are a contract between you and {COMPANY.name} ("Capve", "we") for the hosted
-        Capve service at capve.app. {COMPANY.name} is an Estonian private limited company, registry
-        code {COMPANY.registry}, {COMPANY.address}.
+        Capve service at capve.app. {COMPANY.name} is a US limited liability company at {COMPANY.address}.
       </p>
       <p>
         By creating an account, or by using the service after these terms are shown to you, you agree
@@ -542,15 +571,14 @@ export function TermsPage() {
 
       <h2>13. Law and disputes</h2>
       <p>
-        These terms are governed by the laws of Estonia, excluding conflict-of-law rules. The courts
-        of Harju County, Estonia, have exclusive jurisdiction, except that we may also sue in the
-        courts of your domicile to collect an unpaid fee. If you are a consumer in the European Union,
-        you keep the mandatory rights and the choice of court that consumer law gives you.
+        Applicable law determines the law and courts that apply to a dispute. Nothing in these terms
+        takes away mandatory consumer protections or any right to bring a claim in a court that
+        applicable law gives you.
       </p>
 
       <h2>14. Contact</h2>
       <p>
-        {COMPANY.name}, {COMPANY.address}. Registry code {COMPANY.registry}. Email <Mail />.
+        {COMPANY.name}, {COMPANY.address}. Email <Mail />.
       </p>
     </LegalLayout>
   );

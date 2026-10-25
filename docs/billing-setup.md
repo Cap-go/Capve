@@ -38,6 +38,16 @@ The Capve portal allows billing address/name/email/tax-ID updates, payment metho
 
 Checkout collects a billing address and business tax ID, saves the Customer's address/name, uses flexible subscription billing and preserves the existing remaining trial. The signed webhook retrieves current subscription state before updating access. A paid invoice, Checkout completion, or success redirect alone cannot unlock reporting. Invoice/Checkout reconciliation does not advance the subscription-event timestamp, so those independent event streams cannot suppress later subscription updates. Migration 0028 adds a separate reconciliation revision: every successful webhook update increments it, and handlers retry if another handler has changed the revision since they read the account. This also prevents invoice/Checkout snapshots from overwriting one another. Apply the migration before deploying the updated handler.
 
+### Legal links and merchant identity
+
+The live Capve portal links to `https://capve.app/privacy` and `https://capve.app/terms`. The website's shared footer also links to `/imprint`; all three pages reuse the company details in `src/pages/Legal.tsx`.
+
+Stripe's account record identifies **CodepushGo, LLC**, a US LLC, at 131 Continental Dr, Suite 305, Newark, DE 19713, United States. The confirmed public support contact is `support@capgo.app`, telephone `+17759865200`. The website's Privacy Policy, Terms and imprint use these details; the earlier Digital Shift OÜ details were incorrect. No registration or tax identification number is published because Stripe did not return one.
+
+The account business profile already names Capve and links to `https://capve.app/`. The current statement descriptor and card prefix are still `CAPGO`, and the account support URL is empty. The exposed MCP operations can read these account settings but do not provide an account-update operation; update the descriptor to `CAPVE` and support URL in the authenticated Dashboard before activation. Account-level Checkout policy URLs also require Dashboard review; the dedicated portal policy links are configured and verified separately.
+
+Stripe currently reports charges/payouts enabled, but its requirements list contains outstanding Atlas formation fields. Do not treat those as completed verification: review them in Stripe's Dashboard. Do not invent officers, share counts, formation elections or terms acceptance values. Billing and automatic tax remain disabled; no account legal identity, tax origin, bank details or formation data were changed by this update.
+
 ### Tax activation
 
 Stripe Tax Settings already have an active head-office configuration and account default tax code. No tax registrations were recorded when inspected. The existing account-wide settings were preserved. Both new Prices have unspecified tax behavior and the Products inherit the existing account tax category; confirm that classification and tax-inclusive/exclusive treatment before collecting tax. Creating these resources does not establish tax compliance.
