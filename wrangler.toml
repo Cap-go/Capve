@@ -51,7 +51,7 @@ PLATFORM_ADMIN_EMAILS = "martindonadieu@gmail.com"
 # Keep worker name "velo" (wrangler defaults to velo-production otherwise).
 name = "velo"
 # AUTH_SECRET is a secret: bunx wrangler secret put AUTH_SECRET --env production
-vars = { APP_URL = "https://capve.app", EMAIL_FROM = "noreply@capve.app", PLATFORM_ADMIN_EMAILS = "martindonadieu@gmail.com" }
+vars = { APP_URL = "https://capve.app", EMAIL_FROM = "noreply@capve.app", PLATFORM_ADMIN_EMAILS = "martindonadieu@gmail.com", BILLING_ENABLED = "false", STRIPE_AUTOMATIC_TAX = "false", STRIPE_PRICE_STARTER = "price_1UUFc0Pth1byRSsbw73wF7yf", STRIPE_PRICE_PRO = "price_1UUFcCPth1byRSsbOwrw6lvS", STRIPE_PORTAL_CONFIGURATION = "bpc_1UUFeHPth1byRSsb0svtijZb" }
 
 [[env.production.send_email]]
 name = "EMAIL"

@@ -92,9 +92,16 @@ billing.post("/checkout", async (c) => {
     checkout = await stripe.checkout.sessions.create({
       customer, mode: "subscription", client_reference_id: session.account_id,
       line_items: [{ price: priceId, quantity: 1 }],
+      billing_address_collection: "required",
+      tax_id_collection: { enabled: true },
+      customer_update: { address: "auto", name: "auto" },
+      automatic_tax: { enabled: c.env.STRIPE_AUTOMATIC_TAX === "true" },
+      integration_identifier: `capve_checkout_${Array.from(attempt.request_id.replaceAll("-", "").slice(0, 8),
+        (digit) => String.fromCharCode(97 + parseInt(digit, 16))).join("")}`,
       success_url: `${c.env.APP_URL}/app?entity=billing&checkout=success`,
       cancel_url: `${c.env.APP_URL}/app?entity=billing`,
       subscription_data: {
+        billing_mode: { type: "flexible" },
         metadata: { capve_account_id: session.account_id },
         ...(attempt.trial_end ? { trial_end: attempt.trial_end } : {}),
       },
@@ -120,6 +127,7 @@ billing.post("/portal", async (c) => {
   const row = await billingRow(c.env, session.account_id);
   if (!row.stripe_customer_id) return c.json({ error: "No billing account yet" }, 400);
   const portal = await stripeClient(c.env).billingPortal.sessions.create({
+    ...(c.env.STRIPE_PORTAL_CONFIGURATION ? { configuration: c.env.STRIPE_PORTAL_CONFIGURATION } : {}),
     customer: row.stripe_customer_id, return_url: `${c.env.APP_URL}/app?entity=billing`,
   });
   return c.json({ url: portal.url });
@@ -138,32 +146,75 @@ billing.post("/webhook", async (c) => {
   } catch {
     return c.json({ error: "Invalid Stripe signature" }, 400);
   }
-  if (!["customer.subscription.created", "customer.subscription.updated", "customer.subscription.deleted"].includes(event.type))
-    return c.json({ received: true });
+  let subscriptionId: string | null = null;
+  let eventCustomerId: string | null = null;
   const object = event.data.object;
-  if (!("object" in object) || object.object !== "subscription") return c.json({ error: "Expected subscription" }, 400);
-  // Retrieve current state so delayed events cannot reactivate a canceled subscription.
-  const sub = await stripe.subscriptions.retrieve(object.id);
-  const customerId = typeof sub.customer === "string" ? sub.customer : sub.customer.id;
+  const idOf = (value: string | { id: string } | null): string | null =>
+    typeof value === "string" ? value : value?.id ?? null;
+  switch (event.type) {
+    case "customer.subscription.created":
+    case "customer.subscription.updated":
+    case "customer.subscription.deleted": {
+      const subscription = object as Stripe.Subscription;
+      subscriptionId = subscription.id;
+      eventCustomerId = idOf(subscription.customer);
+      break;
+    }
+    case "checkout.session.completed":
+    case "checkout.session.async_payment_succeeded":
+    case "checkout.session.async_payment_failed": {
+      const checkout = object as Stripe.Checkout.Session;
+      if (checkout.mode !== "subscription") return c.json({ received: true });
+      subscriptionId = idOf(checkout.subscription);
+      eventCustomerId = idOf(checkout.customer);
+      break;
+    }
+    case "invoice.paid":
+    case "invoice.payment_failed":
+    case "invoice.payment_action_required":
+    case "invoice.finalization_failed": {
+      const invoice = object as Stripe.Invoice;
+      subscriptionId = idOf(invoice.parent?.subscription_details?.subscription ?? null);
+      eventCustomerId = idOf(invoice.customer);
+      break;
+    }
+    default:
+      return c.json({ received: true });
+  }
+  if (!subscriptionId || !eventCustomerId) return c.json({ received: true });
+  const known = await c.env.DB.prepare("SELECT account_id, stripe_subscription_id, subscription_status, stripe_event_created FROM account_billing WHERE stripe_customer_id = ?")
+    .bind(eventCustomerId).first<{ account_id: string; stripe_subscription_id: string | null; subscription_status: string | null; stripe_event_created: number }>();
+  if (!known) return c.json({ received: true });
+  // Retrieve current state: a paid invoice or Checkout completion alone never grants access.
+  const sub = await stripe.subscriptions.retrieve(subscriptionId);
+  if (idOf(sub.customer) !== eventCustomerId) return c.json({ error: "Subscription customer mismatch" }, 400);
   const item = sub.items.data[0];
   const plan = item?.price.id === c.env.STRIPE_PRICE_STARTER ? "starter" :
     item?.price.id === c.env.STRIPE_PRICE_PRO ? "pro" : null;
-  const known = await c.env.DB.prepare("SELECT account_id, stripe_subscription_id, subscription_status FROM account_billing WHERE stripe_customer_id = ?")
-    .bind(customerId).first<{ account_id: string; stripe_subscription_id: string | null; subscription_status: string | null }>();
-  if (!known) return c.json({ received: true });
   // Never let events for an old subscription replace its successor.
   if (known.stripe_subscription_id && known.stripe_subscription_id !== sub.id &&
       !["canceled", "incomplete_expired"].includes(known.subscription_status ?? ""))
     return c.json({ received: true });
   const endsAt = sub.status === "trialing" ? sub.trial_end : item?.current_period_end;
-  await c.env.DB.prepare(`UPDATE account_billing SET
+  const subscriptionEvent = event.type.startsWith("customer.subscription.");
+  const updated = await c.env.DB.prepare(`UPDATE account_billing SET
     plan = COALESCE(?, plan), stripe_subscription_id = ?, subscription_status = ?,
-    subscription_ends_at = ?, stripe_event_created = ?,
+    subscription_ends_at = ?, stripe_event_created = MAX(stripe_event_created, ?),
     trial_ends_at = CASE WHEN ? IS NOT NULL AND ? > trial_ends_at THEN ? ELSE trial_ends_at END
-    WHERE account_id = ? AND stripe_event_created <= ?`)
+    WHERE account_id = ? AND stripe_event_created <= ?
+      AND (? = 1 OR stripe_event_created = ?)
+      AND COALESCE(stripe_subscription_id, '') = COALESCE(?, '')`)
     .bind(plan, sub.id, plan ? sub.status : "unrecognized_price", endsAt ? endsAt * 1000 : null,
-      event.created, sub.trial_end, (sub.trial_end ?? 0) * 1000, (sub.trial_end ?? 0) * 1000,
-      known.account_id, event.created).run();
+      subscriptionEvent ? event.created : 0, sub.trial_end, (sub.trial_end ?? 0) * 1000, (sub.trial_end ?? 0) * 1000,
+      known.account_id, subscriptionEvent ? event.created : known.stripe_event_created,
+      subscriptionEvent ? 1 : 0, known.stripe_event_created, known.stripe_subscription_id).run();
+  // Retry independent-stream reconciliation if a subscription event won the race.
+  if (!updated.meta.changes && !subscriptionEvent) return c.json({ error: "Subscription changed; retry event" }, 503);
+  if (["invoice.payment_failed", "invoice.payment_action_required", "invoice.finalization_failed"].includes(event.type)) {
+    // Stripe owns payment recovery; log references only, never invoice details or payment URLs.
+    console.warn("Capve billing invoice requires attention", { eventId: event.id, type: event.type,
+      accountId: known.account_id, subscriptionId: sub.id });
+  }
   return c.json({ received: true });
 });
 
