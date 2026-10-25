@@ -1,10 +1,9 @@
+import { Pricing } from "../components/Pricing";
 import { Link } from "react-router-dom";
 import { CodeBlock } from "../components/CodeBlock";
 import { Shell } from "../components/ui";
 import { useAuth } from "../lib/auth";
 import {
-  DEPLOY_BUTTON_IMAGE,
-  DEPLOY_BUTTON_URL,
   GITHUB_REPO_URL,
   PRODUCTION_APP_URL,
   appBaseUrl,
@@ -32,6 +31,7 @@ export function LandingPage() {
     <Shell
       cta={
         <>
+          <a className="btn btn-ghost" href="#pricing">Pricing</a>
           <Link className="btn btn-ghost" to="/docs">
             Docs
           </Link>
@@ -45,7 +45,7 @@ export function LandingPage() {
                 Sign in
               </Link>
               <Link className="btn btn-primary" to="/register">
-                Sign up
+                Start free trial
               </Link>
             </>
           )}
@@ -65,18 +65,13 @@ export function LandingPage() {
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link className="btn btn-primary" to={user ? "/app" : "/register"}>
-                {user ? "Open dashboard" : "Create account"}
+                {user ? "Open dashboard" : "Start 14-day free trial"}
               </Link>
               <Link className="btn btn-secondary" to="/docs">
                 Read the docs
               </Link>
             </div>
-            <div className="mt-6">
-              <p className="text-sm text-[var(--velo-muted)]">Or run your own copy on Cloudflare:</p>
-              <a className="mt-2 inline-block" href={DEPLOY_BUTTON_URL} target="_blank" rel="noreferrer">
-                <img src={DEPLOY_BUTTON_IMAGE} alt="Deploy to Cloudflare" height={32} />
-              </a>
-            </div>
+
           </div>
 
           <div className="card self-start p-6">
@@ -137,11 +132,13 @@ export function LandingPage() {
           <div className="min-w-0 self-start">
             <CodeBlock>{claudeCodeCommand(appBaseUrl())}</CodeBlock>
             <p className="mt-3 text-sm text-[var(--velo-muted)]">
-              91 tools: campaigns, paths, routing rules, anti-fraud, offers, landers, postbacks, traffic sources, cost updates, reports, drilldown, zone rules, alerts, tracking domains, team, activity.
+              92 tools: campaigns, paths, routing rules, anti-fraud, offers, landers, postbacks, traffic sources, cost updates, reports, drilldown, zone rules, alerts, tracking domains, team, activity.
             </p>
           </div>
         </div>
       </section>
+
+      <Pricing />
 
       <footer className="mx-auto max-w-6xl px-6 text-sm text-[var(--velo-muted)]">
         <div className="border-t border-[var(--velo-border)] py-8">

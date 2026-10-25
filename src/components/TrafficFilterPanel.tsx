@@ -171,7 +171,7 @@ export function TrafficFilterPanel({ programId, canWrite = true }: { programId: 
       {canWrite && (
         <form className="mt-3 grid gap-2 sm:grid-cols-[180px_1fr_auto]" onSubmit={addEntries}>
           <select
-            className="w-full rounded-md border border-[var(--velo-border)] bg-transparent px-3 py-2 text-sm"
+            className="input"
             value={kind}
             onChange={(e) => setKind(e.target.value as BlocklistKind)}
           >

@@ -128,7 +128,7 @@ export function DrilldownPanel({
             <label className="block text-sm" key={index}>
               <span className="mb-1 block font-medium">Level {index + 1}</span>
               <select
-                className="rounded-md border border-[var(--velo-border)] bg-transparent px-3 py-2"
+                className="input"
                 value={levels[index] ?? ""}
                 onChange={(e) => setLevel(index, e.target.value)}
               >

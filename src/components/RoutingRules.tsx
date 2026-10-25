@@ -11,8 +11,7 @@ import {
 } from "../lib/api";
 import { ErrorBox, Field } from "./ui";
 
-const SELECT =
-  "w-full rounded-md border border-[var(--velo-border)] bg-transparent px-3 py-2 text-sm";
+const SELECT = "input";
 
 const FIELDS: { value: string; label: string; hint: string }[] = [
   { value: "country", label: "Country", hint: "DE, AT, CH" },

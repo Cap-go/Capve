@@ -163,6 +163,12 @@ const postbackEvent = nullableStr(
 
 export const TOOLS: McpTool[] = [
   {
+    name: "get_billing_status", title: "Billing and reporting access",
+    description: "Read this account's plan, trial end, monthly click usage and reporting lock. Checkout and portal require the owner in the browser.",
+    inputSchema: schema({}), annotations: read,
+    call: () => ({ method: "GET", path: "/api/billing" }),
+  },
+  {
     name: "whoami",
     title: "Current user",
     description: "Show the signed-in user, team role and account id this token acts as.",

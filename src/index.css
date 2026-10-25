@@ -14,6 +14,7 @@
   --velo-border: #e6e6e3;
   --velo-positive: #15803d;
   --velo-negative: #b42318;
+  --select-chevron: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%235c5c5a' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
 }
 
 * {
@@ -180,6 +181,31 @@ textarea {
   border: 1px solid var(--velo-border);
   border-radius: 6px;
   background: #fafaf9;
+}
+
+/* macOS draws a divider and an empty arrow well inside a native select.
+   Drop that chrome everywhere and paint one chevron. The status pill keeps
+   its own colored mark. Later rules can still replace the image. */
+select:not(.status-select) {
+  -webkit-appearance: none;
+  appearance: none;
+  padding-inline-end: 2rem;
+  background-image: var(--select-chevron);
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 12px;
+  cursor: pointer;
+}
+
+select.input {
+  height: 36px;
+  padding-top: 0;
+  padding-bottom: 0;
+  line-height: 34px;
+}
+
+select:disabled:not(.status-select) {
+  cursor: default;
 }
 
 .stat-grid {
@@ -1724,7 +1750,7 @@ a.campaign-item {
   appearance: none;
   min-width: 88px;
   padding-right: 32px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%235c5c5a' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: var(--select-chevron);
   background-repeat: no-repeat;
   background-position: right 10px center;
   background-size: 12px 12px;
@@ -1837,7 +1863,7 @@ a.campaign-item {
   border: 1px solid #d9d9d6;
   border-radius: 8px;
   background-color: white;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%235c5c5a' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: var(--select-chevron);
   background-repeat: no-repeat;
   background-position: right 8px center;
   background-size: 12px 12px;
@@ -1879,7 +1905,7 @@ a.campaign-item {
   appearance: none;
   border: 0;
   background-color: transparent;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5 6 8l3.5-3.5' fill='none' stroke='%235c5c5a' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-image: var(--select-chevron);
   background-repeat: no-repeat;
   background-position: right 0 center;
   background-size: 12px 12px;

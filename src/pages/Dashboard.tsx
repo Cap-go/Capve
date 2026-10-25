@@ -1,3 +1,5 @@
+import type { BillingStatus } from "../../shared/billing";
+import { BillingPanel, ReportingLock } from "../components/BillingPanel";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { AppShell, type AppNavItem } from "../components/AppShell";
@@ -32,6 +34,7 @@ import {
   formatMoney,
   formatPercent,
   otherCurrencies,
+  type Affiliate,
   type CampaignReportRow,
   type ClickLogRow,
   type ConversionLogRow,
@@ -67,7 +70,8 @@ type EntityView =
   | "groups"
   | "settings"
   | "mcp"
-  | "admin";
+  | "admin"
+  | "billing";
 
 const ENTITY_NAV: AppNavItem<EntityView>[] = [
   { key: "campaigns", label: "Campaigns", icon: "campaigns", group: "Tracking" },
@@ -77,11 +81,13 @@ const ENTITY_NAV: AppNavItem<EntityView>[] = [
   { key: "offers", label: "Offers", icon: "offers", group: "Inventory" },
   { key: "landers", label: "Landers", icon: "landers", group: "Inventory" },
   { key: "groups", label: "Groups", icon: "groups", group: "Inventory" },
+  { key: "billing", label: "Billing", icon: "settings", group: "Workspace" },
   { key: "settings", label: "Settings", icon: "settings", group: "Workspace" },
   { key: "mcp", label: "AI / MCP", icon: "mcp", group: "Workspace" },
 ];
 
 const PAGE_COPY: Record<EntityView, { title: string; description: string }> = {
+  billing: { title: "Billing", description: "Plan, trial, traffic allowance, and subscription." },
   campaigns: { title: "Campaigns", description: "Tracking links, paths, postbacks, and live stats per campaign." },
   reports: { title: "Reports", description: "Compare campaigns, drill into dimensions, and export data." },
   sources: { title: "Traffic sources", description: "Where clicks come from, their tokens, cost model, and postbacks." },
@@ -130,6 +136,24 @@ export function DashboardPage() {
   const section: CampaignSection = isCampaignSection(sectionParam) ? sectionParam : "performance";
   const inCampaign = Boolean(sectionParam);
   const entity = inCampaign ? "campaigns" : ((searchParams.get("entity") as EntityView) || "campaigns");
+
+  const [billing, setBilling] = useState<BillingStatus | null>(null);
+  const reportsLocked = billing?.reportsAllowed === false;
+  useEffect(() => {
+    if (!user) return;
+    let cancelled = false;
+    setBilling(null);
+    const refresh = () => api.billing().then((value) => { if (!cancelled) setBilling(value); }).catch(() => {});
+    void refresh();
+    const interval = window.setInterval(refresh, 60_000);
+    window.addEventListener("focus", refresh);
+    window.addEventListener("capve:billing-changed", refresh);
+    return () => {
+      cancelled = true; window.clearInterval(interval);
+      window.removeEventListener("focus", refresh);
+      window.removeEventListener("capve:billing-changed", refresh);
+    };
+  }, [user]);
 
   const [programs, setPrograms] = useState<Program[]>([]);
   const [programsLoaded, setProgramsLoaded] = useState(false);
@@ -197,6 +221,10 @@ export function DashboardPage() {
   }, [sectionParam, campaignId, navigate]);
 
   useEffect(() => {
+    if (reportsLocked) {
+      setReportRows(null);
+      return;
+    }
     if (!user || inCampaign || entity !== "campaigns") return;
     let cancelled = false;
     api
@@ -210,7 +238,7 @@ export function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, inCampaign, entity, programs]);
+  }, [user, inCampaign, entity, programs, reportsLocked]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -223,7 +251,7 @@ export function DashboardPage() {
     setStats(null);
     setTracking(null);
 
-    api
+    if (!reportsLocked) api
       .stats(selectedId)
       .then((data) => {
         if (!cancelled) setStats(data);
@@ -244,7 +272,7 @@ export function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedId]);
+  }, [selectedId, reportsLocked]);
 
   function setEntity(next: EntityView) {
     if (next === "campaigns") {
@@ -309,6 +337,7 @@ export function DashboardPage() {
       const { tracking_url } = await api.createAffiliate(programId, affiliateName);
       setAffiliateName("");
       setLastLink({ programId, url: tracking_url });
+      if (reportsLocked) return;
       const nextStats = await api.stats(programId);
       setStats((prev) => (prev && prev.program.id !== programId ? prev : nextStats));
     } catch (err) {
@@ -361,7 +390,7 @@ export function DashboardPage() {
     ? (programs.find((p) => p.id === campaignId) ??
       (stats?.program.id === campaignId ? stats.program : undefined))
     : undefined;
-  const visibleStats = stats && stats.program.id === selectedId ? stats : null;
+  const visibleStats = !reportsLocked && stats && stats.program.id === selectedId ? stats : null;
 
   const navItems: AppNavItem<EntityView>[] = [
     ...ENTITY_NAV.filter(({ key }) => !user.impersonating || key !== "mcp"),
@@ -385,13 +414,16 @@ export function DashboardPage() {
       description={inCampaign ? undefined : PAGE_COPY[entity].description}
       notice={user.email_verified === false ? <VerifyEmailBanner /> : undefined}
     >
+      {reportsLocked && entity !== "billing" && <ReportingLock />}
       <ErrorBox message={error} />
 
       {entity !== "campaigns" ? (
-        entity === "admin" ? (
+        entity === "billing" ? (
+          <BillingPanel billing={billing} owner={user.role === "owner" && !user.impersonating} />
+        ) : entity === "admin" ? (
           <AdminPanel />
         ) : entity === "reports" ? (
-          <CampaignReportPanel canWrite={canWrite} />
+          reportsLocked ? null : <CampaignReportPanel canWrite={canWrite} />
         ) : entity === "settings" ? (
           <div className="space-y-6">
             <AccountSettingsPanel canWrite={(user.role ?? "owner") !== "viewer"} />
@@ -418,6 +450,7 @@ export function DashboardPage() {
         <OverviewPanel
           key={selectedId}
           section={section}
+          reportsLocked={reportsLocked}
           busy={busy}
           canWrite={canWrite}
           secretOnce={secretOnce?.programId === selectedId ? secretOnce.secret : ""}
@@ -445,7 +478,7 @@ export function DashboardPage() {
       ) : (
         <CampaignList
           programs={programs}
-          reports={reportRows}
+          reports={reportsLocked ? null : reportRows}
           sources={sources}
           loading={!programsLoaded}
           canWrite={canWrite}
@@ -511,6 +544,7 @@ export function DashboardPage() {
 
 function OverviewPanel({
   section,
+  reportsLocked,
   busy,
   canWrite,
   secretOnce,
@@ -531,6 +565,7 @@ function OverviewPanel({
   onDelete,
 }: {
   section: CampaignSection;
+  reportsLocked: boolean;
   busy: boolean;
   canWrite: boolean;
   secretOnce: string;
@@ -550,6 +585,18 @@ function OverviewPanel({
   onTrackingChanged: () => void;
   onDelete: () => void;
 }) {
+  const [affiliates, setAffiliates] = useState<Affiliate[] | null>(null);
+  useEffect(() => {
+    if (section !== "tracking") return;
+    let cancelled = false;
+    setAffiliates(null);
+    api.affiliates(selectedId)
+      .then(({ affiliates: items }) => { if (!cancelled) setAffiliates(items); })
+      .catch((error) => { if (!cancelled) onError(error instanceof Error ? error.message : "Could not load affiliates"); });
+    return () => { cancelled = true; };
+  }, [selectedId, section, lastLink, onError]);
+  const affiliateRows = affiliates ?? visibleStats?.affiliates ?? [];
+  const affiliateMetrics = new Map(visibleStats?.affiliates.map((affiliate) => [affiliate.id, affiliate]));
   const base = appBaseUrl();
   const origin = trackingOrigin(tracking);
   const eventNames = sortEvents(Object.keys(visibleStats?.totals.events ?? {}));
@@ -592,7 +639,7 @@ function OverviewPanel({
     }
   }
 
-  const hasHiddenCampaignAffiliate = visibleStats?.affiliates.some(
+  const hasHiddenCampaignAffiliate = affiliateRows.some(
     (a) => a.name === "Campaign traffic",
   );
 
@@ -664,7 +711,7 @@ function OverviewPanel({
         </nav>
       </div>
 
-      {section === "performance" && (
+      {section === "performance" && !reportsLocked && (
         <CampaignPerformance
           programId={selectedId}
           currency={visibleStats?.currency ?? "USD"}
@@ -717,64 +764,77 @@ function OverviewPanel({
               </div>
             ))}
           </div>
-
-          <div className="card min-w-0 overflow-hidden p-5">
-            <h2 className="font-semibold">Affiliates</h2>
-            <div className="mt-4 overflow-x-auto">
-              <table className="table">
-                <thead>
-                  <tr>
-                    <th>Name</th>
-                    <th>Tracking URL</th>
-                    <th>Clicks</th>
-                    <th>Conversions</th>
-                    {eventNames.map((name) => (
-                      <th key={name}>{eventLabel(name)}</th>
-                    ))}
-                    <th>Revenue</th>
-                    <th>CR</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {visibleStats.affiliates.length === 0 && (
-                    <tr>
-                      <td colSpan={6 + eventNames.length} className="text-[var(--velo-muted)]">
-                        No affiliates yet. Add one below to get a tracking link.
-                      </td>
-                    </tr>
-                  )}
-                  {visibleStats.affiliates.map((affiliate) => {
-                    const url = `${origin}/r/${affiliate.code}`;
-                    return (
-                      <tr key={affiliate.id}>
-                        <td>{affiliate.name}</td>
-                        <td>
-                          <div className="flex items-center gap-2">
-                            <span className="mono whitespace-nowrap text-xs">{url}</span>
-                            <CopyButton text={url} />
-                          </div>
-                        </td>
-                        <td>{affiliate.clicks}</td>
-                        <td>{affiliate.conversions}</td>
-                        {eventNames.map((name) => (
-                          <td key={name}>{affiliate.events[name] ?? 0}</td>
-                        ))}
-                        <td>{formatMoney(affiliate.revenue_cents, visibleStats.currency)}</td>
-                        <td>{formatPercent(affiliate.conversion_rate)}</td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            {hasHiddenCampaignAffiliate && (
-              <p className="mt-3 text-xs text-[var(--velo-muted)]">
-                "Campaign traffic" is created automatically: it collects clicks on the campaign link (
-                <span className="mono">/c/…</span>) that do not come from a specific affiliate.
-              </p>
-            )}
-          </div>
         </>
+      )}
+
+      {section === "tracking" && (
+        <div className="card min-w-0 overflow-hidden p-5">
+          <h2 id="affiliates-heading" className="font-semibold">Affiliates</h2>
+          <div className="mt-4 overflow-x-auto">
+            <table className="table" aria-labelledby="affiliates-heading">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Tracking URL</th>
+                  {visibleStats && (
+                    <>
+                      <th>Clicks</th>
+                      <th>Conversions</th>
+                      {eventNames.map((name) => (
+                        <th key={name}>{eventLabel(name)}</th>
+                      ))}
+                      <th>Revenue</th>
+                      <th>CR</th>
+                    </>
+                  )}
+                </tr>
+              </thead>
+              <tbody>
+                {affiliates === null && !visibleStats ? (
+                  <tr><td colSpan={2}>Loading affiliates…</td></tr>
+                ) : affiliateRows.length === 0 && (
+                  <tr>
+                    <td colSpan={visibleStats ? 6 + eventNames.length : 2} className="text-[var(--velo-muted)]">
+                      No affiliates yet. Add one below to get a tracking link.
+                    </td>
+                  </tr>
+                )}
+                {affiliateRows.map((affiliate) => {
+                  const metrics = affiliateMetrics.get(affiliate.id);
+                  const url = `${origin}/r/${affiliate.code}`;
+                  return (
+                    <tr key={affiliate.id}>
+                      <td>{affiliate.name}</td>
+                      <td>
+                        <div className="flex items-center gap-2">
+                          <span className="mono whitespace-nowrap text-xs">{url}</span>
+                          <CopyButton text={url} />
+                        </div>
+                      </td>
+                      {visibleStats && (
+                        <>
+                          <td>{metrics?.clicks ?? "—"}</td>
+                          <td>{metrics?.conversions ?? "—"}</td>
+                          {eventNames.map((name) => (
+                            <td key={name}>{metrics?.events[name] ?? 0}</td>
+                          ))}
+                          <td>{metrics ? formatMoney(metrics.revenue_cents, visibleStats.currency) : "—"}</td>
+                          <td>{metrics ? formatPercent(metrics.conversion_rate) : "—"}</td>
+                        </>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          {hasHiddenCampaignAffiliate && (
+            <p className="mt-3 text-xs text-[var(--velo-muted)]">
+              "Campaign traffic" is created automatically: it collects clicks on the campaign link (
+              <span className="mono">/c/…</span>) that do not come from a specific affiliate.
+            </p>
+          )}
+        </div>
       )}
 
       {section === "tracking" && canWrite && (
@@ -946,8 +1006,8 @@ function OverviewPanel({
         </>
       )}
       {section === "budget" && <CampaignSourcePanel programId={selectedId} canWrite={canWrite} />}
-      {section === "clicklog" && <ClicklogTable programId={selectedId} onError={onError} />}
-      {section === "conversions" && <ConversionsTable programId={selectedId} onError={onError} />}
+      {section === "clicklog" && !reportsLocked && <ClicklogTable programId={selectedId} onError={onError} />}
+      {section === "conversions" && !reportsLocked && <ConversionsTable programId={selectedId} onError={onError} />}
     </div>
   );
 }

@@ -1,3 +1,5 @@
+import { billing } from "./routes/billing";
+import { requireReports } from "./lib/billing";
 import { Hono } from "hono";
 import type { Env } from "./types";
 import { accounts } from "./routes/accounts";
@@ -59,6 +61,12 @@ app.use("/api/*", async (c, next) => {
 
 app.get("/api/health", (c) => c.json({ ok: true, service: "capve" }));
 
+// Cover chart/report data, raw logs and exports, including MCP requests replayed through /api.
+app.use("/api/reports/*", requireReports);
+for (const prefix of ["/api/programs", "/api/campaigns"]) {
+  for (const suffix of ["stats", "clicks", "conversions"]) app.use(`${prefix}/:id/${suffix}`, requireReports);
+}
+app.route("/api/billing", billing);
 app.route("/api/auth", accounts);
 app.route("/api/auth", auth);
 app.route("/api/admin", admin);

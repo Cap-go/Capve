@@ -1,3 +1,4 @@
+import type { BillingStatus, PlanId } from "../../shared/billing";
 export type TeamRole = "owner" | "admin" | "viewer";
 
 export type User = {
@@ -414,6 +415,7 @@ export async function request<T>(path: string, init?: RequestInit): Promise<T> {
 
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 402) window.dispatchEvent(new Event("capve:billing-changed"));
     if (res.status === 409 && data && typeof data === "object" && "code" in data && data.code === "account_changed") window.location.assign("/app");
     throw new Error((data as { error?: string }).error ?? "Request failed");
   }
@@ -441,12 +443,15 @@ export type ApiToken = {
 };
 
 export const api = {
+  billing: () => request<BillingStatus>("/api/billing"),
+  billingCheckout: (plan: PlanId) => request<{ url: string }>("/api/billing/checkout", { method: "POST", body: JSON.stringify({ plan }) }),
+  billingPortal: () => request<{ url: string }>("/api/billing/portal", { method: "POST" }),
   accounts: () => request<{ accounts: AccessibleAccount[] }>("/api/auth/accounts"),
   switchAccount: (account_id: string) => request<{ ok: boolean }>("/api/auth/switch-account", { method: "POST", body: JSON.stringify({ account_id }) }),
   impersonate: (account_id: string) => request<{ ok: boolean }>("/api/auth/impersonate", { method: "POST", body: JSON.stringify({ account_id }) }),
   stopImpersonation: () => request<{ ok: boolean }>("/api/auth/stop-impersonation", { method: "POST", body: "{}" }),
   me: () => request<{ user: User | null }>("/api/auth/me"),
-  register: (body: { email: string; password: string; name?: string }) =>
+  register: (body: { email: string; password: string; name?: string; plan?: PlanId }) =>
     request<{ user: User }>("/api/auth/register", { method: "POST", body: JSON.stringify(body) }),
   login: (email: string, password: string) =>
     request<{ user: User }>("/api/auth/login", {
@@ -522,6 +527,7 @@ export const api = {
     request<{ conversions: ConversionLogRow[] }>(
       `/api/programs/${programId}/conversions${logQuery(page)}`,
     ),
+  affiliates: (programId: string) => request<{ affiliates: Affiliate[] }>(`/api/programs/${programId}/affiliates`),
   stats: (programId: string) => request<ProgramStats>(`/api/programs/${programId}/stats`),
   createAffiliate: (programId: string, name: string) =>
     request<{ affiliate: Affiliate; tracking_url: string }>(

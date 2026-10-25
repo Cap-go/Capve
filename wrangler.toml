@@ -34,11 +34,12 @@ simple = { limit = 5, period = 60 }
 
 # Scheduled jobs, dispatched by worker/cron/index.ts (CRON_JOBS keys must match).
 # Every 15 min ("*/15 * * * *"): automation rules (zone blacklist, ROI/spend alerts).
+# At minutes 2,17,32,47: bounded billing-email scans, with a persisted continuation cursor.
 # Hourly ("17 * * * *"): pull traffic source spend (Adcash, ...) into click costs.
 # Daily ("17 3 * * *"): data retention — prunes the postback delivery log (30 days) and,
 # only when RAW_CLICK_RETENTION_DAYS is set, raw clicks without conversions.
 [triggers]
-crons = ["*/15 * * * *", "17 * * * *", "17 3 * * *"]
+crons = ["*/15 * * * *", "2,17,32,47 * * * *", "17 * * * *", "17 3 * * *"]
 
 [vars]
 APP_URL = "http://localhost:5173"
@@ -66,7 +67,7 @@ namespace_id = "1002"
 simple = { limit = 5, period = 60 }
 
 [env.production.triggers]
-crons = ["*/15 * * * *", "17 * * * *", "17 3 * * *"]
+crons = ["*/15 * * * *", "2,17,32,47 * * * *", "17 * * * *", "17 3 * * *"]
 
 # Custom domains for production.
 # [env.production] are copied into dist/velo/wrangler.json only when the build
