@@ -20,7 +20,6 @@ function readNavCollapsed(): boolean {
 export function AppShell<K extends string>({
   items,
   active,
-  onSelect,
   email,
   onSignOut,
   title,
@@ -29,9 +28,8 @@ export function AppShell<K extends string>({
   notice,
   children,
 }: {
-  items: AppNavItem<K>[];
+  items: (AppNavItem<K> & { href: string })[];
   active: K;
-  onSelect: (key: K) => void;
   email: string;
   onSignOut: () => void;
   title?: string;
@@ -88,17 +86,17 @@ export function AppShell<K extends string>({
                   {items
                     .filter((item) => item.group === group)
                     .map((item) => (
-                      <button
+                      <Link
                         key={item.key}
-                        type="button"
+                        to={item.href}
+                        onClick={() => setMenuOpen(false)}
                         className={item.key === active ? "app-nav-link is-active" : "app-nav-link"}
                         aria-current={item.key === active ? "page" : undefined}
                         title={navCollapsed ? item.label : undefined}
-                        onClick={() => onSelect(item.key)}
                       >
                         <Icon name={item.icon} />
                         <span className="nav-label">{item.label}</span>
-                      </button>
+                      </Link>
                     ))}
                 </div>
               ))}

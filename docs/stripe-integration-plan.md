@@ -15,12 +15,12 @@ The implementation preserves verified owner authorization, D1 trial dates, idemp
 
 - Products `capve_starter` and `capve_pro` and their default monthly Prices are active.
 - Dedicated Capve portal `bpc_1UUFeHPth1byRSsb0svtijZb` is active, with invoice history, billing/payment updates, prorated upgrades, period-end downgrades and period-end cancellation. This was the first portal configuration on the account, so Stripe also marked it as the default; Capve explicitly selects it by ID.
-- Replacement webhook `we_1UYnLwPth1byRSsbKJut6qQf` is created for the production URL and installed SDK API version. Its signing secret is staged in Cloudflare; the endpoint stays disabled until deployment. The previous endpoint remains disabled and is marked superseded.
+- Replacement webhook `we_1UYnLwPth1byRSsbKJut6qQf` is created for the production URL and installed SDK API version. Its signing secret is deployed in Cloudflare; the endpoint remains disabled pending the remaining activation checks. The previous endpoint remains disabled and is marked superseded.
 - Resource IDs are recorded in [billing setup](billing-setup.md) and production config. Billing remains disabled.
 
 ## Remaining activation requirements
 
-The privately supplied runtime key and replacement signing secret are encrypted bindings in an unpublished Cloudflare Worker version. Martin performs production deployment and activation after the remaining checks, as required by AGENTS.md. No payments, Customers, subscriptions, refunds or tax registrations were created, and no Worker was deployed by this setup.
+The privately supplied runtime key and replacement signing secret are encrypted bindings in the production Worker. PR #50’s merge triggered the deployment workflow on November 6, 2026; the active deployment was verified with both secrets, healthy HTTP responses, and invalid-signature rejection. Billing and automatic tax remain disabled. No payments, Customers, subscriptions, refunds or tax registrations were created during setup. Platform admins can inspect the current configuration and live Stripe checks at `/app/admin`.
 
 No active Tax registrations were recorded in Stripe. Existing merchant origin and tax defaults were preserved. Merchant confirmation of actual registrations, product category and price tax treatment is required before automatic tax activation. Sandbox coverage and an actual tax calculation are required before launch; mocked tests do not establish live tax collection.
 
@@ -39,6 +39,6 @@ The live Capve portal now links to the Privacy Policy at `https://capve.app/priv
 - Updated both subscription Products' statement descriptor to `CAPVE`. Account-wide descriptor and support URL changes were attempted with the supplied key but rejected by Stripe because its Account update endpoint cannot edit the merchant's own account. Those settings still need the Dashboard.
 - Created replacement webhook `we_1UYnLwPth1byRSsbKJut6qQf` because Stripe does not return an existing endpoint's signing secret. It is disabled, with the original endpoint disabled and marked superseded.
 - Uploaded the current main application as unpublished Cloudflare Worker version `ed3f424b-3179-480f-9ad4-241b5840ad56`, with the private API key and new signing secret supplied directly as encrypted bindings. Inspected the uploaded version: `AUTH_SECRET`, `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` are present; both billing flags are false.
-- Confirmed production traffic still uses version `cdccf516-163f-496f-bbcc-cf514d78a6f0`. No deployment, D1 migration, billing activation, payment, subscription, Customer or tax-registration creation was performed.
+- At initial staging, production traffic was unchanged. PR #50’s merge subsequently deployed version `95861b38-a306-4dae-a84c-787d459aeaa5` through the normal workflow. Both Stripe secrets and the preserved auth secret were verified on the active version; billing and automatic tax remained disabled.
 
-Atlas requirements, account-wide Dashboard settings, tax registration confirmation, sandbox validation, email setup and deployment remain activation requirements. See the current [billing setup](billing-setup.md) for the exact activation order. The staged version is not a claim that production Checkout or tax collection is validated.
+Atlas requirements, account-wide Dashboard settings, tax registration confirmation, sandbox validation and email setup remain activation requirements. See the current [billing setup](billing-setup.md) for the exact activation order. The staged version is not a claim that production Checkout or tax collection is validated.

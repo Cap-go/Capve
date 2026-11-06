@@ -173,7 +173,7 @@ export function ImpersonationBanner() {
           setBusy(true);
           try {
             await api.stopImpersonation();
-            window.location.assign("/app?entity=admin");
+            window.location.assign("/app/admin");
           } catch (err) {
             setError(err instanceof Error ? err.message : "Could not exit impersonation");
             setBusy(false);

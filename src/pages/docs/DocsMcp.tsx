@@ -11,6 +11,7 @@ import {
 
 const TOOL_GROUPS: Array<[string, string[]]> = [
   ["Billing", ["get_billing_status"]],
+  ["Platform admin (admin accounts only)", ["get_stripe_setup_status"]],
   [
     "Campaigns",
     [
@@ -150,7 +151,7 @@ export function DocsMcp() {
 
       <h2>1. Create a token</h2>
       <p>
-        In the dashboard open <Link to="/app?entity=mcp">AI / MCP</Link> and create a token. It
+        In the dashboard open <Link to="/app/mcp">AI / MCP</Link> and create a token. It
         starts with <code>capve_</code> and is shown once. The token acts as you, with your team
         role: viewers can read, owners and admins can change things. Revoke it any time from the
         same page.

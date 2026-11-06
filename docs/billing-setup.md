@@ -1,6 +1,12 @@
 # Hosted billing setup
 
-Billing is opt-in with `BILLING_ENABLED = "true"`. Self-hosted installs leave it unset and keep unrestricted reports. The landing page advertises hosted plans at capve.app. This setup does not deploy the Worker or change production D1 data.
+Billing is opt-in with `BILLING_ENABLED = "true"`. Self-hosted installs leave it unset and keep unrestricted reports. The landing page advertises hosted plans at capve.app. Configuration changes take effect through the deployment workflow; billing activation remains a separate step.
+
+## Admin setup status
+
+Open `/app/admin` as a verified platform admin to see the running Worker's Stripe connection, account and mode, billing/tax switches, credential presence, plan Prices, portal policies, webhook endpoint, account requirements, and tax registrations. Refresh runs read-only Stripe checks. Failed checks remain “Not verified”; the view never returns secrets or enables billing. Webhook settings do not prove that the signing secret matches: verify a signed delivery in Stripe Workbench.
+
+The same admin authorization applies to `GET /api/admin/stripe` and MCP `get_stripe_setup_status`. Customer subscriptions are managed separately at `/app/billing`. Old billing links redirect there.
 
 ## Plans
 
@@ -30,11 +36,11 @@ Production Price IDs and portal configuration are committed in `wrangler.toml`. 
 
 The API key was provided through private secret delivery and verified against this exact US account. Both subscription Products now have `statement_descriptor = CAPVE`. Prices remain USD 74.50 and USD 149.50 per month.
 
-### Runtime secrets staged, production unchanged
+### Runtime secrets deployed, billing disabled
 
 On November 6, the current application was built from `main` commit `3fcdf24` and uploaded as **unpublished Worker version `ed3f424b-3179-480f-9ad4-241b5840ad56`**, using `wrangler versions upload --env production --secrets-file <private-file>`. This uploads a version without assigning production traffic.
 
-Version inspection confirms encrypted `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` bindings, with the existing `AUTH_SECRET` preserved. Both `BILLING_ENABLED` and `STRIPE_AUTOMATIC_TAX` are `false`. The production deployment was compared before and after upload and is unchanged; its active version remains `cdccf516-163f-496f-bbcc-cf514d78a6f0`. The staged secrets are not active yet.
+Version inspection confirms encrypted `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` bindings, with the existing `AUTH_SECRET` preserved. Both `BILLING_ENABLED` and `STRIPE_AUTOMATIC_TAX` are `false`. The initial upload did not change production traffic. After PR #50 merged on November 6, 2026, the deployment workflow deployed Worker version `95861b38-a306-4dae-a84c-787d459aeaa5` at 100% with all three secret bindings. Live health returned HTTP 200 and an invalid webhook signature returned HTTP 400. Consult `/app/admin` for the running configuration after later deployments.
 
 The old webhook's signing secret could not be retrieved from Stripe. A replacement endpoint, `we_1UYnLwPth1byRSsbKJut6qQf`, was created and disabled, and its newly generated signing secret was passed directly into encrypted Worker storage without printing it or committing a secret file. The old endpoint, `we_1UUFfqPth1byRSsblazybdxg`, remains disabled and is marked as superseded. Do not enable the old endpoint: its signing secret does not match the staged version.
 
@@ -44,8 +50,8 @@ The replacement uses `https://capve.app/api/billing/webhook`, API version `2026-
 
 1. Review the account-wide Dashboard settings below, payment recovery emails, failed-payment retries and operational notifications. Stripe's account record reports charges and payouts enabled, but still lists outstanding Atlas fields. Those fields were not invented or filled in.
 2. Complete sandbox Checkout, webhook, portal, failure/recovery and tax validation. Mocked tests do not prove live payment processing or tax collection. Configure Bento's existing trial/report-access flows. Stripe operators handle refunds, disputes and fraud signals; Capve does not automatically change subscriptions or send separate risk-event alerts for them.
-3. Review and apply the pending D1 migrations before deploying the current application. Confirm Medialab's exact stored trial dates. Follow the existing-account correction below immediately before billing activation if the migration and activation dates differ.
-4. Martin can promote the staged application and encrypted secrets with `bunx wrangler versions deploy ed3f424b-3179-480f-9ad4-241b5840ad56@100% --env production`, then apply the source configuration's triggers with `bunx wrangler triggers deploy --env production`. These commands have **not** been run by the agent. If a newer application version is deployed instead, verify all three secret bindings remain present before enabling billing.
+3. Confirm the deployment workflow applied the D1 migrations required by the current application. Confirm Medialab's exact stored trial dates. Follow the existing-account correction below immediately before billing activation if the migration and activation dates differ.
+4. The runtime secrets are already deployed. Preserve all three secret bindings on subsequent deployments and verify the running configuration in `/app/admin`. Do not promote the old staged version over a newer application release.
 5. After deployment, confirm an invalid webhook signature returns HTTP 400, then enable **only** `we_1UYnLwPth1byRSsbKJut6qQf` and verify a real signed delivery in Stripe Workbench. A Checkout redirect alone does not grant access.
 6. Set `BILLING_ENABLED = "true"` only in a later reviewed activation deployment after the above checks pass. Keep automatic tax separately disabled until the tax prerequisites below are met. Keep CI/deploy credentials at Cap-go org level and all runtime secrets out of git.
 
@@ -61,7 +67,7 @@ Stripe's account record identifies **CodepushGo, LLC**, a US LLC, at 131 Contine
 
 The account business profile already names Capve and links to `https://capve.app/`. The account-level statement descriptor and card prefix are still `CAPGO`, and the account support URL is empty. Both Products now specify `CAPVE` for subscription statements, but this does not change the account prefix. An authenticated update with the merchant's own API key was rejected by Stripe: the Account update endpoint only supports connected accounts, not the merchant's own account. Set the account descriptor/prefix to `CAPVE` and support URL to `https://capve.app/imprint` in the authenticated Dashboard before activation. Account-level Checkout policy URLs also require Dashboard review; the dedicated portal policy links are configured and verified separately.
 
-Stripe currently reports charges/payouts enabled, but its requirements list contains outstanding Atlas formation fields. Do not treat those as completed verification: review them in Stripe's Dashboard. Do not invent officers, share counts, formation elections or terms acceptance values. Billing and automatic tax remain disabled; no account legal identity, tax origin, bank details or formation data were changed by this update. Stored runtime secrets are confined to the unpublished Worker version described above.
+Stripe currently reports charges/payouts enabled, but its requirements list contains outstanding Atlas formation fields. Do not treat those as completed verification: review them in Stripe's Dashboard. Do not invent officers, share counts, formation elections or terms acceptance values. Billing and automatic tax remain disabled; no account legal identity, tax origin, bank details or formation data were changed by this update. Runtime secrets are encrypted Worker bindings and are never returned by the admin status API.
 
 ### Tax activation
 

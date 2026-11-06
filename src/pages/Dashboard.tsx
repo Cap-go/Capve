@@ -1,7 +1,7 @@
 import type { BillingStatus } from "../../shared/billing";
 import { BillingPanel, ReportingLock } from "../components/BillingPanel";
 import { FormEvent, useEffect, useRef, useState } from "react";
-import { Link, Navigate, useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { AppShell, type AppNavItem } from "../components/AppShell";
 import { AdminPanel } from "../components/AdminPanel";
 import { AccountSettingsPanel, TrackingDomainPicker } from "../components/AccountSettingsPanel";
@@ -60,20 +60,9 @@ import {
   type CampaignSection,
 } from "../lib/campaign-route";
 
-type EntityView =
-  | "campaigns"
-  | "reports"
-  | "sources"
-  | "networks"
-  | "offers"
-  | "landers"
-  | "groups"
-  | "settings"
-  | "mcp"
-  | "admin"
-  | "billing";
+import { DASHBOARD_PATHS, type DashboardView } from "../lib/dashboard-route";
 
-const ENTITY_NAV: AppNavItem<EntityView>[] = [
+const DASHBOARD_NAV: AppNavItem<DashboardView>[] = [
   { key: "campaigns", label: "Campaigns", icon: "campaigns", group: "Tracking" },
   { key: "reports", label: "Reports", icon: "reports", group: "Tracking" },
   { key: "sources", label: "Traffic sources", icon: "sources", group: "Inventory" },
@@ -86,7 +75,7 @@ const ENTITY_NAV: AppNavItem<EntityView>[] = [
   { key: "mcp", label: "AI / MCP", icon: "mcp", group: "Workspace" },
 ];
 
-const PAGE_COPY: Record<EntityView, { title: string; description: string }> = {
+const PAGE_COPY: Record<DashboardView, { title: string; description: string }> = {
   billing: { title: "Billing", description: "Plan, trial, traffic allowance, and subscription." },
   campaigns: { title: "Campaigns", description: "Tracking links, paths, postbacks, and live stats per campaign." },
   reports: { title: "Reports", description: "Compare campaigns, drill into dimensions, and export data." },
@@ -97,7 +86,7 @@ const PAGE_COPY: Record<EntityView, { title: string; description: string }> = {
   groups: { title: "Groups", description: "Organize campaigns for filtering and reports." },
   settings: { title: "Settings", description: "Account, team, tracking domains, and operations." },
   mcp: { title: "AI / MCP", description: "Connect AI assistants to this account." },
-  admin: { title: "Admin", description: "Platform overview and support access." },
+  admin: { title: "Admin", description: "Platform overview, Stripe setup, and support access." },
 };
 
 const LOG_PAGE_SIZE = 50;
@@ -126,16 +115,12 @@ function dayEnd(value: string): number | undefined {
   return value ? new Date(`${value}T23:59:59.999`).getTime() : undefined;
 }
 
-export function DashboardPage() {
+export function DashboardPage({ page }: { page: DashboardView }) {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
-  const { section: sectionParam } = useParams();
-  const [searchParams] = useSearchParams();
-  const campaignId = searchParams.get("id") ?? "";
+  const { section: sectionParam, campaignId = "" } = useParams();
   const section: CampaignSection = isCampaignSection(sectionParam) ? sectionParam : "performance";
-  const inCampaign = Boolean(sectionParam);
-  const entity = inCampaign ? "campaigns" : ((searchParams.get("entity") as EntityView) || "campaigns");
+  const inCampaign = Boolean(campaignId);
 
   const [billing, setBilling] = useState<BillingStatus | null>(null);
   const reportsLocked = billing?.reportsAllowed === false;
@@ -196,36 +181,28 @@ export function DashboardPage() {
 
   // Source and group pickers; reloaded when returning to campaigns so new entities show up.
   useEffect(() => {
-    if (!user || entity !== "campaigns") return;
+    if (!user || page !== "campaigns") return;
     api.trafficSources().then(({ traffic_sources }) => setSources(traffic_sources)).catch(() => {});
     api.groups().then(({ groups: items }) => setGroups(items)).catch(() => {});
-  }, [user, entity]);
+  }, [user, page]);
 
   // A stale error from another section or campaign must not linger.
   useEffect(() => {
     setError("");
-  }, [entity, sectionParam, selectedId]);
+  }, [page, sectionParam, selectedId]);
 
   useEffect(() => {
-    if (sectionParam) return;
-    if (location.pathname === "/app" && !searchParams.get("entity")) {
-      navigate(CAMPAIGNS_LIST_PATH, { replace: true });
+    if (inCampaign && !isCampaignSection(sectionParam)) {
+      navigate(campaignHref(campaignId), { replace: true });
     }
-  }, [sectionParam, location.pathname, searchParams, navigate]);
-
-  useEffect(() => {
-    if (!sectionParam) return;
-    if (!campaignId || !isCampaignSection(sectionParam)) {
-      navigate(campaignId ? campaignHref(campaignId) : CAMPAIGNS_LIST_PATH, { replace: true });
-    }
-  }, [sectionParam, campaignId, navigate]);
+  }, [inCampaign, sectionParam, campaignId, navigate]);
 
   useEffect(() => {
     if (reportsLocked) {
       setReportRows(null);
       return;
     }
-    if (!user || inCampaign || entity !== "campaigns") return;
+    if (!user || inCampaign || page !== "campaigns") return;
     let cancelled = false;
     api
       .campaignReports()
@@ -238,7 +215,7 @@ export function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [user, inCampaign, entity, programs, reportsLocked]);
+  }, [user, inCampaign, page, programs, reportsLocked]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -274,14 +251,6 @@ export function DashboardPage() {
     };
   }, [selectedId, reportsLocked]);
 
-  function setEntity(next: EntityView) {
-    if (next === "campaigns") {
-      navigate(CAMPAIGNS_LIST_PATH);
-      return;
-    }
-    navigate(`/app?entity=${next}`);
-  }
-
   if (loading) {
     return (
       <div className="app-loading" role="status">
@@ -293,6 +262,8 @@ export function DashboardPage() {
   if (!user) {
     return <Navigate to="/login" replace />;
   }
+
+  if (page === "admin" && !user.is_platform_admin) return <Navigate to={CAMPAIGNS_LIST_PATH} replace />;
 
   const canWrite = (user.role ?? "owner") !== "viewer";
 
@@ -392,8 +363,8 @@ export function DashboardPage() {
     : undefined;
   const visibleStats = !reportsLocked && stats && stats.program.id === selectedId ? stats : null;
 
-  const navItems: AppNavItem<EntityView>[] = [
-    ...ENTITY_NAV.filter(({ key }) => !user.impersonating || key !== "mcp"),
+  const navItems: AppNavItem<DashboardView>[] = [
+    ...DASHBOARD_NAV.filter(({ key }) => !user.impersonating || key !== "mcp"),
     ...(user.is_platform_admin
       ? [{ key: "admin" as const, label: "Admin", icon: "admin" as const, group: "Workspace" }]
       : []),
@@ -401,38 +372,37 @@ export function DashboardPage() {
 
   return (
     <AppShell
-      items={navItems}
-      active={entity}
-      onSelect={setEntity}
+      items={navItems.map((item) => ({ ...item, href: DASHBOARD_PATHS[item.key] }))}
+      active={page}
       email={user.email}
       onSignOut={async () => {
         if (!window.confirm("Sign out?")) return;
         await logout();
         window.location.href = "/login";
       }}
-      title={inCampaign ? undefined : PAGE_COPY[entity].title}
-      description={inCampaign ? undefined : PAGE_COPY[entity].description}
+      title={inCampaign ? undefined : PAGE_COPY[page].title}
+      description={inCampaign ? undefined : PAGE_COPY[page].description}
       notice={user.email_verified === false ? <VerifyEmailBanner /> : undefined}
     >
-      {reportsLocked && entity !== "billing" && <ReportingLock />}
+      {reportsLocked && page !== "billing" && <ReportingLock />}
       <ErrorBox message={error} />
 
-      {entity !== "campaigns" ? (
-        entity === "billing" ? (
+      {page !== "campaigns" ? (
+        page === "billing" ? (
           <BillingPanel billing={billing} owner={user.role === "owner" && !user.impersonating} />
-        ) : entity === "admin" ? (
+        ) : page === "admin" ? (
           <AdminPanel />
-        ) : entity === "reports" ? (
+        ) : page === "reports" ? (
           reportsLocked ? null : <CampaignReportPanel canWrite={canWrite} />
-        ) : entity === "settings" ? (
+        ) : page === "settings" ? (
           <div className="space-y-6">
             <AccountSettingsPanel canWrite={(user.role ?? "owner") !== "viewer"} />
             <OpsPanel role={user.role ?? "owner"} accountId={user.account_id ?? user.id} />
           </div>
-        ) : entity === "mcp" ? (
+        ) : page === "mcp" ? (
           <McpPanel />
         ) : (
-          <EntityPanel kind={entity} canWrite={canWrite} />
+          <EntityPanel kind={page} canWrite={canWrite} />
         )
       ) : campaignId && !programsLoaded && !selectedProgram ? (
         <p className="text-sm text-[var(--velo-muted)]">Loading campaign…</p>

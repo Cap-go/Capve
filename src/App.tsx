@@ -1,8 +1,9 @@
 import { DOC_CONTENT } from "./lib/docs-content";
-import { BrowserRouter, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { DocsLayout } from "./components/DocsLayout";
 import { AuthProvider } from "./lib/auth";
 import { DashboardPage } from "./pages/Dashboard";
+import { DASHBOARD_PATHS, legacyDashboardHref, type DashboardView } from "./lib/dashboard-route";
 import {
   ForgotPasswordPage,
   LoginPage,
@@ -28,9 +29,12 @@ export function App() {
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
           <Route path="/verify-email" element={<VerifyEmailPage />} />
-          <Route path="/app/campaign/:section" element={<DashboardPage />} />
-          <Route path="/app/campaigns" element={<DashboardPage />} />
-          <Route path="/app" element={<DashboardPage />} />
+          <Route path="/app" element={<LegacyDashboardRedirect />} />
+          <Route path="/app/campaign/:section" element={<LegacyDashboardRedirect />} />
+          <Route path="/app/campaigns/:campaignId/:section?" element={<DashboardPage page="campaigns" />} />
+          {Object.entries(DASHBOARD_PATHS).map(([page, path]) => (
+            <Route key={page} path={path} element={<DashboardPage page={page as DashboardView} />} />
+          ))}
           <Route path="/docs" element={<DocsLayout />}>
             {Object.entries(DOC_CONTENT).map(([slug, Page]) =>
               slug ? (
@@ -46,4 +50,10 @@ export function App() {
       </BrowserRouter>
     </AuthProvider>
   );
+}
+
+function LegacyDashboardRedirect() {
+  const { search, hash } = useLocation();
+  const { section } = useParams();
+  return <Navigate to={legacyDashboardHref(search, section) + hash} replace />;
 }

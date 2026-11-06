@@ -45,7 +45,7 @@ Start by adding a campaign and copying its tracking link:
 https://capve.app/app
 
 Your exact trial end date and monthly click allowance are shown in Billing:
-https://capve.app/app?entity=billing
+https://capve.app/app/billing
 
 No card is required for the trial. When it ends, reports will lock unless you subscribe. Tracking links, clicks, and conversions keep working.
 
@@ -65,7 +65,7 @@ Check your campaign reports and confirm that your network's postbacks are record
 https://capve.app/app
 
 To keep reports available after your trial, choose a plan in Billing. You'll find your exact trial end date there too:
-https://capve.app/app?entity=billing
+https://capve.app/app/billing
 
 Your traffic will keep running even if you decide later.
 
@@ -82,7 +82,7 @@ Subject: Your Capve trial ends within three days
 Your Capve trial ends within three days. Choose a plan to keep viewing campaign reports.
 
 Review your trial end date and choose a plan:
-https://capve.app/app?entity=billing
+https://capve.app/app/billing
 
 If you don't subscribe, reports will lock at the end of your trial. Traffic will keep redirecting, and clicks and conversions will keep recording.
 
@@ -101,7 +101,7 @@ Your Capve trial has ended. An active subscription is now required to view repor
 Your tracking links still work. Capve continues recording clicks and conversions.
 
 Choose a plan to restore reports. If you also exceeded your monthly allowance, choose a larger plan or wait for the next month's reset:
-https://capve.app/app?entity=billing
+https://capve.app/app/billing
 
 The Capve team
 ```
@@ -120,7 +120,7 @@ Your traffic is still running, and Capve continues recording clicks and conversi
 Upgrade your plan to restore reports, or wait until the first of next month UTC for your allowance to reset. Reports also require an active trial or subscription.
 
 Review your usage and plan:
-https://capve.app/app?entity=billing
+https://capve.app/app/billing
 
 The Capve team
 ```
@@ -135,7 +135,7 @@ Subject: Your Capve subscription is active
 Your Capve subscription is active. Reports are available within your plan's monthly click allowance.
 
 View your plan or manage your subscription:
-https://capve.app/app?entity=billing
+https://capve.app/app/billing
 
 Stripe sends your receipt separately. Your campaign tracking continues as usual.
 
@@ -152,7 +152,7 @@ Subject: Update your payment method for Capve
 Your Capve subscription needs a payment update.
 
 Open Billing, then choose Manage subscription to update your payment method:
-https://capve.app/app?entity=billing
+https://capve.app/app/billing
 
 Reports require an active trial or subscription and available click allowance. Your traffic keeps running while you resolve payment.
 
@@ -171,7 +171,7 @@ Your Capve subscription has ended. An active trial or subscription is required t
 Your tracking links still redirect traffic, and Capve keeps recording clicks and conversions.
 
 You can subscribe again here:
-https://capve.app/app?entity=billing
+https://capve.app/app/billing
 
 The Capve team
 ```

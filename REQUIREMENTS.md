@@ -48,9 +48,11 @@ A Capve instance lets a user:
 
 **Public** (no session): `/`, `/docs/*`, `/login`, `/register`, `/r/:code`, `/c/:key`, `/lp/:clickId`, `/click`, `POST /api/v1/convert` + OPTIONS, `GET /api/v1/snippet`, `GET /api/health`, `/api/auth/*`.
 
-**Session or API token** (`Authorization: Bearer capve_…`): `/app`, `/api/programs*`, `/api/campaigns*`, `/api/entities*`, `/api/reports*`, `/api/ops*`, `/api/sources*`, `/api/admin*`, `/api/settings*`, `/api/automation*`, `/api/tracking-domains*`, `/mcp`.
+**Session or API token** (`Authorization: Bearer capve_…`): `/app/*`, `/api/programs*`, `/api/campaigns*`, `/api/entities*`, `/api/reports*`, `/api/ops*`, `/api/sources*`, `/api/admin*`, `/api/settings*`, `/api/automation*`, `/api/tracking-domains*`, `/mcp`.
 
 **Session cookie only**: `/api/tokens*` (a token cannot mint tokens).
+
+Dashboard pages have dedicated paths: `/app/campaigns`, `/app/reports`, `/app/traffic-sources`, `/app/affiliate-networks`, `/app/offers`, `/app/landers`, `/app/groups`, `/app/billing`, `/app/settings`, `/app/mcp`, and `/app/admin`. Campaign sections use `/app/campaigns/:campaignId/:section`. Legacy `?entity=` and campaign `?id=` links redirect to these paths. Platform admins can inspect deployed Stripe configuration and live read-only checks in `/app/admin` (also `/api/admin/stripe` and MCP `get_stripe_setup_status`); credentials are never returned.
 
 Tracking and API paths are listed in `assets.run_worker_first` in `wrangler.toml` so browser navigations reach the Worker instead of the SPA fallback.
 

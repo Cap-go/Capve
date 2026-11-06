@@ -163,6 +163,12 @@ const postbackEvent = nullableStr(
 
 export const TOOLS: McpTool[] = [
   {
+    name: "get_stripe_setup_status", title: "Platform Stripe setup status",
+    description: "Platform admins only. Read deployed billing configuration and live Stripe account, Price, portal, webhook, and tax checks. Never returns credentials or changes settings.",
+    inputSchema: schema({}), annotations: read,
+    call: () => ({ method: "GET", path: "/api/admin/stripe" }),
+  },
+  {
     name: "get_billing_status", title: "Billing and reporting access",
     description: "Read this account's plan, trial end, monthly click usage and reporting lock. Checkout and portal require the owner in the browser.",
     inputSchema: schema({}), annotations: read,

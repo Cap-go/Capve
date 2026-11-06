@@ -988,6 +988,7 @@ select:disabled:not(.status-select) {
   color: #8a8a87;
 }
 .app-nav-link {
+  text-decoration: none;
   display: flex;
   width: 100%;
   align-items: center;
@@ -2677,3 +2678,17 @@ a.campaign-item {
     padding-left: 36px;
   }
 }
+
+.stripe-setup-status {
+  display: inline-flex;
+  flex-shrink: 0;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid var(--velo-border);
+  padding: 0.25rem 0.625rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--velo-muted);
+}
+.stripe-setup-status--ready { color: var(--velo-positive); }
+.stripe-setup-status--attention { color: var(--velo-negative); }

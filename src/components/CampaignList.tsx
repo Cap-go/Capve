@@ -13,7 +13,7 @@ function formatCreated(ms: number): string {
 
 /**
  * Campaign index: one row per campaign, with the stats the report API already has.
- * Opens `/app/campaign/performance?id=`.
+ * Opens the campaign’s own performance URL.
  */
 export function CampaignList({
   programs,

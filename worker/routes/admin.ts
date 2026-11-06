@@ -2,8 +2,16 @@ import { Hono } from "hono";
 import { getPlatformOverview, listPlatformUsers } from "../db/admin";
 import { requirePlatformAdmin } from "../lib/access";
 import type { Env } from "../types";
+import { stripeSetupStatus } from "../lib/stripe-setup";
 
 const admin = new Hono<{ Bindings: Env }>();
+
+admin.get("/stripe", async (c) => {
+  const session = await requirePlatformAdmin(c);
+  if (session instanceof Response) return session;
+  c.header("Cache-Control", "no-store");
+  return c.json(await stripeSetupStatus(c.env));
+});
 
 admin.get("/overview", async (c) => {
   const session = await requirePlatformAdmin(c);
