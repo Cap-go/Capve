@@ -1,6 +1,6 @@
 # Hosted billing setup
 
-Billing is opt-in with `BILLING_ENABLED = "true"`. Self-hosted installs leave it unset and keep unrestricted reports. The landing page advertises hosted plans at capve.app. This PR does not deploy or change production data.
+Billing is opt-in with `BILLING_ENABLED = "true"`. Self-hosted installs leave it unset and keep unrestricted reports. The landing page advertises hosted plans at capve.app. This setup does not deploy the Worker or change production D1 data.
 
 ## Plans
 
@@ -17,22 +17,37 @@ After trial expiry, an active or trialing Stripe subscription with an unexpired 
 
 ## Stripe, before enabling billing
 
-Live resources are already created in **CodepushGo, LLC** (`acct_1UUFFLPth1byRSsb`), October 25, 2026. Do not duplicate them:
+Live resources are already created in the **Capve US account**, owned by **CodepushGo, LLC** (`acct_1UUFFLPth1byRSsb`). Created October 25, 2026 and rechecked November 6, 2026. Do not duplicate them:
 
 | Resource | ID |
 | --- | --- |
 | Starter Product / monthly USD 74.50 Price | `capve_starter` / `price_1UUFc0Pth1byRSsbw73wF7yf` |
 | Pro Product / monthly USD 149.50 Price | `capve_pro` / `price_1UUFcCPth1byRSsbOwrw6lvS` |
 | Capve portal configuration | `bpc_1UUFeHPth1byRSsb0svtijZb` |
-| Webhook endpoint (disabled pending launch) | `we_1UUFfqPth1byRSsblazybdxg` |
+| Webhook endpoint (disabled pending launch) | `we_1UYnLwPth1byRSsbKJut6qQf` |
 
 Production Price IDs and portal configuration are committed in `wrangler.toml`. **Billing and automatic tax remain explicitly disabled.** Self-hosters supply their own account's resources. Local development and CI must use mocks or separate sandbox resources; never use these live IDs with sandbox keys.
 
-1. Create a restricted runtime API key in Stripe's Dashboard. Allow Customer write, Checkout Session write (including retrieval/expiration), Subscription read and Customer Portal Session write. Verify dependencies and permissions with sandbox Checkout, subscription retrieval and portal creation before launch. The Stripe MCP OAuth connection configures the merchant account but cannot issue or install a Worker runtime key.
-2. Set Worker secrets using `bunx wrangler secret put STRIPE_SECRET_KEY --env production` and `bunx wrangler secret put STRIPE_WEBHOOK_SECRET --env production`. Retrieve this endpoint's signing secret in Stripe Workbench. Enter secrets privately, never in git or chat. Keep CI/deploy credentials at Cap-go org level.
-3. Review and merge this integration, then Martin deploys through the normal workflow. The endpoint URL is `https://capve.app/api/billing/webhook`, API version `2026-09-30.endive`. Enable the existing endpoint after the handler and secrets are ready. It subscribes to `customer.subscription.created`, `.updated`, `.deleted`; `checkout.session.completed`, `.async_payment_succeeded`, `.async_payment_failed`; and `invoice.paid`, `.payment_failed`, `.payment_action_required`, `.finalization_failed`.
-4. Configure Stripe payment recovery emails, failed-payment retries and operational notifications. Capve logs event/account/subscription references for invoice failures and action/finalization issues. Bento's existing cron sends subscription/report-access notices; it does not send a separate email for each invoice attempt. Monitor Stripe Workbench failed deliveries and Worker warnings. Refunds, disputes and fraud warnings require operator review in Stripe; Capve does not automatically refund, cancel or interrupt tracking in response.
-5. Complete the sandbox verification below, Bento setup and delayed-rollout trial correction. Confirm Medialab's stored date. Only then set `BILLING_ENABLED = "true"` for Martin's activation deployment.
+The API key was provided through private secret delivery and verified against this exact US account. Both subscription Products now have `statement_descriptor = CAPVE`. Prices remain USD 74.50 and USD 149.50 per month.
+
+### Runtime secrets staged, production unchanged
+
+On November 6, the current application was built from `main` commit `3fcdf24` and uploaded as **unpublished Worker version `ed3f424b-3179-480f-9ad4-241b5840ad56`**, using `wrangler versions upload --env production --secrets-file <private-file>`. This uploads a version without assigning production traffic.
+
+Version inspection confirms encrypted `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` bindings, with the existing `AUTH_SECRET` preserved. Both `BILLING_ENABLED` and `STRIPE_AUTOMATIC_TAX` are `false`. The production deployment was compared before and after upload and is unchanged; its active version remains `cdccf516-163f-496f-bbcc-cf514d78a6f0`. The staged secrets are not active yet.
+
+The old webhook's signing secret could not be retrieved from Stripe. A replacement endpoint, `we_1UYnLwPth1byRSsbKJut6qQf`, was created and disabled, and its newly generated signing secret was passed directly into encrypted Worker storage without printing it or committing a secret file. The old endpoint, `we_1UUFfqPth1byRSsblazybdxg`, remains disabled and is marked as superseded. Do not enable the old endpoint: its signing secret does not match the staged version.
+
+The replacement uses `https://capve.app/api/billing/webhook`, API version `2026-09-30.endive`, and the same subscription, Checkout and invoice events supported by the handler. Its metadata records the staged Worker version. No Customers, subscriptions, payments or tax registrations were created during this setup.
+
+### Activation by Martin
+
+1. Review the account-wide Dashboard settings below, payment recovery emails, failed-payment retries and operational notifications. Stripe's account record reports charges and payouts enabled, but still lists outstanding Atlas fields. Those fields were not invented or filled in.
+2. Complete sandbox Checkout, webhook, portal, failure/recovery and tax validation. Mocked tests do not prove live payment processing or tax collection. Configure Bento's existing trial/report-access flows. Stripe operators handle refunds, disputes and fraud signals; Capve does not automatically change subscriptions or send separate risk-event alerts for them.
+3. Review and apply the pending D1 migrations before deploying the current application. Confirm Medialab's exact stored trial dates. Follow the existing-account correction below immediately before billing activation if the migration and activation dates differ.
+4. Martin can promote the staged application and encrypted secrets with `bunx wrangler versions deploy ed3f424b-3179-480f-9ad4-241b5840ad56@100% --env production`, then apply the source configuration's triggers with `bunx wrangler triggers deploy --env production`. These commands have **not** been run by the agent. If a newer application version is deployed instead, verify all three secret bindings remain present before enabling billing.
+5. After deployment, confirm an invalid webhook signature returns HTTP 400, then enable **only** `we_1UYnLwPth1byRSsbKJut6qQf` and verify a real signed delivery in Stripe Workbench. A Checkout redirect alone does not grant access.
+6. Set `BILLING_ENABLED = "true"` only in a later reviewed activation deployment after the above checks pass. Keep automatic tax separately disabled until the tax prerequisites below are met. Keep CI/deploy credentials at Cap-go org level and all runtime secrets out of git.
 
 The Capve portal allows billing address/name/email/tax-ID updates, payment method changes, invoice history/downloads, and switching only between Capve's two prices. Upgrades are prorated and invoiced immediately; downgrades and cancellations take effect at period end. Plan changes during a trial preserve the trial. Subscription Billing generates invoices automatically; do not create a second invoice for a subscription charge.
 
@@ -44,9 +59,9 @@ The live Capve portal links to `https://capve.app/privacy` and `https://capve.ap
 
 Stripe's account record identifies **CodepushGo, LLC**, a US LLC, at 131 Continental Dr, Suite 305, Newark, DE 19713, United States. The confirmed public support contact is `support@capgo.app`, telephone `+17759865200`. The website's Privacy Policy, Terms and imprint use these details; the earlier Digital Shift OÜ details were incorrect. No registration or tax identification number is published because Stripe did not return one.
 
-The account business profile already names Capve and links to `https://capve.app/`. The current statement descriptor and card prefix are still `CAPGO`, and the account support URL is empty. The exposed MCP operations can read these account settings but do not provide an account-update operation; update the descriptor to `CAPVE` and support URL in the authenticated Dashboard before activation. Account-level Checkout policy URLs also require Dashboard review; the dedicated portal policy links are configured and verified separately.
+The account business profile already names Capve and links to `https://capve.app/`. The account-level statement descriptor and card prefix are still `CAPGO`, and the account support URL is empty. Both Products now specify `CAPVE` for subscription statements, but this does not change the account prefix. An authenticated update with the merchant's own API key was rejected by Stripe: the Account update endpoint only supports connected accounts, not the merchant's own account. Set the account descriptor/prefix to `CAPVE` and support URL to `https://capve.app/imprint` in the authenticated Dashboard before activation. Account-level Checkout policy URLs also require Dashboard review; the dedicated portal policy links are configured and verified separately.
 
-Stripe currently reports charges/payouts enabled, but its requirements list contains outstanding Atlas formation fields. Do not treat those as completed verification: review them in Stripe's Dashboard. Do not invent officers, share counts, formation elections or terms acceptance values. Billing and automatic tax remain disabled; no account legal identity, tax origin, bank details or formation data were changed by this update.
+Stripe currently reports charges/payouts enabled, but its requirements list contains outstanding Atlas formation fields. Do not treat those as completed verification: review them in Stripe's Dashboard. Do not invent officers, share counts, formation elections or terms acceptance values. Billing and automatic tax remain disabled; no account legal identity, tax origin, bank details or formation data were changed by this update. Stored runtime secrets are confined to the unpublished Worker version described above.
 
 ### Tax activation
 
@@ -82,7 +97,7 @@ The SQL returns the affected IDs and new dates. Verify those dates, then enable 
 
 Medialab's confirmed account is `usr_f26ae7acc0337df4`, owned by `team.mediapath@gmail.com`.
 
-Migration `0025_medialab_trial.sql` sets its trial start to the migration time and its end to three calendar years later. Both ID and email must match. It does not change other accounts or the plan's click allowance. The migration runs once through the normal deployment workflow. No production account has been modified by this PR.
+Migration `0025_medialab_trial.sql` sets its trial start to the migration time and its end to three calendar years later. Both ID and email must match. It does not change other accounts or the plan's click allowance. The migration runs once through the normal deployment workflow. No production D1 account has been modified by this setup.
 
 After deployment, verify the stored trial end for this account before enabling billing. Review whether Medialab needs Pro's allowance before enabling enforcement.
 
