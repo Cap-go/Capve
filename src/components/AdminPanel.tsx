@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../lib/auth";
 import { ErrorBox } from "./ui";
+import { StripeSetupPanel } from "./StripeSetupPanel";
 import { api, formatMoney, type PlatformOverview, type PlatformUserRow } from "../lib/api";
 
 export function AdminPanel() {
@@ -54,6 +55,8 @@ export function AdminPanel() {
           ))}
         </div>
       ) : null}
+
+      <StripeSetupPanel />
 
       <div className="card overflow-x-auto p-0">
         <div className="border-b border-[var(--velo-border)] px-5 py-4">

@@ -1,3 +1,4 @@
+import type { StripeSetupStatus } from "../../shared/stripe-setup";
 import type { BillingStatus, PlanId } from "../../shared/billing";
 export type TeamRole = "owner" | "admin" | "viewer";
 
@@ -814,6 +815,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(name ? { name } : {}),
     }),
+  adminStripeSetup: () => request<StripeSetupStatus>("/api/admin/stripe"),
   adminOverview: () => request<{ overview: PlatformOverview }>("/api/admin/overview"),
   adminUsers: (limit = 50, offset = 0) =>
     request<{ users: PlatformUserRow[]; total: number }>(

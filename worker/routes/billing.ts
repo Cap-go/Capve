@@ -98,8 +98,8 @@ billing.post("/checkout", async (c) => {
       automatic_tax: { enabled: c.env.STRIPE_AUTOMATIC_TAX === "true" },
       integration_identifier: `capve_checkout_${Array.from(attempt.request_id.replaceAll("-", "").slice(0, 8),
         (digit) => String.fromCharCode(97 + parseInt(digit, 16))).join("")}`,
-      success_url: `${c.env.APP_URL}/app?entity=billing&checkout=success`,
-      cancel_url: `${c.env.APP_URL}/app?entity=billing`,
+      success_url: `${c.env.APP_URL}/app/billing?checkout=success`,
+      cancel_url: `${c.env.APP_URL}/app/billing`,
       subscription_data: {
         billing_mode: { type: "flexible" },
         metadata: { capve_account_id: session.account_id },
@@ -128,7 +128,7 @@ billing.post("/portal", async (c) => {
   if (!row.stripe_customer_id) return c.json({ error: "No billing account yet" }, 400);
   const portal = await stripeClient(c.env).billingPortal.sessions.create({
     ...(c.env.STRIPE_PORTAL_CONFIGURATION ? { configuration: c.env.STRIPE_PORTAL_CONFIGURATION } : {}),
-    customer: row.stripe_customer_id, return_url: `${c.env.APP_URL}/app?entity=billing`,
+    customer: row.stripe_customer_id, return_url: `${c.env.APP_URL}/app/billing`,
   });
   return c.json({ url: portal.url });
 });

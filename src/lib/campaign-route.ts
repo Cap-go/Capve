@@ -1,4 +1,4 @@
-/** Campaign editor sections. The path segment is the section; the campaign id is `?id=`. */
+/** Campaign editor sections, addressed by campaign id and section in the path. */
 export const CAMPAIGN_SECTIONS = [
   { key: "performance", label: "Performance" },
   { key: "general", label: "General information" },
@@ -25,7 +25,7 @@ export function isCampaignSection(value: string | undefined): value is CampaignS
 /** Campaign list. `/app` redirects here so the list has its own address. */
 export const CAMPAIGNS_LIST_PATH = "/app/campaigns";
 
-/** `/app/campaign/targeting?id=prg_…` — section in the path, campaign id in the query. */
+/** Each campaign and editor section has its own bookmarkable URL. */
 export function campaignHref(id: string, section: CampaignSection = "performance"): string {
-  return `/app/campaign/${section}?id=${encodeURIComponent(id)}`;
+  return `/app/campaigns/${encodeURIComponent(id)}/${section}`;
 }

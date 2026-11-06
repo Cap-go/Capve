@@ -63,7 +63,7 @@ export async function billingEmails(env: Env, now = Date.now()) {
               capve_trial_ends_at: new Date(row.trial_ends_at).toISOString(),
               capve_reports_allowed: status.reportsAllowed, capve_subscription_status: status.subscriptionStatus ?? "none",
               capve_click_limit: status.clickLimit, capve_monthly_clicks: status.clicks,
-              capve_billing_url: `${env.APP_URL}/app?entity=billing`,
+              capve_billing_url: `${env.APP_URL}/app/billing`,
             },
             details: { event_key: key, period: status.period, unique: { key } },
           }]);

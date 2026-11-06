@@ -9,7 +9,7 @@ export function ReportingLock({ showLink = true }: { showLink?: boolean }) {
   return <div className="card my-4 p-5" role="status">
     <h2 className="font-semibold">Reports are locked</h2>
     <p className="mt-2">Your traffic is still running. Clicks and conversions keep recording.</p>
-    {showLink && <Link className="btn btn-primary mt-4" to="/app?entity=billing">View plan and reporting access</Link>}
+    {showLink && <Link className="btn btn-primary mt-4" to="/app/billing">View plan and reporting access</Link>}
   </div>;
 }
 
