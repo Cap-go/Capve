@@ -46,7 +46,7 @@ export function DocsTrackingLinks() {
         source&apos;s fixed CPC/CPM in reports. Country, region, city, ISP, device, OS, browser and
         referrer are captured automatically; reports can be grouped by any of them.
       </p>
-      <CodeBlock>{`${buildTrackingUrl(base, "abc123")}?sub1={zone}&clickid={click_id}&cost={cpc}`}</CodeBlock>
+      <CodeBlock>{`${buildTrackingUrl(base, "abc123")}?sub1=[zone]&clickid=[clickid]&cost=[redirection_cost]`}</CodeBlock>
       <h2>Lander and offer URL macros</h2>
       <p>
         Lander, offer and destination URLs support <code>{"{clickid}"}</code> /{" "}
@@ -62,12 +62,20 @@ export function DocsTrackingLinks() {
         <code>click_id</code> query parameter:
       </p>
       <CodeBlock>{`${base}/lp/{click_id}`}</CodeBlock>
-      <h2>Offer URL macro</h2>
+      <h2>Network postback configuration</h2>
       <p>
-        In your affiliate network, pass the click ID using the macro from the landing URL. Capve
-        exposes <code>click_id</code> on redirect — configure your network postback to call:
+        Configure the affiliate network to send postbacks to Capve when a conversion happens. Use the
+        network&apos;s own macros for the click ID and payout — do not copy{" "}
+        <code>{"{click_id}"}</code> or <code>{"{payout}"}</code> literally. For example, on YesPlay
+        (Affilka) use <code>cnv_id={"${subid1}"}</code> and send a numeric payout or omit it. Each
+        network&apos;s macros are different; see the network docs or the Capve cheat sheet.
       </p>
       <CodeBlock>{buildPostbackUrl(base)}</CodeBlock>
+      <p className="text-sm text-[var(--velo-muted)]">
+        Replace <code>{"{click_id}"}</code>, <code>{"{payout}"}</code>, and{" "}
+        <code>{"{status}"}</code> with the network&apos;s actual macros (e.g.{" "}
+        <code>{"cnv_id={aff_sub}&payout={payout_amount}"}</code> for HasOffers).
+      </p>
     </>
   );
 }
