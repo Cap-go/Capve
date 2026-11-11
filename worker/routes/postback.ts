@@ -9,15 +9,16 @@ import type { Env } from "../types";
 const postback = new Hono<{ Bindings: Env }>();
 
 /**
- * Detects unreplaced macro placeholders (e.g. {payout}, ${amount}, #price#).
- * Common patterns: {key}, ${key}, #key#, {key}, $key$.
+ * Detects unreplaced macro placeholders (e.g. {payout}, ${amount}, #price#, $sum$).
+ * Common patterns: {key}, ${key}, #key#, $key$.
  */
 function isUnreplacedMacro(raw: string): boolean {
   const trimmed = raw.trim();
   return (
-    /^[{$#][^}]+[}#$]$/.test(trimmed) ||
-    /^\$\{[^}]+\}$/.test(trimmed) ||
-    /^#[^#]+#$/.test(trimmed)
+    /^\{[^{}]+\}$/.test(trimmed) ||
+    /^\$\{[^{}]+\}$/.test(trimmed) ||
+    /^#[^#]+#$/.test(trimmed) ||
+    /^\$.+\$$/.test(trimmed)
   );
 }
 
@@ -37,8 +38,8 @@ postback.get("/", async (c) => {
     return c.text("cnv_id required", 400);
   }
 
-  const payoutRaw = c.req.query("payout") || c.req.query("amount");
-  const payout = parsePayout(payoutRaw);
+  const parsedPayout = parsePayout(c.req.query("payout"));
+  const payout = parsedPayout !== undefined ? parsedPayout : parsePayout(c.req.query("amount"));
   if (payout === null) {
     return c.text("invalid payout", 400);
   }
