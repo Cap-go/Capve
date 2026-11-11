@@ -473,9 +473,10 @@ export function DashboardPage({ page }: { page: DashboardView }) {
                   onChange={(e) => setDestinationUrl(e.target.value)}
                 />
                 <p className="text-sm text-[var(--velo-muted)]">
-                  Leave empty to route through paths. Copy <span className="mono">{"{click_id}"}</span> into
-                  the network sub ID, as in the example. <span className="mono">[clickid]</span> stays on
-                  the traffic-source link. The Adcash pixel on that source is{" "}
+                  Leave empty to route through paths. Copy <span className="mono">{"{click_id}"}</span> or{" "}
+                  <span className="mono">{"{clickid}"}</span> into the network sub ID, as in the example.{" "}
+                  <span className="mono">[clickid]</span> on the traffic-source link is the source&apos;s
+                  own placeholder (e.g. Adcash). The Adcash pixel on that source is{" "}
                   <span className="mono">cid={"{external_id}"}</span>.
                 </p>
                 <div className="grid grid-cols-2 gap-3">
@@ -911,9 +912,10 @@ function OverviewPanel({
               onChange={(e) => setDraft({ ...draft, destination: e.target.value })}
             />
             <p className="text-sm text-[var(--velo-muted)]">
-              Leave empty to route through paths. Copy <span className="mono">{"{click_id}"}</span> into the
-              network sub ID, as in the example. <span className="mono">[clickid]</span> stays on the
-              traffic-source link. The Adcash pixel on that source is{" "}
+              Leave empty to route through paths. Copy <span className="mono">{"{click_id}"}</span> or{" "}
+              <span className="mono">{"{clickid}"}</span> into the network sub ID, as in the example.{" "}
+              <span className="mono">[clickid]</span> on the traffic-source link is the source&apos;s own
+              placeholder (e.g. Adcash). The Adcash pixel on that source is{" "}
               <span className="mono">cid={"{external_id}"}</span>.
             </p>
             <SelectField
