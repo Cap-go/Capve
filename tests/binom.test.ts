@@ -328,6 +328,94 @@ describe("binom parity", () => {
     await settle();
     expect(tsPostbacks).toHaveLength(1);
   });
+  it("treats unreplaced macro placeholders as missing values", async () => {
+    const { affiliate } = await setupCampaign({
+      offerUrl: "https://offer.example.com/go",
+      payoutCents: 1234,
+    });
+    const { clickId } = await click(affiliate.code);
+
+    // {payout} treated as undefined -> falls back to offer payout (1234 cents)
+    const macroPayoutResult = await postback(`cnv_id=${clickId}&payout={payout}`);
+    expect(macroPayoutResult.status).toBe("created");
+    expect(macroPayoutResult.conversion.amount_cents).toBe(1234);
+
+    // {status} treated as undefined -> defaults to "lead"
+    const macroStatusResult = await postback(
+      `cnv_id=${clickId}&payout=10&cnv_status={status}&order_id=t1`,
+    );
+    expect(macroStatusResult.status).toBe("created");
+    expect(macroStatusResult.conversion.status).toBe("lead");
+
+    // Other common macro formats: ${amount}, #price#, $sum$
+    const { clickId: clickId2 } = await click(affiliate.code);
+    const dollarBraceResult = await postback(`cnv_id=${clickId2}&payout=\${amount}`);
+    expect(dollarBraceResult.status).toBe("created");
+    expect(dollarBraceResult.conversion.amount_cents).toBe(1234);
+
+    const { clickId: clickId3 } = await click(affiliate.code);
+    const hashResult = await postback(`cnv_id=${clickId3}&payout=#price#`);
+    expect(hashResult.status).toBe("created");
+    expect(hashResult.conversion.amount_cents).toBe(1234);
+
+    const { clickId: clickId4 } = await click(affiliate.code);
+    const dollarResult = await postback(`cnv_id=${clickId4}&payout=$sum$`);
+    expect(dollarResult.status).toBe("created");
+    expect(dollarResult.conversion.amount_cents).toBe(1234);
+
+    // Mixed delimiters like {ok$ or #ok} are now rejected (not treated as macros)
+    const mixedRes = await SELF.fetch(`http://localhost/click?cnv_id=${clickId}&payout={ok$&order_id=t_mixed`);
+    expect(mixedRes.status).toBe(400);
+    expect(await mixedRes.text()).toContain("invalid payout");
+
+    // Invalid payout still returns 400
+    const invalidRes = await SELF.fetch(`http://localhost/click?cnv_id=${clickId}&payout=abc&order_id=t2`);
+    expect(invalidRes.status).toBe(400);
+    expect(await invalidRes.text()).toContain("invalid payout");
+
+    // Negative payout still returns 400
+    const negativeRes = await SELF.fetch(`http://localhost/click?cnv_id=${clickId}&payout=-10&order_id=t3`);
+    expect(negativeRes.status).toBe(400);
+    expect(await negativeRes.text()).toContain("invalid payout");
+
+    // Valid numeric payout still works (with key for payouts above offer payout)
+    const { postback_key } = await json<{ postback_key: { key: string } }>(
+      await SELF.fetch("http://localhost/api/ops/postback-key", { headers: authHeaders }),
+    );
+    const validResult = await postback(`cnv_id=${clickId}&payout=50&key=${postback_key.key}&order_id=t4`);
+    expect(validResult.status).toBe("created");
+    expect(validResult.conversion.amount_cents).toBe(5000);
+  });
+
+  it("accepts 'amount' as an alias for 'payout'", async () => {
+    const { affiliate } = await setupCampaign();
+    const { clickId } = await click(affiliate.code);
+
+    const result = await postback(`cnv_id=${clickId}&amount=25.50&cnv_status=sale`);
+    expect(result.status).toBe("created");
+    expect(result.conversion.amount_cents).toBe(2550);
+    expect(result.conversion.status).toBe("sale");
+
+    // 'amount' with macro placeholder also works
+    const { clickId: clickId2 } = await click(affiliate.code);
+    const macroResult = await postback(`cnv_id=${clickId2}&amount=\${amount}&event=ftd`);
+    expect(macroResult.status).toBe("created");
+    expect(macroResult.conversion.amount_cents).toBe(0);
+
+    // When payout is a macro and amount is real, use amount
+    const { clickId: clickId3 } = await click(affiliate.code);
+    const fallbackResult = await postback(`cnv_id=${clickId3}&payout={payout}&amount=35.75`);
+    expect(fallbackResult.status).toBe("created");
+    expect(fallbackResult.conversion.amount_cents).toBe(3575);
+
+    // When payout is invalid (not a macro), still return 400 even if amount is valid
+    const invalidRes = await SELF.fetch(
+      `http://localhost/click?cnv_id=${clickId}&payout=abc&amount=10&order_id=t_invalid`,
+    );
+    expect(invalidRes.status).toBe(400);
+    expect(await invalidRes.text()).toContain("invalid payout");
+  });
+
   it("tracks conversion events with several postbacks each", async () => {
     const { network } = await post<{ network: { id: string } }>("/api/entities/networks", {
       name: "Net",

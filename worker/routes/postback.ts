@@ -8,9 +8,24 @@ import type { Env } from "../types";
 
 const postback = new Hono<{ Bindings: Env }>();
 
+/**
+ * Detects unreplaced macro placeholders (e.g. {payout}, ${amount}, #price#, $sum$).
+ * Common patterns: {key}, ${key}, #key#, $key$.
+ */
+function isUnreplacedMacro(raw: string): boolean {
+  const trimmed = raw.trim();
+  return (
+    /^\{[^{}]+\}$/.test(trimmed) ||
+    /^\$\{[^{}]+\}$/.test(trimmed) ||
+    /^#[^#]+#$/.test(trimmed) ||
+    /^\$.+\$$/.test(trimmed)
+  );
+}
+
 /** `undefined` = not provided; `null` = invalid. */
 function parsePayout(raw: string | undefined): number | null | undefined {
   if (raw === undefined || raw.trim() === "") return undefined;
+  if (isUnreplacedMacro(raw)) return undefined;
   const value = Number(raw);
   if (!Number.isFinite(value) || value < 0) return null;
   return value;
@@ -23,7 +38,8 @@ postback.get("/", async (c) => {
     return c.text("cnv_id required", 400);
   }
 
-  const payout = parsePayout(c.req.query("payout"));
+  const parsedPayout = parsePayout(c.req.query("payout"));
+  const payout = parsedPayout !== undefined ? parsedPayout : parsePayout(c.req.query("amount"));
   if (payout === null) {
     return c.text("invalid payout", 400);
   }
@@ -47,7 +63,9 @@ postback.get("/", async (c) => {
   if (keySettings?.postback_key_required === 1 && !keyValid) {
     return c.text("invalid postback key", 403);
   }
-  const explicitStatus = c.req.query("cnv_status")?.trim() || undefined;
+  const statusRaw = c.req.query("cnv_status")?.trim();
+  const explicitStatus =
+    statusRaw && !isUnreplacedMacro(statusRaw) ? statusRaw : undefined;
   const status2 = c.req.query("cnv_status2")?.trim() || null;
   const currency = c.req.query("cnv_currency")?.trim() || "USD";
   // Without an explicit tx id the click id (+ event) is the key, so repeated postbacks

@@ -100,8 +100,11 @@ export function DocsPostback() {
             </td>
             <td>No</td>
             <td>
-              Revenue amount in dollars (e.g. <code>49.99</code>). Defaults to the clicked offer
-              payout, or <code>0</code> when an <code>event</code> is set.
+              Revenue amount in dollars (e.g. <code>49.99</code>). Also accepts <code>amount</code>{" "}
+              as an alias. Defaults to the clicked offer payout, or <code>0</code> when an{" "}
+              <code>event</code> is set. Unreplaced macro placeholders (e.g.{" "}
+              <code>{"{payout}"}</code>, <code>{"${amount}"}</code>) are treated as missing and
+              use the default.
             </td>
           </tr>
           <tr>
@@ -109,7 +112,11 @@ export function DocsPostback() {
               <code>cnv_status</code>
             </td>
             <td>No</td>
-            <td>Lead status: <code>lead</code>, <code>sale</code>, <code>rejected</code></td>
+            <td>
+              Lead status: <code>lead</code>, <code>sale</code>, <code>rejected</code>. Defaults
+              to <code>lead</code>. Unreplaced macro placeholders (e.g. <code>{"{status}"}</code>)
+              are treated as missing and use the default.
+            </td>
           </tr>
           <tr>
             <td>
