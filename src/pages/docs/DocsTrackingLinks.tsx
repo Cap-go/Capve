@@ -46,6 +46,9 @@ export function DocsTrackingLinks() {
         source&apos;s fixed CPC/CPM in reports. Country, region, city, ISP, device, OS, browser and
         referrer are captured automatically; reports can be grouped by any of them.
       </p>
+      <p className="text-sm text-[var(--velo-muted)]">
+        Example with Adcash macros:
+      </p>
       <CodeBlock>{`${buildTrackingUrl(base, "abc123")}?sub1=[zone]&clickid=[clickid]&cost=[redirection_cost]`}</CodeBlock>
       <h2>Lander and offer URL macros</h2>
       <p>
@@ -65,17 +68,28 @@ export function DocsTrackingLinks() {
       <h2>Network postback configuration</h2>
       <p>
         Configure the affiliate network to send postbacks to Capve when a conversion happens. Use the
-        network&apos;s own macros for the click ID and payout — do not copy{" "}
-        <code>{"{click_id}"}</code> or <code>{"{payout}"}</code> literally. For example, on YesPlay
-        (Affilka) use <code>cnv_id={"${subid1}"}</code> and send a numeric payout or omit it. Each
-        network&apos;s macros are different; see the network docs or the Capve cheat sheet.
+        network&apos;s own macros for the click ID and payout. Do not copy{" "}
+        <code>{"{click_id}"}</code> or <code>{"{payout}"}</code> literally.
       </p>
       <CodeBlock>{buildPostbackUrl(base)}</CodeBlock>
       <p className="text-sm text-[var(--velo-muted)]">
         Replace <code>{"{click_id}"}</code>, <code>{"{payout}"}</code>, and{" "}
-        <code>{"{status}"}</code> with the network&apos;s actual macros (e.g.{" "}
-        <code>{"cnv_id={aff_sub}&payout={payout_amount}"}</code> for HasOffers).
+        <code>{"{status}"}</code> with the network&apos;s actual macros. Examples:
       </p>
+      <ul className="text-sm text-[var(--velo-muted)]">
+        <li>
+          <strong>TUNE / HasOffers:</strong> <code>{"cnv_id={aff_sub}&payout={payout}"}</code>
+        </li>
+        <li>
+          <strong>Everflow:</strong> <code>{"cnv_id={sub1}&payout={payout_amount}"}</code>
+        </li>
+        <li>
+          <strong>Affilka (YesPlay):</strong> If your offer URL uses{" "}
+          <code>{"?subid1={click_id}"}</code>, send{" "}
+          <code>{"cnv_id=${subid1}"}</code> (Affilka macros use <code>{"${...}"}</code>). Pass a
+          numeric payout or omit it.
+        </li>
+      </ul>
     </>
   );
 }
