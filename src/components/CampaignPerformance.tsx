@@ -173,6 +173,8 @@ function DualAxisChart({
   rightKey: SeriesKey;
   currency: string;
 }) {
+  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
+
   const hasTraffic = points.some(
     (point) => point.clicks > 0 || point.leads > 0 || point.revenue_cents > 0 || point.cost_cents > 0,
   );
@@ -238,25 +240,97 @@ function DualAxisChart({
       )}
       <path d={smoothPath(leftPts)} fill="none" stroke={LEFT_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
       <path d={smoothPath(rightPts)} fill="none" stroke={RIGHT_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
-      {points.map((point, index) => {
+      {points.map((point, index) => (
+        <g key={`pt-${point.date}`}>
+          <circle
+            cx={leftPts[index][0]}
+            cy={leftPts[index][1]}
+            r={hoveredIndex === index ? "5" : "3"}
+            fill={LEFT_COLOR}
+            style={{ cursor: "pointer" }}
+            onMouseEnter={() => setHoveredIndex(index)}
+            onMouseLeave={() => setHoveredIndex(null)}
+          />
+          <circle
+            cx={rightPts[index][0]}
+            cy={rightPts[index][1]}
+            r={hoveredIndex === index ? "5" : "3"}
+            fill={RIGHT_COLOR}
+            style={{ cursor: "pointer" }}
+            onMouseEnter={() => setHoveredIndex(index)}
+            onMouseLeave={() => setHoveredIndex(null)}
+          />
+        </g>
+      ))}
+      {hoveredIndex !== null && (() => {
+        const point = points[hoveredIndex];
         const left = seriesValue(point, leftKey);
         const right = seriesValue(point, rightKey);
-        const tip = `${formatDay(new Date(`${point.date}T00:00:00`).getTime(), true)}: ${
-          isMoney(leftKey) ? formatMoney(left, currency) : left
-        } ${seriesName(leftKey).toLowerCase()}, ${
-          isMoney(rightKey) ? formatMoney(right, currency) : right
-        } ${seriesName(rightKey).toLowerCase()}`;
+        const dateStr = formatDay(new Date(`${point.date}T00:00:00`).getTime(), true);
+        const leftLabel = `${seriesName(leftKey)}: ${isMoney(leftKey) ? formatMoney(left, currency) : left}`;
+        const rightLabel = `${seriesName(rightKey)}: ${isMoney(rightKey) ? formatMoney(right, currency) : right}`;
+        
+        const tooltipLines = [dateStr, leftLabel, rightLabel];
+        const lineHeight = 18;
+        const padding = 10;
+        const tooltipWidth = Math.max(
+          dateStr.length * 7,
+          leftLabel.length * 6.5,
+          rightLabel.length * 6.5,
+        ) + padding * 2;
+        const tooltipHeight = tooltipLines.length * lineHeight + padding * 2;
+        
+        let tooltipX = leftPts[hoveredIndex][0] + 12;
+        let tooltipY = Math.min(leftPts[hoveredIndex][1], rightPts[hoveredIndex][1]) - 10;
+        
+        if (tooltipX + tooltipWidth > width - pad.r) {
+          tooltipX = leftPts[hoveredIndex][0] - tooltipWidth - 12;
+        }
+        if (tooltipY - tooltipHeight < pad.t) {
+          tooltipY = Math.max(leftPts[hoveredIndex][1], rightPts[hoveredIndex][1]) + tooltipHeight + 10;
+        }
+        
         return (
-          <g key={`pt-${point.date}`}>
-            <circle cx={leftPts[index][0]} cy={leftPts[index][1]} r="3" fill={LEFT_COLOR}>
-              <title>{tip}</title>
-            </circle>
-            <circle cx={rightPts[index][0]} cy={rightPts[index][1]} r="3" fill={RIGHT_COLOR}>
-              <title>{tip}</title>
-            </circle>
+          <g>
+            <rect
+              x={tooltipX}
+              y={tooltipY - tooltipHeight}
+              width={tooltipWidth}
+              height={tooltipHeight}
+              fill="white"
+              stroke="#d4d4d1"
+              strokeWidth="1"
+              rx="4"
+              style={{ filter: "drop-shadow(0 2px 8px rgba(0,0,0,0.1))" }}
+            />
+            <text
+              x={tooltipX + padding}
+              y={tooltipY - tooltipHeight + padding + 14}
+              fontSize="12"
+              fontWeight="600"
+              fill="#1a1a19"
+            >
+              {dateStr}
+            </text>
+            <text
+              x={tooltipX + padding}
+              y={tooltipY - tooltipHeight + padding + 14 + lineHeight}
+              fontSize="11"
+              fill={LEFT_COLOR}
+            >
+              {leftLabel}
+            </text>
+            <text
+              x={tooltipX + padding}
+              y={tooltipY - tooltipHeight + padding + 14 + lineHeight * 2}
+              fontSize="11"
+              fill={RIGHT_COLOR}
+            >
+              {rightLabel}
+            </text>
           </g>
         );
-      })}
+      })()}
     </svg>
   );
 }
