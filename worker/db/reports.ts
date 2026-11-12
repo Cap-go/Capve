@@ -84,6 +84,7 @@ function clickTimeClause(filters: ReportFilters, alias = "c") {
   };
 }
 
+/** Time filter for conversions: uses the conversion's own timestamp. */
 function conversionTimeClause(filters: ReportFilters, alias = "cv") {
   const clauses: string[] = [];
   const binds: number[] = [];
@@ -181,8 +182,8 @@ type DimensionSql = {
   convJoin?: string;
 };
 
-/** Conversions are attributed to their click's time (Binom); click-less ones use their own time. */
-const CONV_TIME = "COALESCE(c.created_at, cv.created_at)";
+/** Conversions are attributed to their own timestamp (when the postback arrived). */
+const CONV_TIME = "cv.created_at";
 
 /** strftime modifier shifting UTC to the account timezone (see worker/lib/timezone.ts). */
 function tzModifier(offsetMinutes: number | undefined): string {
@@ -365,13 +366,8 @@ export async function getGroupedReport(
   const campaignSql = options.campaign_id ? " AND p.id = ?" : "";
   const campaignBinds = options.campaign_id ? [options.campaign_id] : [];
   const clickTime = clickTimeClause(options, "c");
-  const convTime = timeClause(options, CONV_TIME);
-  // A conversion never precedes its click, so `cv.created_at >= from` is implied by the
-  // click-time window: an index-friendly prefilter (idx_conversions_program_created).
-  const convFloor =
-    options.from != null
-      ? { sql: " AND cv.created_at >= ?", binds: [options.from] }
-      : { sql: "", binds: [] as number[] };
+  // Conversions are filtered by their own timestamp (when the postback was received).
+  const convTime = conversionTimeClause(options, "cv");
   const label = dim.label ?? "NULL";
 
   const [clickRows, convRows] = await Promise.all([
@@ -417,10 +413,10 @@ export async function getGroupedReport(
          LEFT JOIN clicks c ON c.id = cv.click_id
          LEFT JOIN traffic_sources ts ON ts.id = p.traffic_source_id
          ${dim.convJoin ?? ""}
-         WHERE ${where.sql}${campaignSql} AND ${approvedStatusSql("cv")}${convTime.sql}${convFloor.sql}
+         WHERE ${where.sql}${campaignSql} AND ${approvedStatusSql("cv")}${convTime.sql}
          GROUP BY k, ev, cur`,
       )
-      .bind(...where.binds, ...campaignBinds, ...convTime.binds, ...convFloor.binds)
+      .bind(...where.binds, ...campaignBinds, ...convTime.binds)
       .all<{
         k: string | null;
         ev: string | null;

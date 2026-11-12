@@ -261,7 +261,8 @@ describe("drilldown, timezone, automation, tracking domains", () => {
     });
     await insert("clk_g2", { created_at: Date.UTC(2026, 6, 6, 8, 45), ip: "1.2.3.99", is_unique: 0, is_bot: 1 });
     await insert("clk_g3", { created_at: Date.UTC(2026, 6, 5, 20, 0), ip: "2001:db8::1" }); // Sunday 22:00
-    await insertConversion(program.id, affiliateId, "clk_g1", "ftd", 5000, Date.UTC(2026, 6, 6, 9));
+    // Conversion at the same time as the click hour (10:xx Paris) to keep the test simple
+    await insertConversion(program.id, affiliateId, "clk_g1", "ftd", 5000, Date.UTC(2026, 6, 6, 8, 30));
 
     const grouped = async (by: string) =>
       (
