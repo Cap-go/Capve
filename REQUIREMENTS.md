@@ -1,6 +1,6 @@
 # Capve requirements
 
-Capve is an **open-source alternative to Binom**: a campaign and affiliate tracker that runs on Cloudflare Workers + D1. Anyone can deploy it on their own Cloudflare account; `capve.app` is the hosted install. It is **not** Capgo's Affonso program and does not replace it.
+Capve is an **open-source (AGPL-3.0) alternative to Binom**: a campaign and affiliate tracker that runs on Cloudflare Workers + D1. Anyone can deploy it on their own Cloudflare account; `capve.app` is the hosted install. It is **not** Capgo's Affonso program and does not replace it.
 
 ## Product
 

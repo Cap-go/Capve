@@ -40,7 +40,7 @@ const CAPVE = {
   metering: "Clicks only. LP clicks, postbacks and conversions are free.",
   overage: "None. Tracking keeps running; reports pause until the allowance resets or you upgrade.",
   hosting: "Managed on Cloudflare's edge network. Self-host on your own Cloudflare account if you prefer.",
-  source: "Public on GitHub.",
+  source: "Public on GitHub under AGPL-3.0.",
   seats: "No per-seat price. Owner, admin and viewer roles.",
   retention: "Not limited by plan.",
   ai: "MCP server with 93 tools on every plan.",

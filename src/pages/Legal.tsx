@@ -332,8 +332,8 @@ export function TermsPage() {
       </p>
       <p>
         These terms cover the service we host. They are not a license to the Capve source code. The
-        source is published separately, and publishing it does not include hosting, support, or an
-        uptime promise.
+        source is published separately under the GNU Affero General Public License v3.0, and
+        publishing it does not include hosting, support, or an uptime promise.
       </p>
 
       <h2>1. The service</h2>

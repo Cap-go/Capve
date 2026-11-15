@@ -60,6 +60,7 @@ const SOFTWARE_LD = {
   applicationCategory: "BusinessApplication",
   applicationSubCategory: "Affiliate and campaign tracking",
   operatingSystem: "Web",
+  license: "https://www.gnu.org/licenses/agpl-3.0.html",
   description: DEFAULT_DESCRIPTION,
   offers: PLANS.map((plan) => ({
     "@type": "Offer",

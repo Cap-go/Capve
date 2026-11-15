@@ -138,7 +138,7 @@ The browser snippet at `/api/v1/snippet` stores `velo_ref` from the query string
 
 ## License
 
-Open source — see [github.com/Cap-go/Capve](https://github.com/Cap-go/Capve).
+Capve is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0), the same license as [Capgo](https://github.com/Cap-go/capgo). Source: [github.com/Cap-go/Capve](https://github.com/Cap-go/Capve).
 
 ## Hosted billing and email
 

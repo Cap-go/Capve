@@ -523,7 +523,7 @@ export const FEATURES: Feature[] = [
       {
         icon: "code",
         title: "Public source",
-        body: "Read how attribution, routing and postbacks work before you trust them with your money.",
+        body: "Licensed under AGPL-3.0. Read how attribution, routing and postbacks work before you trust them with your money.",
       },
       {
         icon: "globe",
@@ -560,6 +560,10 @@ export const FEATURES: Feature[] = [
       {
         q: "If it's open source, why pay for capve.app?",
         a: "Because running a tracker is work: secrets, email delivery, upgrades, migrations, monitoring and support. The hosted plans cost half of Binom's and you get none of the ops.",
+      },
+      {
+        q: "What license is Capve under?",
+        a: "The [GNU Affero General Public License v3.0](https://github.com/Cap-go/Capve/blob/main/LICENSE) (AGPL-3.0). You can run, study, change and self-host it. If you let other people use a modified version over a network, you must offer them its source under the same license.",
       },
       {
         q: "Can I move from capve.app to my own install later?",
