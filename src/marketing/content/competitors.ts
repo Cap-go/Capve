@@ -51,6 +51,10 @@ const CAPVE = {
 const STATUS_NOTE =
   "Capve keeps whatever status the network sends. `rejected`, `declined`, `chargeback`, `refunded` and similar are left out of revenue, and `pending` or `hold` conversions aren't forwarded to sources until they change.";
 
+/** Externally hosted landers can't expand Capve macros, so the LP click URL reaches them as a parameter. */
+const LP_CTA = "add `?next={lp_click_url}` to the lander URL in Capve and link the call to action to that `next` value";
+const LP_MACRO = "`?next={lp_click_url}` on the lander URL, CTA links to `next`";
+
 const PARALLEL_STEP = {
   title: "Run both trackers side by side",
   body: "Send a slice of traffic through the Capve campaign link and add Capve's postback to the network next to the old one. If the network allows only one postback URL per offer, run the Capve slice on a separate offer or tracking link.",
@@ -58,7 +62,7 @@ const PARALLEL_STEP = {
 
 const COMPARE_STEP = (name: string) => ({
   title: "Compare, then switch",
-  body: `After a few days, compare clicks, conversions and payouts per day in both trackers. When they line up, point the rest of your traffic at Capve links and keep ${name} read-only for as long as you need its history.`,
+  body: `After a few days, compare clicks, conversions and payouts per day in both trackers. When they line up, point the rest of your traffic at Capve links. Keep ${name} running with its postback URL live until conversions and status updates for its last clicks stop arriving, because networks keep sending those click ids to ${name}. After that, keep it read-only for as long as you need its history.`,
 });
 
 export const COMPETITORS: Competitor[] = [
@@ -200,7 +204,7 @@ export const COMPETITORS: Competitor[] = [
         ["`{country_code}`", "`{country}`"],
         ["`{externalid}`", "`{external_id}`"],
         ["`{t1}`–`{t10}`", "`{sub1}`–`{sub10}`"],
-        ["`click.php?lp=1` on the lander CTA", "`{lp_click_url}`"],
+        ["`click.php?lp=1` on the lander CTA", LP_MACRO],
       ],
       steps: [
         {
@@ -218,7 +222,7 @@ export const COMPETITORS: Competitor[] = [
         },
         {
           title: "Recreate networks, offers and landers",
-          body: "Offer URLs keep `{clickid}` where Binom had it. On landers, point the call to action at `{lp_click_url}` instead of `click.php?lp=1`.",
+          body: `Offer URLs keep \`{clickid}\` where Binom had it. For landers, ${LP_CTA}, instead of \`click.php?lp=1\`. If Binom hosts any of your landers, move them to your own hosting first.`,
           code: { label: "Offer URL", text: "https://network.example/offer?aff_sub={clickid}&s2={sub1}" },
         },
         {
@@ -354,7 +358,7 @@ export const COMPETITORS: Competitor[] = [
         ["`{campaign.id}`", "`{campaign_id}`"],
         ["`{var1}`–`{var10}`", "`{sub1}`–`{sub10}`"],
         ["`{country}`", "`{country}`"],
-        ["Click URL `/click` on the lander", "`{lp_click_url}`"],
+        ["Click URL `/click` on the lander", LP_MACRO],
       ],
       steps: [
         {
@@ -367,7 +371,7 @@ export const COMPETITORS: Competitor[] = [
         },
         {
           title: "Recreate networks, offers and landers",
-          body: "Voluum can export all offers as CSV, which makes a good checklist, or input for your AI assistant. Keep `{clickid}` in offer URLs, and change the lander's click URL to `{lp_click_url}`.",
+          body: "Voluum can export all offers as CSV, which makes a good checklist, or input for your AI assistant. Keep `{clickid}` in offer URLs. For landers, " + LP_CTA + ", instead of Voluum's `/click` URL.",
         },
         {
           title: "Turn flows into paths and rules",
@@ -493,7 +497,7 @@ export const COMPETITORS: Competitor[] = [
         ["`{landerid}`", "`{lander_id}`"],
         ["`{country}`", "`{country}`"],
         ["`{sub1}`–`{sub10}`", "`{sub1}`–`{sub10}`"],
-        ["LP click URL `/click/1`", "`{lp_click_url}`"],
+        ["LP click URL `/click/1`", LP_MACRO],
       ],
       steps: [
         {
@@ -506,7 +510,7 @@ export const COMPETITORS: Competitor[] = [
         },
         {
           title: "Recreate offer sources, offers and landers",
-          body: "Keep `{clickid}` in offer URLs. On landers, replace the `/click/1` CTA URL with `{lp_click_url}`.",
+          body: `Keep \`{clickid}\` in offer URLs. For landers, ${LP_CTA}, instead of the \`/click/1\` CTA URL.`,
         },
         {
           title: "Turn funnels into paths",
@@ -637,7 +641,7 @@ export const COMPETITORS: Competitor[] = [
         ["`{country}`", "`{country}`"],
         ["`{external_id}`", "`{external_id}`"],
         ["`{sub_id_1}`–`{sub_id_10}`", "`{sub1}`–`{sub10}`"],
-        ["`{offer}` or `?_lp=1` on the lander CTA", "`{lp_click_url}`"],
+        ["`{offer}` or `?_lp=1` on the lander CTA", LP_MACRO],
       ],
       steps: [
         {
@@ -646,7 +650,7 @@ export const COMPETITORS: Competitor[] = [
         },
         {
           title: "Recreate sources, networks, offers and landers",
-          body: "Swap `{subid}` for `{clickid}` in every offer URL, and the lander CTA for `{lp_click_url}`.",
+          body: `Swap \`{subid}\` for \`{clickid}\` in every offer URL. For landers, ${LP_CTA}. Landers stored on the Keitaro server (local landers) must be exported and hosted elsewhere first, because they disappear with the server.`,
         },
         {
           title: "Turn flows into rules and paths",
@@ -659,7 +663,7 @@ export const COMPETITORS: Competitor[] = [
         PARALLEL_STEP,
         {
           title: "Compare, switch, and retire the server",
-          body: "When daily clicks and conversions line up, move the rest of the traffic. Export the Keitaro reports you want to keep as CSV, then cancel the license and the VPS.",
+          body: "When daily clicks and conversions line up, move the rest of the traffic. Keep the Keitaro server, its postback URL and the license running until conversions and status updates for its last clicks stop arriving, because networks keep sending those click ids to Keitaro. Then export the reports you want to keep as CSV, and cancel the license and the VPS.",
         },
       ],
       faqs: [
@@ -669,7 +673,7 @@ export const COMPETITORS: Competitor[] = [
         },
         {
           q: "Do my landers need to change?",
-          a: "Only the call to action: replace `{offer}` or `?_lp=1` with `{lp_click_url}`. The landers stay where they're hosted.",
+          a: `Landers hosted outside Keitaro only need a new call to action: ${LP_CTA}. Local landers stored on the Keitaro server must be exported, hosted elsewhere and added to Capve with their new URLs. Test the whole funnel before you shut the server down.`,
         },
       ],
     },
@@ -764,7 +768,7 @@ export const COMPETITORS: Competitor[] = [
         ["`{externalId}`", "`{external_id}`"],
         ["`{country}`", "`{country}`"],
         ["`{custom1}`–`{custom10}`", "`{sub1}`–`{sub10}`"],
-        ["Click URL `/click` on the lander", "`{lp_click_url}`"],
+        ["Click URL `/click` on the lander", LP_MACRO],
       ],
       steps: [
         {
@@ -773,7 +777,7 @@ export const COMPETITORS: Competitor[] = [
         },
         {
           title: "Recreate sources, networks, offers and landers",
-          body: "Map the source's custom parameters to named tokens on `sub1`–`sub10`. In offer URLs, replace `{clickId}` with `{clickid}`. On landers, use `{lp_click_url}` for the CTA.",
+          body: "Map the source's custom parameters to named tokens on `sub1`–`sub10`. In offer URLs, replace `{clickId}` with `{clickid}`. For landers, " + LP_CTA + ".",
         },
         {
           title: "Rebuild flows as paths and rules",
@@ -884,7 +888,7 @@ export const COMPETITORS: Competitor[] = [
       macros: [
         ["`{cf_click_id}`", "`{clickid}`"],
         ["`{trackingField1}`–`{trackingField10}`", "`{sub1}`–`{sub10}`"],
-        ["CTA URL `/cf/click`", "`{lp_click_url}`"],
+        ["CTA URL `/cf/click`", LP_MACRO],
       ],
       steps: [
         {
@@ -893,7 +897,7 @@ export const COMPETITORS: Competitor[] = [
         },
         {
           title: "Recreate sources, networks, offers and landers",
-          body: "ClickFlare's public API lists every entity, which makes a good checklist or input for your AI assistant. Swap `{cf_click_id}` for `{clickid}` in offer URLs and `/cf/click` for `{lp_click_url}` on landers.",
+          body: "ClickFlare's public API lists every entity, which makes a good checklist or input for your AI assistant. Swap `{cf_click_id}` for `{clickid}` in offer URLs. For landers, " + LP_CTA + ", instead of `/cf/click`.",
         },
         {
           title: "Rebuild flows as paths and rules",

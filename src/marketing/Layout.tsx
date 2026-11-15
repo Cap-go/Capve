@@ -1,5 +1,5 @@
-import { useEffect, useState, type ReactNode } from "react";
-import { Link, NavLink, useLocation } from "react-router-dom";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Link, NavLink, useLocation, useNavigationType } from "react-router-dom";
 import { Icon } from "../components/Icon";
 import { SiteFooter } from "../components/SiteFooter";
 import { useAuth } from "../lib/auth";
@@ -38,16 +38,25 @@ const MENUS: Array<{ label: string; href: string; items: MenuItem[] }> = [
 /** Header, page body and footer for every public marketing and legal page. */
 export function MarketingLayout({ children }: { children: ReactNode }) {
   const { pathname, hash } = useLocation();
+  const navigationType = useNavigationType();
   const { user } = useAuth();
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  const main = useRef<HTMLElement>(null);
 
   useEffect(() => {
     setOpen(false);
-    (document.activeElement as HTMLElement | null)?.blur?.();
-    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView();
+    const target = hash ? document.getElementById(hash.slice(1)) : null;
+    if (target) target.scrollIntoView();
     else window.scrollTo(0, 0);
-  }, [pathname, hash]);
+    // After an in-app link (not a first load or back/forward), move focus to the new content so
+    // keyboard and screen-reader users land on it. This also closes the hover/focus menus.
+    if (navigationType === "POP") return;
+    const focusTarget = target ?? main.current;
+    if (!focusTarget) return;
+    if (!focusTarget.hasAttribute("tabindex")) focusTarget.setAttribute("tabindex", "-1");
+    focusTarget.focus({ preventScroll: true });
+  }, [pathname, hash, navigationType]);
 
   useEffect(() => {
     const update = () => setScrolled(window.scrollY > 8);
@@ -164,7 +173,7 @@ export function MarketingLayout({ children }: { children: ReactNode }) {
           </nav>
         )}
       </header>
-      <main className="flex-1" id="main">
+      <main className="flex-1 outline-none" id="main" ref={main} tabIndex={-1}>
         {children}
       </main>
       <SiteFooter />

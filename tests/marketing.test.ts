@@ -14,8 +14,10 @@ describe("marketing site", () => {
     expect(new URL(res.headers.get("location")!, "https://capve.app").pathname).toBe("/");
   });
 
-  it("keeps the home page off custom tracking domains", async () => {
-    const res = await SELF.fetch("https://track.unknown-domain.test/");
-    expect(res.status).toBe(404);
+  it("keeps marketing, docs and dashboard pages off custom tracking domains", async () => {
+    for (const path of ["/", "/pricing", "/compare/binom", "/docs", "/app/campaigns"]) {
+      const res = await SELF.fetch(`https://track.unknown-domain.test${path}`);
+      expect(res.status, path).toBe(404);
+    }
   });
 });

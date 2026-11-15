@@ -48,7 +48,7 @@ export const FEATURES: Feature[] = [
       },
       {
         title: "URL macros on landers and offers",
-        body: "Lander, offer and destination URLs are filled per click. Pass the click id to the network, forward a sub ID, or link a lander's call to action through Capve with `{lp_click_url}`.",
+        body: "Lander, offer and destination URLs are filled per click. Pass the click id to the network, forward a sub ID, or hand a lander its LP click link with `?next={lp_click_url}`.",
         bullets: [
           "`{clickid}` / `{click_id}`, `{external_id}`",
           "`{campaign_id}`, `{offer_id}`, `{lander_id}`",
@@ -211,7 +211,7 @@ export const FEATURES: Feature[] = [
       {
         icon: "cursor",
         title: "LP click tracking",
-        body: "Link a lander's CTA to `{lp_click_url}`. Capve marks the LP click and sends the visitor to the click's offer.",
+        body: "Add `?next={lp_click_url}` to the lander URL and link the lander's CTA to that `next` value. Capve marks the LP click and sends the visitor to the click's offer.",
       },
     ],
     sections: [

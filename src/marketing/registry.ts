@@ -186,30 +186,39 @@ export const PAGES: PageMeta[] = [
     title: "Security",
     description:
       "How Capve protects accounts and tracking data: hashed passwords and tokens, role checks on every request, signed sessions, no open redirects, postback keys and audit logs.",
+    jsonLd: [breadcrumbLd([["Home", "/"], ["Security", "/security"]])],
   }),
   page({
     path: "/terms",
     section: "Legal",
     title: "Terms of Service",
     description: "Terms of Service for the hosted Capve campaign and affiliate tracking service at capve.app.",
+    jsonLd: [breadcrumbLd([["Home", "/"], ["Terms of Service", "/terms"]])],
   }),
   page({
     path: "/privacy",
     section: "Legal",
     title: "Privacy Policy",
     description: "How Capve handles account data and the tracking data it processes for customers.",
+    jsonLd: [breadcrumbLd([["Home", "/"], ["Privacy Policy", "/privacy"]])],
   }),
   page({
     path: "/imprint",
     section: "Legal",
     title: "Imprint",
     description: "Operator and contact details for the hosted Capve service at capve.app.",
+    jsonLd: [breadcrumbLd([["Home", "/"], ["Imprint", "/imprint"]])],
   }),
   ...DOC_PAGES.map((doc) => ({
     path: docHref(doc.slug),
     section: "Docs" as const,
     title: `${doc.title} · Capve Docs`,
     description: `${doc.description}. Capve documentation for open-source campaign and affiliate tracking.`,
+    jsonLd: [
+      breadcrumbLd(
+        doc.slug ? [["Home", "/"], ["Docs", "/docs"], [doc.title, docHref(doc.slug)]] : [["Home", "/"], ["Docs", "/docs"]],
+      ),
+    ],
   })),
 ];
 

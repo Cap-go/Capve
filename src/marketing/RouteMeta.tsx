@@ -28,6 +28,14 @@ export function RouteMeta() {
     setMeta('meta[property="og:description"]', "property", "og:description", description);
     setMeta('meta[name="twitter:title"]', "name", "twitter:title", title);
     setMeta('meta[name="twitter:description"]', "name", "twitter:description", description);
+    // Structured data belongs to one URL: drop the previous page's and add this page's.
+    document.head.querySelectorAll('script[type="application/ld+json"]').forEach((script) => script.remove());
+    for (const data of meta?.jsonLd ?? []) {
+      const script = document.createElement("script");
+      script.type = "application/ld+json";
+      script.textContent = JSON.stringify(data);
+      document.head.appendChild(script);
+    }
     let canonical = document.head.querySelector<HTMLLinkElement>('link[rel="canonical"]');
     if (meta) {
       if (!canonical) {
