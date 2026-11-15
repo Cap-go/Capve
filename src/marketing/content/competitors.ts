@@ -62,7 +62,7 @@ const PARALLEL_STEP = {
 
 const COMPARE_STEP = (name: string) => ({
   title: "Compare, then switch",
-  body: `After a few days, compare clicks, conversions and payouts per day in both trackers. When they line up, point the rest of your traffic at Capve links. Keep ${name} running with its postback URL live until conversions and status updates for its last clicks stop arriving, because networks keep sending those click ids to ${name}. After that, keep it read-only for as long as you need its history.`,
+  body: `After a few days, compare clicks, conversions and payouts per day in both trackers. When they line up, point the rest of your traffic at Capve links. Keep ${name} running, with its postback URL, database and subscription live, until the conversion window of every offer and each network's status-update period (approvals, rejections, chargebacks) have passed for its last clicks. Networks keep sending those click ids to ${name}, and Capve can't record them. A quiet day doesn't mean no more updates are coming. After that, keep ${name} read-only for as long as you need its history.`,
 });
 
 export const COMPETITORS: Competitor[] = [
@@ -663,7 +663,7 @@ export const COMPETITORS: Competitor[] = [
         PARALLEL_STEP,
         {
           title: "Compare, switch, and retire the server",
-          body: "When daily clicks and conversions line up, move the rest of the traffic. Keep the Keitaro server, its postback URL and the license running until conversions and status updates for its last clicks stop arriving, because networks keep sending those click ids to Keitaro. Then export the reports you want to keep as CSV, and cancel the license and the VPS.",
+          body: "When daily clicks and conversions line up, move the rest of the traffic. Keep the Keitaro server, its postback URL, its database and the license running until the conversion window of every offer and each network's status-update period (approvals, rejections, chargebacks) have passed for its last clicks. Networks keep sending those click ids to Keitaro, and Capve can't record them. A quiet day doesn't mean no more updates are coming. Then export the reports you want to keep as CSV, and cancel the license and the VPS.",
         },
       ],
       faqs: [

@@ -48,7 +48,7 @@ export const FEATURES: Feature[] = [
       },
       {
         title: "URL macros on landers and offers",
-        body: "Lander, offer and destination URLs are filled per click. Pass the click id to the network, forward a sub ID, or hand a lander its LP click link with `?next={lp_click_url}`.",
+        body: "Lander, offer and destination URLs are filled per click. Pass the click id to the network, forward a sub ID, or hand a lander its LP click link with `?next={lp_click_url}` and link the lander's call to action to that `next` value.",
         bullets: [
           "`{clickid}` / `{click_id}`, `{external_id}`",
           "`{campaign_id}`, `{offer_id}`, `{lander_id}`",
