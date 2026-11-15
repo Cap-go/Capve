@@ -1630,6 +1630,44 @@ label > span.text-sm.font-medium {
   background: #fef8e7;
   color: #7a5200;
 }
+.status-pill.is-failed {
+  border-color: #f3c4c4;
+  background: #fdf1f1;
+  color: #9b1c1c;
+}
+.status-dot.is-failed {
+  background: #d63b3b;
+}
+
+/* Tracking domains (Settings): status, and the DNS record to add while setup is pending. */
+.tracking-domain {
+  border: 1px solid var(--velo-border);
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+.tracking-domain-status {
+  text-transform: none;
+}
+.tracking-domain-record {
+  display: grid;
+  gap: 6px;
+  font-size: 13px;
+}
+.tracking-domain-record > div {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+}
+.tracking-domain-record dt {
+  color: var(--velo-muted);
+}
+.tracking-domain-record dd {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+}
 
 a.campaign-item {
   color: inherit;

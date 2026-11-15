@@ -3,6 +3,7 @@ import type { Env } from "../types";
 import { runRetention } from "../lib/retention";
 import { automationJob } from "./alerts";
 import { syncAllSourceCosts } from "./cost-sync";
+import { retryHostnameCleanup } from "../lib/tracking-domain-cleanup";
 
 /** One unit of scheduled work. */
 export type ScheduledJob = {
@@ -21,8 +22,12 @@ export const CRON_JOBS: Record<string, ScheduledJob[]> = {
   "*/15 * * * *": [automationJob],
   // Separate invocation so billing's D1 query budget is independent of automation.
   "2,17,32,47 * * * *": [{ name: "billing-emails", run: (env) => billingEmails(env) }],
-  // Hourly: pull today's and yesterday's spend from traffic source cost APIs (Adcash, ...).
-  "17 * * * *": [{ name: "cost-sync", run: (env) => syncAllSourceCosts(env) }],
+  // Hourly: pull today's and yesterday's spend from traffic source cost APIs (Adcash, ...), and
+  // retry deleting Cloudflare custom hostnames left without a tracking domain.
+  "17 * * * *": [
+    { name: "cost-sync", run: (env) => syncAllSourceCosts(env) },
+    { name: "tracking-domain-cleanup", run: (env) => retryHostnameCleanup(env) },
+  ],
   // Daily: postback delivery log pruning and optional raw click retention.
   "17 3 * * *": [{ name: "retention", run: (env) => runRetention(env) }],
 };

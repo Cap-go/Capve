@@ -441,6 +441,23 @@ CREATE TABLE IF NOT EXISTS tracking_domains (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id),
   hostname TEXT NOT NULL UNIQUE,
+  created_at INTEGER NOT NULL,
+  cf_hostname_id TEXT,
+  cf_status TEXT,
+  cf_ssl_status TEXT,
+  cf_errors TEXT,
+  checked_at INTEGER,
+  removal_claim TEXT,
+  deleting_at INTEGER
+);
+
+CREATE TABLE IF NOT EXISTS tracking_domain_cleanup (
+  cf_hostname_id TEXT PRIMARY KEY,
+  hostname TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  claim TEXT,
+  claimed_at INTEGER,
   created_at INTEGER NOT NULL
 );
 

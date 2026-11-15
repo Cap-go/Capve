@@ -54,6 +54,7 @@ Local dev uses email/password sessions (`/login`, `/register`). The local-dev `A
    - `/r/:code` → merchant URL with `velo_ref=`
    - POST convert with `X-Program-Secret` + `affiliate_code` → stats update
    - `/app` works after sign-in (register at `/register`)
+8. Automatic tracking domains: one-time Cloudflare for SaaS setup on the `capve.app` zone (fallback origin `domains.capve.app`, then `bunx wrangler secret put TRACKING_DOMAIN_API_TOKEN --env production`). Steps in [docs/tracking-domains.md](./docs/tracking-domains.md). Until the secret is set, tracking domains stay manual.
 
 ## Rules when changing code
 

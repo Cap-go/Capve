@@ -1142,7 +1142,8 @@ export const TOOLS: McpTool[] = [
   {
     name: "list_tracking_domains",
     title: "List tracking domains",
-    description: "Custom tracking hostnames of the account.",
+    description:
+      "Custom tracking hostnames of the account with their setup status (pending, active, failed, or manual when the install sets domains up by hand) and the DNS records still needed. Listing re-checks pending domains with Cloudflare.",
     inputSchema: schema({}),
     annotations: read,
     call: () => ({ method: "GET", path: "/api/tracking-domains" }),
@@ -1151,7 +1152,7 @@ export const TOOLS: McpTool[] = [
     name: "add_tracking_domain",
     title: "Add tracking domain",
     description:
-      "Register a custom tracking hostname (track.example.com). It must also be added as a Custom Domain of the Worker in Cloudflare; it serves only /r, /c, /lp and /click.",
+      "Register a custom tracking hostname (track.example.com); it serves only /r, /c, /lp and /click. With automatic setup (capve.app), the response lists the CNAME record to add and HTTPS is issued once it is live. Without it, add the hostname as a Custom Domain of the Worker in Cloudflare.",
     inputSchema: schema({ hostname: str("Hostname, e.g. track.example.com.") }, ["hostname"]),
     annotations: write,
     call: (a) => ({ method: "POST", path: "/api/tracking-domains", body: pick(a, ["hostname"]) }),

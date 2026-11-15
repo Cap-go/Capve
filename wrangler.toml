@@ -47,7 +47,8 @@ simple = { limit = 5, period = 60 }
 # Scheduled jobs, dispatched by worker/cron/index.ts (CRON_JOBS keys must match).
 # Every 15 min ("*/15 * * * *"): automation rules (zone blacklist, ROI/spend alerts).
 # At minutes 2,17,32,47: bounded billing-email scans, with a persisted continuation cursor.
-# Hourly ("17 * * * *"): pull traffic source spend (Adcash, ...) into click costs.
+# Hourly ("17 * * * *"): pull traffic source spend (Adcash, ...) into click costs, and retry deleting
+# Cloudflare custom hostnames left without a tracking domain.
 # Daily ("17 3 * * *"): data retention — prunes the postback delivery log (30 days) and,
 # only when RAW_CLICK_RETENTION_DAYS is set, raw clicks without conversions.
 [triggers]
@@ -63,7 +64,10 @@ PLATFORM_ADMIN_EMAILS = "martindonadieu@gmail.com"
 # Keep worker name "velo" (wrangler defaults to velo-production otherwise).
 name = "velo"
 # AUTH_SECRET is a secret: bunx wrangler secret put AUTH_SECRET --env production
-vars = { APP_URL = "https://capve.app", EMAIL_FROM = "noreply@capve.app", PLATFORM_ADMIN_EMAILS = "martindonadieu@gmail.com", BILLING_ENABLED = "false", STRIPE_AUTOMATIC_TAX = "false", STRIPE_PRICE_STARTER = "price_1UUFc0Pth1byRSsbw73wF7yf", STRIPE_PRICE_PRO = "price_1UUFcCPth1byRSsbOwrw6lvS", STRIPE_PORTAL_CONFIGURATION = "bpc_1UUFeHPth1byRSsb0svtijZb" }
+# Automatic tracking domains (docs/tracking-domains.md): custom hostnames are created on the capve.app
+# zone and customers CNAME to TRACKING_DOMAIN_CNAME_TARGET. Off until the TRACKING_DOMAIN_API_TOKEN
+# secret is set: bunx wrangler secret put TRACKING_DOMAIN_API_TOKEN --env production
+vars = { APP_URL = "https://capve.app", EMAIL_FROM = "noreply@capve.app", PLATFORM_ADMIN_EMAILS = "martindonadieu@gmail.com", BILLING_ENABLED = "false", STRIPE_AUTOMATIC_TAX = "false", STRIPE_PRICE_STARTER = "price_1UUFc0Pth1byRSsbw73wF7yf", STRIPE_PRICE_PRO = "price_1UUFcCPth1byRSsbOwrw6lvS", STRIPE_PORTAL_CONFIGURATION = "bpc_1UUFeHPth1byRSsb0svtijZb", TRACKING_DOMAIN_ZONE_ID = "05d1d78a5f2325a1058c7c0ad370d0a1", TRACKING_DOMAIN_CNAME_TARGET = "domains.capve.app" }
 
 [[env.production.send_email]]
 name = "EMAIL"
@@ -93,6 +97,13 @@ custom_domain = true
 [[env.production.routes]]
 pattern = "www.capve.app"
 custom_domain = true
+
+# Sends traffic for customers' tracking domains (Cloudflare for SaaS custom hostnames on this zone)
+# to the Worker; the host gate serves them only /r, /c, /lp and /click. Keep it here: wrangler deploy
+# replaces routes added in the dashboard with the ones in this file.
+[[env.production.routes]]
+pattern = "*/*"
+zone_name = "capve.app"
 
 [[env.production.d1_databases]]
 binding = "DB"
