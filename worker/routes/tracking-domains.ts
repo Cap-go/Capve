@@ -117,18 +117,40 @@ async function removeDomain(
   setup: HostnameSetup | null,
   domainId: string,
   userId: string,
-): Promise<{ ok: true } | { ok: false; notFound: boolean; message: string }> {
+): Promise<{ ok: true } | { ok: false; status: 404 | 409 | 502; message: string }> {
   const removal = await beginTrackingDomainRemoval(db, domainId, userId);
-  if (!removal) return { ok: false, notFound: true, message: "Not found" };
-  if (setup && removal.cf_hostname_id) {
+  if (!removal) return { ok: false, status: 404, message: "Not found" };
+  if (removal.cf_hostname_id) {
+    // Without credentials the hostname can't be deleted: keep the row, the only record of it.
+    if (!setup) {
+      await cancelTrackingDomainRemoval(db, domainId, userId);
+      return {
+        ok: false,
+        status: 409,
+        message:
+          "This domain was set up automatically, but automatic setup is now off, so its Cloudflare hostname can't be deleted. Turn automatic setup back on (TRACKING_DOMAIN_* settings) to remove it.",
+      };
+    }
     const removed = await deleteCustomHostname(setup, removal.cf_hostname_id);
     if (!removed.ok) {
       await cancelTrackingDomainRemoval(db, domainId, userId);
-      return { ok: false, notFound: false, message: removed.message };
+      return { ok: false, status: 502, message: `Couldn't remove the domain from Cloudflare: ${removed.message}` };
     }
   }
   await deleteTrackingDomain(db, domainId, userId);
   return { ok: true };
+}
+
+const OVER_LIMIT = `Over the limit of ${MAX_AUTOMATIC_DOMAINS} automatically set up domains. Remove another domain to set this one up.`;
+
+/**
+ * The account's oldest MAX_AUTOMATIC_DOMAINS domains: the only ones a status check may register.
+ * A domain's rank only goes down (rows are removed, and new rows are only added under the cap),
+ * so parallel checks can never provision more than the cap.
+ */
+function firstDomains(domains: TrackingDomain[]): Set<string> {
+  const oldest = [...domains].sort((a, b) => a.created_at - b.created_at || a.id.localeCompare(b.id));
+  return new Set(oldest.slice(0, MAX_AUTOMATIC_DOMAINS).map((domain) => domain.id));
 }
 
 /** Hostnames that belong to the install itself: the app host, its subdomains and the CNAME target. */
@@ -153,10 +175,16 @@ trackingDomains.get("/", async (c) => {
   let domains = await listTrackingDomains(c.env.DB, session.account_id);
   if (setup) {
     const now = Date.now();
+    const provisionable = firstDomains(domains);
     const checked = await Promise.all(
-      domains.map((domain) =>
-        !domain.deleting_at && due(domain, now) ? sync(c.env.DB, setup, domain, now) : domain,
-      ),
+      domains.map((domain) => {
+        if (domain.deleting_at || !due(domain, now)) return domain;
+        // Domains added by hand are only registered within the cap, oldest first.
+        if (!domain.cf_hostname_id && !provisionable.has(domain.id)) {
+          return saveHostnameCheck(c.env.DB, domain, { errors: [OVER_LIMIT] }, now);
+        }
+        return sync(c.env.DB, setup, domain, now);
+      }),
     );
     domains = checked.filter((domain): domain is TrackingDomain => domain !== null);
   }
@@ -218,8 +246,7 @@ trackingDomains.delete("/:id", async (c) => {
   if (session instanceof Response) return session;
   const removed = await removeDomain(c.env.DB, hostnameSetup(c.env), c.req.param("id"), session.account_id);
   if (removed.ok) return c.json({ ok: true });
-  if (removed.notFound) return c.json({ error: "Not found" }, 404);
-  return c.json({ error: `Couldn't remove the domain from Cloudflare: ${removed.message}` }, 502);
+  return c.json({ error: removed.message }, removed.status);
 });
 
 /** Pick the tracking domain of a campaign (null = default app URL). */

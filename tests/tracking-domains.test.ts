@@ -333,6 +333,47 @@ describe("automatic tracking domain setup", () => {
     expect(row.cf_hostname_id).toBe("ch_new");
   });
 
+  it("registers domains added by hand only up to the cap, oldest first", async () => {
+    for (let index = 0; index <= MAX_AUTOMATIC_DOMAINS; index++) {
+      await env.DB.prepare("INSERT INTO tracking_domains (id, user_id, hostname, created_at) VALUES (?, ?, ?, ?)")
+        .bind(`dom_hand_${index}`, accountId, `hand${index}.example.com`, 1_000 + index)
+        .run();
+    }
+    const cf = mockCloudflare(async (_method, _path, body) => {
+      const { hostname: name } = body as { hostname: string };
+      return ok(hostname(`ch_${name}`, name, "pending", "initializing"));
+    });
+    const listed = await list();
+    expect(cf.calls).toHaveLength(MAX_AUTOMATIC_DOMAINS);
+    const newest = listed.body.tracking_domains.find((domain) => domain.hostname === `hand${MAX_AUTOMATIC_DOMAINS}.example.com`);
+    expect(newest).toMatchObject({ status: "manual", dns_records: [] });
+    expect(newest?.errors[0]).toContain(`Over the limit of ${MAX_AUTOMATIC_DOMAINS}`);
+    expect(listed.body.tracking_domains.filter((domain) => domain.status === "pending")).toHaveLength(
+      MAX_AUTOMATIC_DOMAINS,
+    );
+  });
+
+  it("keeps an automatic domain while automatic setup is off, so its hostname isn't orphaned", async () => {
+    mockCloudflare(() => ok(hostname("ch_keep", "keep.example.com", "active", "active")));
+    const created = await add("keep.example.com");
+    vi.restoreAllMocks();
+
+    const blocked = await call<{ error: string }>(
+      `/api/tracking-domains/${created.body.tracking_domain.id}`,
+      { method: "DELETE" },
+      manual,
+    );
+    expect(blocked.status).toBe(409);
+    expect(blocked.body.error).toContain("automatic setup is now off");
+    const [kept] = await listTrackingDomains(env.DB, accountId);
+    expect(kept).toMatchObject({ cf_hostname_id: "ch_keep", deleting_at: null });
+
+    const cf = mockCloudflare(() => ok({ id: "ch_keep" }));
+    const removed = await call(`/api/tracking-domains/${created.body.tracking_domain.id}`, { method: "DELETE" });
+    expect(removed.status).toBe(200);
+    expect(cf.calls).toEqual(["DELETE /ch_keep"]);
+  });
+
   it("registers domains that were added before automatic setup was on", async () => {
     const legacy = await add("legacy.example.com", manual);
     expect(legacy.body.tracking_domain).toMatchObject({ status: "manual", dns_records: [] });
