@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Disallow: /app
+Disallow: /api/
+Disallow: /mcp
+Disallow: /r/
+Disallow: /c/
+Disallow: /lp/
+Disallow: /click
+Disallow: /reset-password
+Disallow: /verify-email
+
+Sitemap: https://capve.app/sitemap.xml

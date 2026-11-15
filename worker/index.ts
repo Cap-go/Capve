@@ -129,6 +129,15 @@ app.get("/api/v1/snippet", (c) => {
   });
 });
 
+// The home page is prerendered to home.html (scripts/prerender.tsx); index.html stays the empty
+// SPA shell that Cloudflare serves for /app and other client routes.
+app.get("/", (c) => {
+  const assets = c.env.ASSETS;
+  if (!assets) return c.text("Capve API running. Build the frontend with `bun run build`.", 404);
+  return assets.fetch(new Request(new URL("/home", c.req.url), c.req.raw));
+});
+app.get("/home", (c) => c.redirect("/", 301));
+
 app.all("*", async (c) => {
   const assets = c.env.ASSETS;
   if (!assets) {

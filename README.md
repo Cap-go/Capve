@@ -22,7 +22,7 @@ Capve is also an **MCP server**: connect Claude Code, Cursor, VS Code or any MCP
 
 | Path | Access |
 | --- | --- |
-| `/` | Public — project homepage + install instructions |
+| `/` | Public — marketing site (also `/pricing`, `/features/*`, `/solutions/*`, `/compare/*`, `/migrate/*`, `/security`), prerendered at build time |
 | `/app` | Sign in required (`/register` to create an account) |
 | `/r/:code` | Public — affiliate redirect |
 | `/api/v1/convert` | Public — conversion API (`X-Program-Secret`) |
