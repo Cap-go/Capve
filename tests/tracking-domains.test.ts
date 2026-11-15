@@ -346,11 +346,21 @@ describe("automatic tracking domain setup", () => {
     const listed = await list();
     expect(cf.calls).toHaveLength(MAX_AUTOMATIC_DOMAINS);
     const newest = listed.body.tracking_domains.find((domain) => domain.hostname === `hand${MAX_AUTOMATIC_DOMAINS}.example.com`);
-    expect(newest).toMatchObject({ status: "manual", dns_records: [] });
+    expect(newest).toMatchObject({ status: "failed" });
     expect(newest?.errors[0]).toContain(`Over the limit of ${MAX_AUTOMATIC_DOMAINS}`);
     expect(listed.body.tracking_domains.filter((domain) => domain.status === "pending")).toHaveLength(
       MAX_AUTOMATIC_DOMAINS,
     );
+
+    // Once an older domain is gone, the next check registers it.
+    await env.DB.prepare("DELETE FROM tracking_domains WHERE id = 'dom_hand_0'").run();
+    await expireChecks();
+    const after = await list();
+    // The 19 remaining domains are re-checked; only the newly eligible one is registered.
+    const second = cf.calls.slice(MAX_AUTOMATIC_DOMAINS);
+    expect(second.filter((entry) => entry === "POST ")).toHaveLength(1);
+    expect(second.filter((entry) => entry.startsWith("GET "))).toHaveLength(MAX_AUTOMATIC_DOMAINS - 1);
+    expect(after.body.tracking_domains.every((domain) => domain.status === "pending")).toBe(true);
   });
 
   it("keeps an automatic domain while automatic setup is off, so its hostname isn't orphaned", async () => {
@@ -372,6 +382,19 @@ describe("automatic tracking domain setup", () => {
     const removed = await call(`/api/tracking-domains/${created.body.tracking_domain.id}`, { method: "DELETE" });
     expect(removed.status).toBe(200);
     expect(cf.calls).toEqual(["DELETE /ch_keep"]);
+  });
+
+  it("retries registering a domain added by hand after Cloudflare recovers", async () => {
+    await add("retry.example.com", manual);
+    mockCloudflare(() => fail(503, 1000, "Service unavailable"));
+    let listed = await list();
+    expect(listed.body.tracking_domains[0]).toMatchObject({ status: "failed", errors: ["Service unavailable"] });
+    vi.restoreAllMocks();
+
+    mockCloudflare(() => ok(hostname("ch_retry", "retry.example.com", "pending", "initializing")));
+    await expireChecks();
+    listed = await list();
+    expect(listed.body.tracking_domains[0]).toMatchObject({ status: "pending", errors: [] });
   });
 
   it("registers domains that were added before automatic setup was on", async () => {

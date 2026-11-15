@@ -17,6 +17,7 @@ import {
   deleteCustomHostname,
   domainStatus,
   getCustomHostname,
+  type DomainStatus,
   hostnameSetup,
   isValidationTimeout,
   retryValidation,
@@ -49,9 +50,20 @@ function parseErrors(raw: string | null): string[] {
   }
 }
 
+/**
+ * Status shown to the user. With automatic setup on, a domain without a Cloudflare hostname yet
+ * (registration failed, or it is over the cap) is pending or failed, never manual, so the
+ * dashboard keeps polling it and the next check retries.
+ */
+function statusOf(domain: TrackingDomain, setup: HostnameSetup | null, errors: string[]): DomainStatus {
+  if (setup && !domain.cf_hostname_id) return errors.length > 0 ? "failed" : "pending";
+  return domainStatus(domain);
+}
+
 /** API shape: setup status plus the DNS record the customer must add. */
 function view(domain: TrackingDomain, setup: HostnameSetup | null) {
-  const status = domainStatus(domain);
+  const errors = parseErrors(domain.cf_errors);
+  const status = statusOf(domain, setup, errors);
   return {
     id: domain.id,
     user_id: domain.user_id,
@@ -61,7 +73,7 @@ function view(domain: TrackingDomain, setup: HostnameSetup | null) {
     ssl_status: domain.cf_ssl_status,
     dns_records:
       setup && status !== "manual" ? [{ type: "CNAME", name: domain.hostname, value: setup.target }] : [],
-    errors: parseErrors(domain.cf_errors),
+    errors,
     checked_at: domain.checked_at,
   };
 }
