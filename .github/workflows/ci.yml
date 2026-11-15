@@ -21,7 +21,7 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Run tests
+      - name: Run tests (including AI bidding beta regression suite)
         run: bun run test
 
       - name: Build

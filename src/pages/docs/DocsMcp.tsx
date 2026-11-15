@@ -104,6 +104,7 @@ const TOOL_GROUPS: Array<[string, string[]]> = [
       "update_campaign_cost",
     ],
   ],
+  ["AI bidding (beta)", ["get_bidding_settings", "set_bidding_settings", "analyze_bidding", "get_bid_recommendations"]],
   ["Reports", ["report_campaigns", "report_grouped", "report_drilldown", "report_trends"]],
   ["Automation", ["list_triggers", "create_trigger", "delete_trigger", "list_notes", "add_note"]],
   [

@@ -5,6 +5,7 @@ import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { AppShell, type AppNavItem } from "../components/AppShell";
 import { AdminPanel } from "../components/AdminPanel";
 import { AccountSettingsPanel, TrackingDomainPicker } from "../components/AccountSettingsPanel";
+import { BiddingPanel } from "../components/BiddingPanel";
 import { AutomationPanel } from "../components/AutomationPanel";
 import { CampaignReportPanel } from "../components/CampaignReport";
 import { EntityPanel } from "../components/EntityPanel";
@@ -967,7 +968,7 @@ function OverviewPanel({
         </div>
       )}
 
-      {section === "optimization" && <AutomationPanel campaignId={selectedId} canWrite={canWrite} />}
+      {section === "optimization" && <><BiddingPanel key={selectedId} campaignId={selectedId} canWrite={canWrite} /><AutomationPanel campaignId={selectedId} canWrite={canWrite} /></>}
       {section === "paths" && (
         <PathEditor programId={selectedId} trackingOrigin={origin} canWrite={canWrite} />
       )}

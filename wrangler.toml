@@ -110,3 +110,7 @@ binding = "DB"
 database_name = "velo-db"
 database_id = "eb916c67-6e45-4798-a6d9-c0e47f99cb8d"
 migrations_dir = "migrations"
+
+# Binding alone does not enable the beta. Each campaign must explicitly opt in.
+[env.production.ai]
+binding = "AI"
