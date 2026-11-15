@@ -7,9 +7,21 @@ compatibility_flags = ["nodejs_compat"]
 directory = "./dist"
 not_found_handling = "single-page-application"
 binding = "ASSETS"
-# Tracking and API routes must hit the Worker even for browser navigations,
-# otherwise SPA fallback serves index.html for /r, /c, /lp, /click and /mcp.
-run_worker_first = ["/api/*", "/r/*", "/c/*", "/lp/*", "/click", "/click/*", "/mcp"]
+# Every request except static files goes to the Worker first, so tracking, API and /mcp routes reach
+# their handlers, the host gate keeps custom tracking domains to /r, /c, /lp and /click (pages 404 there),
+# and "/" is served from the prerendered home.html. The Worker hands everything else to ASSETS.
+run_worker_first = [
+  "/*",
+  "!/assets/*",
+  "!/favicon-32.png",
+  "!/favicon-64.png",
+  "!/apple-touch-icon.png",
+  "!/logo.svg",
+  "!/og-image.png",
+  "!/robots.txt",
+  "!/sitemap.xml",
+  "!/llms.txt",
+]
 
 [[d1_databases]]
 binding = "DB"

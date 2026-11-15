@@ -1,9 +1,10 @@
-import { useEffect, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { PLANS } from "../../shared/billing";
-import { Shell } from "../components/ui";
+import { MarketingLayout } from "../marketing/Layout";
 
 const UPDATED = "October 25, 2026";
+const PRIVACY_UPDATED = "November 15, 2026";
 const SUPPORT_EMAIL = "support@capgo.app";
 
 const COMPANY = {
@@ -12,34 +13,15 @@ const COMPANY = {
   phone: "+17759865200",
 };
 
-function LegalLayout({ title, children }: { title: string; children: ReactNode }) {
-  useEffect(() => {
-    const previous = document.title;
-    document.title = `${title} · Capve`;
-    return () => {
-      document.title = previous;
-    };
-  }, [title]);
-
+function LegalLayout({ title, updated = UPDATED, children }: { title: string; updated?: string; children: ReactNode }) {
   return (
-    <Shell
-      cta={
-        <>
-          <Link className="btn btn-ghost" to="/docs">
-            Docs
-          </Link>
-          <Link className="btn btn-primary" to="/register">
-            Start free trial
-          </Link>
-        </>
-      }
-    >
-      <article className="docs-prose mx-auto max-w-3xl px-6 pb-4 pt-8">
+    <MarketingLayout>
+      <article className="docs-prose mx-auto max-w-3xl px-6 pb-16 pt-10">
         <h1>{title}</h1>
-        <p>Last updated {UPDATED}.</p>
+        <p>Last updated {updated}.</p>
         {children}
       </article>
-    </Shell>
+    </MarketingLayout>
   );
 }
 
@@ -86,7 +68,7 @@ export function ImprintPage() {
 
 export function PrivacyPage() {
   return (
-    <LegalLayout title="Privacy Policy">
+    <LegalLayout title="Privacy Policy" updated={PRIVACY_UPDATED}>
       <p>
         This policy explains how {COMPANY.name} ("Capve", "we") handles personal data when you use
         the hosted Capve service at capve.app. {COMPANY.name} is a US limited liability company at {COMPANY.address}.
@@ -199,6 +181,10 @@ export function PrivacyPage() {
         </li>
       </ul>
       <p>
+        Our website analytics provider, DataFast, may set first-party cookies on capve.app to count
+        unique visitors and sessions. They are not used on your tracking links.
+      </p>
+      <p>
         Session cookies are required to use the dashboard. Tracking cookies are part of attribution.
         If a browser blocks them, some clicks will not be tied to a later visit.
       </p>
@@ -248,6 +234,10 @@ export function PrivacyPage() {
         <li>
           Bento (Bentonow), when enabled, for transactional email to you. Bento does not receive click
           logs.
+        </li>
+        <li>
+          DataFast, for website analytics on capve.app: pages viewed, referrer, browser, device and
+          approximate location. DataFast does not receive click logs.
         </li>
       </ul>
       <p>
@@ -342,8 +332,8 @@ export function TermsPage() {
       </p>
       <p>
         These terms cover the service we host. They are not a license to the Capve source code. The
-        source is published separately, and publishing it does not include hosting, support, or an
-        uptime promise.
+        source is published separately under the GNU Affero General Public License v3.0, and
+        publishing it does not include hosting, support, or an uptime promise.
       </p>
 
       <h2>1. The service</h2>
@@ -396,7 +386,7 @@ export function TermsPage() {
         <li>You have the rights you need in any destination URL, creative, or name you upload.</li>
       </ul>
 
-      <h2>4. Acceptable use</h2>
+      <h2 id="acceptable-use">4. Acceptable use</h2>
       <p>You will not, and you will not allow anyone else to:</p>
       <ul>
         <li>Break the law, or run a campaign whose traffic, offer, or destination breaks the law.</li>
@@ -412,7 +402,7 @@ export function TermsPage() {
         the reason and give you a chance to fix it first.
       </p>
 
-      <h2>5. Trial, plans, and payment</h2>
+      <h2 id="payment">5. Trial, plans, and payment</h2>
       <p>
         A new account includes a 14-day trial. The trial does not require a card. During the trial
         you get the click allowance of the plan you selected at signup.
@@ -455,7 +445,7 @@ export function TermsPage() {
         before the renewal if you do not accept it.
       </p>
 
-      <h2>6. Processing tracking data</h2>
+      <h2 id="processing">6. Processing tracking data</h2>
       <p>
         For personal data in Customer Content, you are the controller and we are the processor. We
         process it only to provide the service, on the configuration and API calls you make, which are

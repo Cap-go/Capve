@@ -1,6 +1,6 @@
 # Capve requirements
 
-Capve is an **open-source alternative to Binom**: a campaign and affiliate tracker that runs on Cloudflare Workers + D1. Anyone can deploy it on their own Cloudflare account; `capve.app` is the hosted install. It is **not** Capgo's Affonso program and does not replace it.
+Capve is an **open-source (AGPL-3.0) alternative to Binom**: a campaign and affiliate tracker that runs on Cloudflare Workers + D1. Anyone can deploy it on their own Cloudflare account; `capve.app` is the hosted install. It is **not** Capgo's Affonso program and does not replace it.
 
 ## Product
 
@@ -46,7 +46,7 @@ A Capve instance lets a user:
 
 ### Routes
 
-**Public** (no session): `/`, `/docs/*`, `/login`, `/register`, `/r/:code`, `/c/:key`, `/lp/:clickId`, `/click`, `POST /api/v1/convert` + OPTIONS, `GET /api/v1/snippet`, `GET /api/health`, `/api/auth/*`.
+**Public** (no session): `/`, marketing pages (`/pricing`, `/features/*`, `/solutions/*`, `/compare/*`, `/migrate/*`, `/security`), legal pages (`/terms`, `/privacy`, `/imprint`), `/docs/*`, `/login`, `/register`, `/r/:code`, `/c/:key`, `/lp/:clickId`, `/click`, `POST /api/v1/convert` + OPTIONS, `GET /api/v1/snippet`, `GET /api/health`, `/api/auth/*`.
 
 **Session or API token** (`Authorization: Bearer capve_…`): `/app/*`, `/api/programs*`, `/api/campaigns*`, `/api/entities*`, `/api/reports*`, `/api/ops*`, `/api/sources*`, `/api/admin*`, `/api/settings*`, `/api/automation*`, `/api/tracking-domains*`, `/mcp`.
 
@@ -54,7 +54,15 @@ A Capve instance lets a user:
 
 Dashboard pages have dedicated paths: `/app/campaigns`, `/app/reports`, `/app/traffic-sources`, `/app/affiliate-networks`, `/app/offers`, `/app/landers`, `/app/groups`, `/app/billing`, `/app/settings`, `/app/mcp`, and `/app/admin`. Campaign sections use `/app/campaigns/:campaignId/:section`. Legacy `?entity=` and campaign `?id=` links redirect to these paths. Platform admins can inspect deployed Stripe configuration and live read-only checks in `/app/admin` (also `/api/admin/stripe` and MCP `get_stripe_setup_status`); credentials are never returned.
 
-Tracking and API paths are listed in `assets.run_worker_first` in `wrangler.toml` so browser navigations reach the Worker instead of the SPA fallback.
+`assets.run_worker_first` in `wrangler.toml` sends every request except static files (`/assets/*`, icons, `robots.txt`, `sitemap.xml`, `llms.txt`) to the Worker first, so tracking and API routes reach their handlers instead of the SPA fallback, and the host gate applies to pages too: custom tracking domains 404 everything but `/r`, `/c`, `/lp` and `/click`.
+
+### Marketing site and SEO
+
+- Public marketing, legal and docs pages are prerendered at build time (`scripts/prerender.tsx`, run by `bun run build`) and hydrated by the client, so crawlers and AI assistants get full HTML with per-page title, description, canonical, Open Graph and JSON-LD. `/pricing` is written to `pricing.html`, `/docs/mcp` to `docs/mcp.html`.
+- `index.html` stays the empty SPA shell for `/app` and other client routes. The home page is written to `home.html` and the Worker serves it for `/`; `/home` redirects to `/`.
+- One registry (`src/marketing/registry.ts`) drives head tags, `sitemap.xml` and `llms.txt`. Page copy lives in `src/marketing/content/` as plain strings.
+- Comparison and migration pages state competitor facts only from the vendor's own pages, with sources and a "checked" date on each page. Re-check them when prices change.
+- `MCP_TOOL_COUNT` in `src/marketing/content/features.ts` must equal the number of MCP tools (`tests/marketing.test.ts`).
 
 **Do not put Cloudflare Access in front of the Worker.** It intercepts `/api/auth/*` and breaks login. `bun run remove-access` (and the deploy workflow) deletes any leftover Access app.
 

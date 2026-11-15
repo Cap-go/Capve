@@ -11,7 +11,9 @@ Capve = **open-source Binom alternative**: campaign and affiliate tracking on Cl
 | `worker/` | Hono API, redirect, LP click, postback, convert, session auth |
 | `worker/lib/access.ts` | Session + API-token auth (`requireUser`, team roles) |
 | `worker/mcp/` | MCP server (`/mcp`); `tools.ts` maps each tool to an `/api` route |
-| `src/` | React UI (homepage `/`, dashboard `/app`) |
+| `src/` | React UI (marketing site `/`, dashboard `/app`) |
+| `src/marketing/` | Marketing pages (home, pricing, features, solutions, compare, migrate, security), copy in `content/`, head tags in `registry.ts` |
+| `scripts/prerender.tsx` | Build step: prerenders public pages, writes `sitemap.xml` and `llms.txt` |
 | `src/lib/constants.ts` | Deploy button + GitHub URLs |
 | `migrations/` | D1 schema |
 | `tests/tracking.test.ts` | Integration tests (Workers pool) |

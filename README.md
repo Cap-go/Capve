@@ -22,7 +22,7 @@ Capve is also an **MCP server**: connect Claude Code, Cursor, VS Code or any MCP
 
 | Path | Access |
 | --- | --- |
-| `/` | Public — project homepage + install instructions |
+| `/` | Public — marketing site (also `/pricing`, `/features/*`, `/solutions/*`, `/compare/*`, `/migrate/*`, `/security`), prerendered at build time |
 | `/app` | Sign in required (`/register` to create an account) |
 | `/r/:code` | Public — affiliate redirect |
 | `/api/v1/convert` | Public — conversion API (`X-Program-Secret`) |
@@ -138,7 +138,7 @@ The browser snippet at `/api/v1/snippet` stores `velo_ref` from the query string
 
 ## License
 
-Open source — see [github.com/Cap-go/Capve](https://github.com/Cap-go/Capve).
+Capve is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0), the same license as [Capgo](https://github.com/Cap-go/capgo). Source: [github.com/Cap-go/Capve](https://github.com/Cap-go/Capve).
 
 ## Hosted billing and email
 
