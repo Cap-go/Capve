@@ -1,6 +1,7 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import worker from "../worker";
+import { listTrackingDomains, saveHostnameCheck } from "../worker/db/tracking-domains";
 import { domainStatus, hostnameSetup } from "../worker/lib/custom-hostnames";
 import { MAX_AUTOMATIC_DOMAINS } from "../worker/routes/tracking-domains";
 import type { Env } from "../worker/types";
@@ -70,7 +71,7 @@ function fail(status: number, code: number, message: string) {
 }
 
 /** Routes Cloudflare API calls to `handler`; records them as "METHOD path?query". */
-function mockCloudflare(handler: (method: string, path: string, body: unknown) => Response) {
+function mockCloudflare(handler: (method: string, path: string, body: unknown) => Response | Promise<Response>) {
   const calls: string[] = [];
   const bodies: unknown[] = [];
   vi.spyOn(globalThis, "fetch").mockImplementation(async (input, init) => {
@@ -231,6 +232,66 @@ describe("automatic tracking domain setup", () => {
     expect(cf.calls).toEqual([]);
   });
 
+  it("never goes past the cap when domains are added at the same time", async () => {
+    const now = Date.now();
+    for (let index = 0; index < MAX_AUTOMATIC_DOMAINS - 2; index++) {
+      await env.DB.prepare(
+        "INSERT INTO tracking_domains (id, user_id, hostname, created_at, checked_at) VALUES (?, ?, ?, ?, ?)",
+      )
+        .bind(`dom_race_${index}`, accountId, `race${index}.example.com`, now, now)
+        .run();
+    }
+    let next = 0;
+    mockCloudflare(async (_method, _path, body) => {
+      const { hostname: name } = body as { hostname: string };
+      return ok(hostname(`ch_race_${next++}`, name, "pending", "initializing"));
+    });
+    const results = await Promise.all(
+      ["a", "b", "c", "d", "e"].map((name) => add(`${name}.parallel.example.com`)),
+    );
+    expect(results.filter((result) => result.status === 201)).toHaveLength(2);
+    expect(results.filter((result) => result.status === 400)).toHaveLength(3);
+    expect(await listTrackingDomains(env.DB, accountId)).toHaveLength(MAX_AUTOMATIC_DOMAINS);
+  });
+
+  it("deletes a hostname a status check recreated for a domain removed meanwhile", async () => {
+    mockCloudflare(() => ok(hostname("ch_9", "gone.example.com", "pending", "initializing")));
+    await add("gone.example.com");
+    vi.restoreAllMocks();
+
+    const cf = mockCloudflare(async (method, path) => {
+      if (method === "GET") {
+        // The domain is removed while the check is running: Cloudflare already lost ch_9.
+        await env.DB.prepare("DELETE FROM tracking_domains WHERE user_id = ?").bind(accountId).run();
+        return fail(404, 1436, "Custom hostname not found.");
+      }
+      if (method === "POST") return ok(hostname("ch_10", "gone.example.com", "pending", "initializing"));
+      return ok({ id: path.slice(1) });
+    });
+    await expireChecks();
+    const listed = await list();
+    expect(cf.calls).toEqual(["GET /ch_9", "POST ", "DELETE /ch_10"]);
+    expect(listed.body.tracking_domains).toEqual([]);
+  });
+
+  it("stops status checks from writing to a domain while it is removed", async () => {
+    mockCloudflare(() => ok(hostname("ch_11", "mark.example.com", "pending", "initializing")));
+    const created = await add("mark.example.com");
+    vi.restoreAllMocks();
+
+    let saveDuringRemoval: unknown = "not called";
+    mockCloudflare(async () => {
+      const [domain] = await listTrackingDomains(env.DB, accountId);
+      saveDuringRemoval = await saveHostnameCheck(env.DB, domain, {
+        hostname: hostname("ch_12", "mark.example.com", "pending", "initializing"),
+      });
+      return ok({ id: "ch_11" });
+    });
+    const removed = await call(`/api/tracking-domains/${created.body.tracking_domain.id}`, { method: "DELETE" });
+    expect(removed.status).toBe(200);
+    expect(saveDuringRemoval).toBeNull();
+  });
+
   it("registers domains that were added before automatic setup was on", async () => {
     const legacy = await add("legacy.example.com", manual);
     expect(legacy.body.tracking_domain).toMatchObject({ status: "manual", dns_records: [] });
@@ -265,6 +326,15 @@ describe("automatic tracking domain setup", () => {
     const failed = await call(`/api/tracking-domains/${created.body.tracking_domain.id}`, { method: "DELETE" });
     expect(failed.status).toBe(502);
     expect((await list(manual)).body.tracking_domains).toHaveLength(1);
+    vi.restoreAllMocks();
+
+    // The failed removal is undone: status checks save again.
+    mockCloudflare(() => ok(hostname("ch_5", "del.example.com", "active", "active")));
+    await expireChecks();
+    await list();
+    const [kept] = await listTrackingDomains(env.DB, accountId);
+    expect(kept).toMatchObject({ deleting_at: null, cf_status: "active" });
+    expect(kept.checked_at).toBeGreaterThan(0);
     vi.restoreAllMocks();
 
     const cf = mockCloudflare(() => fail(404, 1436, "Custom hostname not found."));

@@ -1,9 +1,10 @@
 import { Hono } from "hono";
 import {
-  countTrackingDomains,
+  beginTrackingDomainRemoval,
+  cancelTrackingDomainRemoval,
   createTrackingDomain,
   deleteTrackingDomain,
-  getTrackingDomain,
+  isCustomHostnameInUse,
   listTrackingDomains,
   normalizeHostname,
   saveHostnameCheck,
@@ -72,15 +73,27 @@ function due(domain: TrackingDomain, now: number): boolean {
 }
 
 /**
+ * Deletes a custom hostname this request created for a domain that was removed meanwhile, so it
+ * isn't left billing on the zone. Skipped if a domain uses it (the hostname was added again).
+ */
+async function discardHostname(db: D1Database, setup: HostnameSetup, cfHostnameId: string) {
+  if (await isCustomHostnameInUse(db, cfHostnameId)) return;
+  await deleteCustomHostname(setup, cfHostnameId);
+}
+
+/**
  * Pulls the domain's state from Cloudflare. Registers domains that have no custom hostname yet
  * (added by hand before automatic setup was on, or deleted in Cloudflare) and restarts validation
- * after a timeout, so the domain goes live once its CNAME is in place.
+ * after a timeout, so the domain goes live once its CNAME is in place. Returns null when the
+ * domain was removed during the check.
  */
 async function sync(db: D1Database, setup: HostnameSetup, domain: TrackingDomain, now: number) {
+  let created = !domain.cf_hostname_id;
   let result = domain.cf_hostname_id
     ? await getCustomHostname(setup, domain.cf_hostname_id)
     : await createCustomHostname(setup, domain.hostname);
   if (!result.ok && result.status === 404 && domain.cf_hostname_id) {
+    created = true;
     result = await createCustomHostname(setup, domain.hostname);
   }
   if (!result.ok) return saveHostnameCheck(db, domain, { errors: [result.message] }, now);
@@ -89,7 +102,9 @@ async function sync(db: D1Database, setup: HostnameSetup, domain: TrackingDomain
     const retried = await retryValidation(setup, hostname.id);
     if (retried.ok) hostname = retried.result;
   }
-  return saveHostnameCheck(db, domain, { hostname }, now);
+  const saved = await saveHostnameCheck(db, domain, { hostname }, now);
+  if (!saved && created) await discardHostname(db, setup, hostname.id);
+  return saved;
 }
 
 /** Hostnames that belong to the install itself: the app host, its subdomains and the CNAME target. */
@@ -114,9 +129,12 @@ trackingDomains.get("/", async (c) => {
   let domains = await listTrackingDomains(c.env.DB, session.account_id);
   if (setup) {
     const now = Date.now();
-    domains = await Promise.all(
-      domains.map((domain) => (due(domain, now) ? sync(c.env.DB, setup, domain, now) : domain)),
+    const checked = await Promise.all(
+      domains.map((domain) =>
+        !domain.deleting_at && due(domain, now) ? sync(c.env.DB, setup, domain, now) : domain,
+      ),
     );
+    domains = checked.filter((domain): domain is TrackingDomain => domain !== null);
   }
   return c.json({
     tracking_domains: domains.map((domain) => view(domain, setup)),
@@ -137,12 +155,18 @@ trackingDomains.post("/", async (c) => {
   if (reservedHostname(hostname, c.env, setup)) {
     return c.json({ error: "This hostname already serves the app" }, 400);
   }
-  if (setup && (await countTrackingDomains(c.env.DB, session.account_id)) >= MAX_AUTOMATIC_DOMAINS) {
+
+  const inserted = await createTrackingDomain(
+    c.env.DB,
+    session.account_id,
+    hostname,
+    setup ? MAX_AUTOMATIC_DOMAINS : null,
+  );
+  if (inserted === "duplicate") return c.json({ error: "Hostname already registered" }, 409);
+  if (inserted === "limit") {
     return c.json({ error: `An account can have up to ${MAX_AUTOMATIC_DOMAINS} tracking domains` }, 400);
   }
-
-  let domain = await createTrackingDomain(c.env.DB, session.account_id, hostname);
-  if (!domain) return c.json({ error: "Hostname already registered" }, 409);
+  let domain = inserted;
 
   if (setup) {
     const created = await createCustomHostname(setup, hostname);
@@ -154,7 +178,12 @@ trackingDomains.post("/", async (c) => {
         userError ? 400 : 502,
       );
     }
-    domain = await saveHostnameCheck(c.env.DB, domain, { hostname: created.result });
+    const saved = await saveHostnameCheck(c.env.DB, domain, { hostname: created.result });
+    if (!saved) {
+      await discardHostname(c.env.DB, setup, created.result.id);
+      return c.json({ error: `${hostname} was removed while it was being set up` }, 409);
+    }
+    domain = saved;
   }
   return c.json({ tracking_domain: view(domain, setup), setup: setupHint(setup) }, 201);
 });
@@ -162,16 +191,19 @@ trackingDomains.post("/", async (c) => {
 trackingDomains.delete("/:id", async (c) => {
   const session = await requireWrite(c);
   if (session instanceof Response) return session;
-  const domain = await getTrackingDomain(c.env.DB, c.req.param("id"), session.account_id);
-  if (!domain) return c.json({ error: "Not found" }, 404);
+  const domainId = c.req.param("id");
+  // Marking first means a concurrent status check can't attach a new hostname after this read.
+  const removal = await beginTrackingDomainRemoval(c.env.DB, domainId, session.account_id);
+  if (!removal) return c.json({ error: "Not found" }, 404);
   const setup = hostnameSetup(c.env);
-  if (setup && domain.cf_hostname_id) {
-    const removed = await deleteCustomHostname(setup, domain.cf_hostname_id);
+  if (setup && removal.cf_hostname_id) {
+    const removed = await deleteCustomHostname(setup, removal.cf_hostname_id);
     if (!removed.ok) {
-      return c.json({ error: `Couldn't remove ${domain.hostname} from Cloudflare: ${removed.message}` }, 502);
+      await cancelTrackingDomainRemoval(c.env.DB, domainId, session.account_id);
+      return c.json({ error: `Couldn't remove the domain from Cloudflare: ${removed.message}` }, 502);
     }
   }
-  const ok = await deleteTrackingDomain(c.env.DB, domain.id, session.account_id);
+  const ok = await deleteTrackingDomain(c.env.DB, domainId, session.account_id);
   if (!ok) return c.json({ error: "Not found" }, 404);
   return c.json({ ok: true });
 });

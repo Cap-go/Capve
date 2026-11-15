@@ -13,9 +13,12 @@ export type TrackingDomain = {
   /** JSON array of Cloudflare verification errors. */
   cf_errors: string | null;
   checked_at: number | null;
+  /** Set while the domain is being removed. */
+  deleting_at: number | null;
 };
 
-const COLUMNS = "id, user_id, hostname, created_at, cf_hostname_id, cf_status, cf_ssl_status, cf_errors, checked_at";
+const COLUMNS =
+  "id, user_id, hostname, created_at, cf_hostname_id, cf_status, cf_ssl_status, cf_errors, checked_at, deleting_at";
 
 const HOSTNAME = /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
@@ -58,32 +61,16 @@ export async function findTrackingDomainByHost(
     .first<TrackingDomain>();
 }
 
-export async function getTrackingDomain(
-  db: D1Database,
-  domainId: string,
-  userId: string,
-): Promise<TrackingDomain | null> {
-  return db
-    .prepare(`SELECT ${COLUMNS} FROM tracking_domains WHERE id = ? AND user_id = ?`)
-    .bind(domainId, userId)
-    .first<TrackingDomain>();
-}
-
-export async function countTrackingDomains(db: D1Database, userId: string): Promise<number> {
-  const row = await db
-    .prepare("SELECT COUNT(*) AS total FROM tracking_domains WHERE user_id = ?")
-    .bind(userId)
-    .first<{ total: number }>();
-  return row?.total ?? 0;
-}
-
-/** Stores the latest Cloudflare state of a domain (or only the check time and errors when it failed). */
+/**
+ * Stores the latest Cloudflare state of a domain (or only the check time and errors when it failed).
+ * Returns null when the domain was removed, or is being removed, in the meantime.
+ */
 export async function saveHostnameCheck(
   db: D1Database,
   domain: TrackingDomain,
   check: { hostname: CustomHostname } | { errors: string[] },
   now = Date.now(),
-): Promise<TrackingDomain> {
+): Promise<TrackingDomain | null> {
   const next: TrackingDomain =
     "hostname" in check
       ? {
@@ -95,22 +82,61 @@ export async function saveHostnameCheck(
           checked_at: now,
         }
       : { ...domain, cf_errors: JSON.stringify(check.errors), checked_at: now };
-  await db
+  const result = await db
     .prepare(
       `UPDATE tracking_domains SET cf_hostname_id = ?, cf_status = ?, cf_ssl_status = ?, cf_errors = ?, checked_at = ?
-       WHERE id = ? AND user_id = ?`,
+       WHERE id = ? AND user_id = ? AND deleting_at IS NULL`,
     )
     .bind(next.cf_hostname_id, next.cf_status, next.cf_ssl_status, next.cf_errors, next.checked_at, domain.id, domain.user_id)
     .run();
-  return next;
+  return result.meta.changes ? next : null;
 }
 
-/** Creates a domain; returns null when the hostname is already registered. */
+/**
+ * Marks the domain as being removed and returns its Cloudflare hostname id as of that moment.
+ * From then on saveHostnameCheck no longer writes to it, so any hostname a concurrent status
+ * check creates is either returned here or cleaned up by that check. Null when not found.
+ */
+export async function beginTrackingDomainRemoval(
+  db: D1Database,
+  domainId: string,
+  userId: string,
+): Promise<{ cf_hostname_id: string | null } | null> {
+  return db
+    .prepare(
+      "UPDATE tracking_domains SET deleting_at = ? WHERE id = ? AND user_id = ? RETURNING cf_hostname_id",
+    )
+    .bind(Date.now(), domainId, userId)
+    .first<{ cf_hostname_id: string | null }>();
+}
+
+/** Undoes beginTrackingDomainRemoval when the Cloudflare hostname couldn't be deleted. */
+export async function cancelTrackingDomainRemoval(db: D1Database, domainId: string, userId: string) {
+  await db
+    .prepare("UPDATE tracking_domains SET deleting_at = NULL WHERE id = ? AND user_id = ?")
+    .bind(domainId, userId)
+    .run();
+}
+
+/** Whether any domain still uses this Cloudflare custom hostname. */
+export async function isCustomHostnameInUse(db: D1Database, cfHostnameId: string): Promise<boolean> {
+  const row = await db
+    .prepare("SELECT 1 AS used FROM tracking_domains WHERE cf_hostname_id = ? LIMIT 1")
+    .bind(cfHostnameId)
+    .first();
+  return !!row;
+}
+
+/**
+ * Creates a domain. With `limit`, the insert only happens while the account has fewer domains,
+ * checked in the same statement so concurrent requests can't go past it.
+ */
 export async function createTrackingDomain(
   db: D1Database,
   userId: string,
   hostname: string,
-): Promise<TrackingDomain | null> {
+  limit: number | null = null,
+): Promise<TrackingDomain | "duplicate" | "limit"> {
   const domain: TrackingDomain = {
     id: id("dom"),
     user_id: userId,
@@ -121,14 +147,23 @@ export async function createTrackingDomain(
     cf_ssl_status: null,
     cf_errors: null,
     checked_at: null,
+    deleting_at: null,
   };
-  const result = await db
-    .prepare(
-      "INSERT OR IGNORE INTO tracking_domains (id, user_id, hostname, created_at) VALUES (?, ?, ?, ?)",
-    )
-    .bind(domain.id, domain.user_id, domain.hostname, domain.created_at)
-    .run();
-  return result.meta.changes ? domain : null;
+  const insert =
+    limit === null
+      ? db
+          .prepare("INSERT OR IGNORE INTO tracking_domains (id, user_id, hostname, created_at) VALUES (?, ?, ?, ?)")
+          .bind(domain.id, domain.user_id, domain.hostname, domain.created_at)
+      : db
+          .prepare(
+            `INSERT OR IGNORE INTO tracking_domains (id, user_id, hostname, created_at)
+             SELECT ?, ?, ?, ? WHERE (SELECT COUNT(*) FROM tracking_domains WHERE user_id = ?) < ?`,
+          )
+          .bind(domain.id, domain.user_id, domain.hostname, domain.created_at, userId, limit);
+  const result = await insert.run();
+  if (result.meta.changes) return domain;
+  const existing = await findTrackingDomainByHost(db, hostname);
+  return existing || limit === null ? "duplicate" : "limit";
 }
 
 export async function deleteTrackingDomain(
@@ -173,7 +208,7 @@ export async function getCampaignTrackingDomain(
   return db
     .prepare(
       `SELECT td.id, td.user_id, td.hostname, td.created_at, td.cf_hostname_id, td.cf_status, td.cf_ssl_status,
-              td.cf_errors, td.checked_at
+              td.cf_errors, td.checked_at, td.deleting_at
        FROM programs p JOIN tracking_domains td ON td.id = p.tracking_domain_id AND td.user_id = p.user_id
        WHERE p.id = ?`,
     )

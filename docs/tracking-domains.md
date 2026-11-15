@@ -17,9 +17,9 @@ Each hostname becomes a [Cloudflare for SaaS custom hostname](https://developers
 2. **Point DNS.** The response and the Settings page show one record: `CNAME track.example.com → domains.capve.app`. Users on Cloudflare DNS set it to DNS only.
 3. **Go live.** `GET /api/tracking-domains` re-checks domains with Cloudflare: pending ones at most every 15 seconds, active ones hourly. The Settings page polls while a domain is waiting. Statuses: `pending` (waiting for DNS or the certificate), `active`, `failed` (for example the CNAME was removed, or Cloudflare blocked the hostname) and `manual`. Cloudflare's verification errors are shown under the domain.
 4. **Recover.** When certificate validation times out, the next check restarts it. A domain added by hand before automatic setup was turned on, or whose custom hostname was deleted in Cloudflare, is registered again on the next check.
-5. **Remove.** `DELETE /api/tracking-domains/:id` deletes the custom hostname first, then the domain. If Cloudflare can't be reached, nothing is deleted and the user can try again.
+5. **Remove.** `DELETE /api/tracking-domains/:id` marks the domain as being removed, deletes the custom hostname, then deletes the domain. While it is marked, status checks don't write to it, and a check that recreated a hostname in the meantime deletes it again, so no hostname is left without a domain. If Cloudflare can't be reached, the mark is cleared, nothing is deleted and the user can try again.
 
-An account can have up to 20 tracking domains in automatic mode. Cloudflare for SaaS works on the Free plan: each zone includes 100 custom hostnames, then Cloudflare bills $0.10 per hostname per month ([plans](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/plans/)).
+An account can have up to 20 tracking domains in automatic mode, checked in the same database statement as the insert so parallel requests can't go past it. Cloudflare for SaaS works on the Free plan: each zone includes 100 custom hostnames, then Cloudflare bills $0.10 per hostname per month ([plans](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/plans/)).
 
 The dashboard and MCP tools are the same in both modes: `list_tracking_domains` returns the status and DNS records, and `add_tracking_domain` returns the record to add.
 

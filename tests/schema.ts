@@ -446,7 +446,8 @@ CREATE TABLE IF NOT EXISTS tracking_domains (
   cf_status TEXT,
   cf_ssl_status TEXT,
   cf_errors TEXT,
-  checked_at INTEGER
+  checked_at INTEGER,
+  deleting_at INTEGER
 );
 
 CREATE INDEX IF NOT EXISTS idx_tracking_domains_user ON tracking_domains(user_id);

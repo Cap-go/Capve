@@ -6,3 +6,5 @@ ALTER TABLE tracking_domains ADD COLUMN cf_status TEXT;
 ALTER TABLE tracking_domains ADD COLUMN cf_ssl_status TEXT;
 ALTER TABLE tracking_domains ADD COLUMN cf_errors TEXT;
 ALTER TABLE tracking_domains ADD COLUMN checked_at INTEGER;
+-- Set while a removal deletes the Cloudflare hostname; status checks then stop saving to the row.
+ALTER TABLE tracking_domains ADD COLUMN deleting_at INTEGER;
