@@ -66,7 +66,27 @@ export type ZoneBlacklistEntry = {
   created_at: number;
 };
 
-export type TrackingDomain = { id: string; hostname: string; created_at: number };
+/** manual: set up by hand. pending: waiting for DNS or the certificate. failed: needs attention. */
+export type TrackingDomainStatus = "manual" | "pending" | "active" | "failed";
+
+export type TrackingDomain = {
+  id: string;
+  hostname: string;
+  created_at: number;
+  status: TrackingDomainStatus;
+  ssl_status: string | null;
+  /** DNS records the hostname needs (automatic setup only). */
+  dns_records: Array<{ type: string; name: string; value: string }>;
+  errors: string[];
+};
+
+export type TrackingDomainList = {
+  tracking_domains: TrackingDomain[];
+  /** True when Capve registers domains with Cloudflare and issues HTTPS itself. */
+  automatic: boolean;
+  cname_target: string | null;
+  setup: string;
+};
 
 function qs(params: Record<string, string | number | undefined>): string {
   const search = new URLSearchParams();
@@ -116,8 +136,7 @@ export const automationApi = {
   removeFromBlacklist: (entryId: string) =>
     request<{ ok: boolean }>(`/api/automation/blacklist/${entryId}`, { method: "DELETE" }),
 
-  trackingDomains: () =>
-    request<{ tracking_domains: TrackingDomain[]; setup: string }>("/api/tracking-domains"),
+  trackingDomains: () => request<TrackingDomainList>("/api/tracking-domains"),
   addTrackingDomain: (hostname: string) =>
     request<{ tracking_domain: TrackingDomain; setup: string }>("/api/tracking-domains", {
       method: "POST",

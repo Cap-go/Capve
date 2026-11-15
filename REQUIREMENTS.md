@@ -40,7 +40,7 @@ A Capve instance lets a user:
 | Drilldown | `/api/reports/drilldown?by=campaign,sub1,country,offer` (1–4 levels) → nested rows with grouped-report metrics |
 | Timezone | Account timezone (`/api/settings`, default UTC); date buckets use the offset at range start; `YYYY-MM-DD` ranges are calendar days in that timezone |
 | Automation | `/api/automation/*`: zone blacklist rules (≥ N clicks, 0 conversions/event in H hours), ROI/spend alerts via email + webhook; `zone_blacklist` exported as TXT/CSV; cron `*/15` (`worker/cron/`) |
-| Tracking domains | `/api/tracking-domains`; campaigns can pick one; those hosts serve only `/r`, `/c`, `/lp`, `/click`; unknown hosts 404. Hostnames are added as Worker custom domains manually in Cloudflare |
+| Tracking domains | `/api/tracking-domains`; campaigns can pick one; those hosts serve only `/r`, `/c`, `/lp`, `/click`; unknown hosts 404. With `TRACKING_DOMAIN_*` set, each hostname becomes a Cloudflare for SaaS custom hostname: the user adds one CNAME and HTTPS is issued automatically (up to 20 per account; removing the domain deletes the hostname). Without them, hostnames are added as Worker custom domains by hand. See `docs/tracking-domains.md` |
 | MCP | `POST /mcp` (Streamable HTTP, stateless JSON-RPC) in `worker/mcp/`; each tool replays an `/api` route with the bearer token; tokens in `api_tokens` (hash only), managed at `/api/tokens` with a session cookie only |
 | Redirect safety | Only configured destinations/offers/landers; `?url=` same host only; postback/webhook URLs must be http(s) |
 

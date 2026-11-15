@@ -32,6 +32,15 @@ export type Env = {
   AUTH_EMAIL_LIMITER?: RateLimit;
   /** Days to keep raw clicks without conversions; unset/0 = keep forever. */
   RAW_CLICK_RETENTION_DAYS?: string;
+  /**
+   * Automatic tracking domain setup (Cloudflare for SaaS custom hostnames); all three are needed,
+   * otherwise domains are set up by hand. See docs/tracking-domains.md.
+   */
+  TRACKING_DOMAIN_ZONE_ID?: string;
+  /** Secret: API token with SSL and Certificates Edit on that zone. */
+  TRACKING_DOMAIN_API_TOKEN?: string;
+  /** Hostname customers point their CNAME at (the zone's fallback origin), e.g. domains.capve.app. */
+  TRACKING_DOMAIN_CNAME_TARGET?: string;
 };
 
 export type User = {

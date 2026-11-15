@@ -1,3 +1,4 @@
+import { hostnameErrors, type CustomHostname } from "../lib/custom-hostnames";
 import { id } from "../lib/utils";
 
 export type TrackingDomain = {
@@ -5,7 +6,16 @@ export type TrackingDomain = {
   user_id: string;
   hostname: string;
   created_at: number;
+  /** Cloudflare custom hostname id; null when the domain was set up by hand. */
+  cf_hostname_id: string | null;
+  cf_status: string | null;
+  cf_ssl_status: string | null;
+  /** JSON array of Cloudflare verification errors. */
+  cf_errors: string | null;
+  checked_at: number | null;
 };
+
+const COLUMNS = "id, user_id, hostname, created_at, cf_hostname_id, cf_status, cf_ssl_status, cf_errors, checked_at";
 
 const HOSTNAME = /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 
@@ -31,7 +41,7 @@ export async function listTrackingDomains(
 ): Promise<TrackingDomain[]> {
   const { results } = await db
     .prepare(
-      "SELECT id, user_id, hostname, created_at FROM tracking_domains WHERE user_id = ? ORDER BY hostname",
+      `SELECT ${COLUMNS} FROM tracking_domains WHERE user_id = ? ORDER BY hostname`,
     )
     .bind(userId)
     .all<TrackingDomain>();
@@ -43,9 +53,56 @@ export async function findTrackingDomainByHost(
   hostname: string,
 ): Promise<TrackingDomain | null> {
   return db
-    .prepare("SELECT id, user_id, hostname, created_at FROM tracking_domains WHERE hostname = ?")
+    .prepare(`SELECT ${COLUMNS} FROM tracking_domains WHERE hostname = ?`)
     .bind(hostname.toLowerCase())
     .first<TrackingDomain>();
+}
+
+export async function getTrackingDomain(
+  db: D1Database,
+  domainId: string,
+  userId: string,
+): Promise<TrackingDomain | null> {
+  return db
+    .prepare(`SELECT ${COLUMNS} FROM tracking_domains WHERE id = ? AND user_id = ?`)
+    .bind(domainId, userId)
+    .first<TrackingDomain>();
+}
+
+export async function countTrackingDomains(db: D1Database, userId: string): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS total FROM tracking_domains WHERE user_id = ?")
+    .bind(userId)
+    .first<{ total: number }>();
+  return row?.total ?? 0;
+}
+
+/** Stores the latest Cloudflare state of a domain (or only the check time and errors when it failed). */
+export async function saveHostnameCheck(
+  db: D1Database,
+  domain: TrackingDomain,
+  check: { hostname: CustomHostname } | { errors: string[] },
+  now = Date.now(),
+): Promise<TrackingDomain> {
+  const next: TrackingDomain =
+    "hostname" in check
+      ? {
+          ...domain,
+          cf_hostname_id: check.hostname.id,
+          cf_status: check.hostname.status ?? null,
+          cf_ssl_status: check.hostname.ssl?.status ?? null,
+          cf_errors: JSON.stringify(hostnameErrors(check.hostname)),
+          checked_at: now,
+        }
+      : { ...domain, cf_errors: JSON.stringify(check.errors), checked_at: now };
+  await db
+    .prepare(
+      `UPDATE tracking_domains SET cf_hostname_id = ?, cf_status = ?, cf_ssl_status = ?, cf_errors = ?, checked_at = ?
+       WHERE id = ? AND user_id = ?`,
+    )
+    .bind(next.cf_hostname_id, next.cf_status, next.cf_ssl_status, next.cf_errors, next.checked_at, domain.id, domain.user_id)
+    .run();
+  return next;
 }
 
 /** Creates a domain; returns null when the hostname is already registered. */
@@ -54,7 +111,17 @@ export async function createTrackingDomain(
   userId: string,
   hostname: string,
 ): Promise<TrackingDomain | null> {
-  const domain: TrackingDomain = { id: id("dom"), user_id: userId, hostname, created_at: Date.now() };
+  const domain: TrackingDomain = {
+    id: id("dom"),
+    user_id: userId,
+    hostname,
+    created_at: Date.now(),
+    cf_hostname_id: null,
+    cf_status: null,
+    cf_ssl_status: null,
+    cf_errors: null,
+    checked_at: null,
+  };
   const result = await db
     .prepare(
       "INSERT OR IGNORE INTO tracking_domains (id, user_id, hostname, created_at) VALUES (?, ?, ?, ?)",
@@ -105,7 +172,8 @@ export async function getCampaignTrackingDomain(
 ): Promise<TrackingDomain | null> {
   return db
     .prepare(
-      `SELECT td.id, td.user_id, td.hostname, td.created_at
+      `SELECT td.id, td.user_id, td.hostname, td.created_at, td.cf_hostname_id, td.cf_status, td.cf_ssl_status,
+              td.cf_errors, td.checked_at
        FROM programs p JOIN tracking_domains td ON td.id = p.tracking_domain_id AND td.user_id = p.user_id
        WHERE p.id = ?`,
     )

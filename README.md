@@ -65,7 +65,7 @@ Tokens act as the user who created them, can be revoked from the dashboard, and 
 
 **Host gating:** the Worker serves the full app only on `APP_URL`'s host, `capve.app`, `localhost` and `*.workers.dev`. Set `APP_URL` to your own hostname when you use a custom domain, otherwise requests on it get 404.
 
-**Custom tracking domains:** add the hostname in Dashboard → Settings → Tracking domains (or `POST /api/tracking-domains`), then attach it to the Worker in Cloudflare yourself: Workers & Pages → the Capve Worker → Settings → Domains & Routes → Add → Custom Domain (`track.example.com`). Do not commit these hostnames to `wrangler.toml`. A tracking domain only serves `/r`, `/c`, `/lp` and `/click`; campaigns that pick it show their links on it.
+**Custom tracking domains:** add the hostname in Dashboard → Settings → Tracking domains (or `POST /api/tracking-domains`). With automatic setup (Cloudflare for SaaS, see [tracking domains](docs/tracking-domains.md)), Capve registers it with Cloudflare, shows the one CNAME record to add, and HTTPS is issued once the record is live. Without it, attach the hostname to the Worker in Cloudflare yourself: Workers & Pages → the Capve Worker → Settings → Domains & Routes → Add → Custom Domain (`track.example.com`). Do not commit customer hostnames to `wrangler.toml`. A tracking domain only serves `/r`, `/c`, `/lp` and `/click`; campaigns that pick it show their links on it.
 
 **Report timezone:** Settings → Report timezone (IANA, default UTC). D1 has no timezone support, so date buckets use the UTC offset at the start of the report range; a range crossing a DST change is off by one hour after the switch. `from`/`to` given as `YYYY-MM-DD` are exact calendar days in that timezone.
 

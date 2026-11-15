@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { CodeBlock } from "../../components/CodeBlock";
-import { appBaseUrl } from "../../lib/constants";
+import { appBaseUrl, GITHUB_REPO_URL } from "../../lib/constants";
 import { buildPostbackUrl, buildTrackingUrl } from "../../lib/tracking";
 
 export function DocsTrackingLinks() {
@@ -90,6 +90,38 @@ export function DocsTrackingLinks() {
           numeric payout or omit it.
         </li>
       </ul>
+      <h2 id="tracking-domain">Your own tracking domain</h2>
+      <p>
+        Links can run on a hostname you own, such as <code>track.example.com</code>, instead of{" "}
+        {new URL(base).host}. It serves only <code>/r</code>, <code>/c</code>, <code>/lp</code> and{" "}
+        <code>/click</code>; every other path returns 404, so it never exposes your dashboard.
+      </p>
+      <ol>
+        <li>
+          In <Link to="/app/settings">Settings</Link> → Tracking domains, add the hostname. Use a
+          subdomain: most DNS providers don&apos;t allow a CNAME on the root domain.
+        </li>
+        <li>
+          At your DNS provider, add the CNAME record Capve shows. If your DNS is on Cloudflare, set
+          it to DNS only.
+        </li>
+        <li>
+          Once the record is live, Capve issues the HTTPS certificate, usually within a few minutes,
+          and the domain turns <strong>Active</strong>.
+        </li>
+        <li>
+          Pick the domain on a campaign&apos;s Tracking tab. Its campaign link, affiliate links, LP
+          click URL and postback URL then use the domain.
+        </li>
+      </ol>
+      <p className="text-sm text-[var(--velo-muted)]">
+        Self-hosted installs without automatic setup add the hostname as a Custom Domain of the
+        Worker in Cloudflare instead. See the{" "}
+        <a href={`${GITHUB_REPO_URL}/blob/main/docs/tracking-domains.md`} rel="noreferrer" target="_blank">
+          tracking domains guide
+        </a>
+        .
+      </p>
     </>
   );
 }
