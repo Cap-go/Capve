@@ -1,7 +1,8 @@
 import { createExecutionContext, env, waitOnExecutionContext } from "cloudflare:test";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import worker from "../worker";
-import { listTrackingDomains, saveHostnameCheck } from "../worker/db/tracking-domains";
+import { listHostnameCleanup, listTrackingDomains, saveHostnameCheck } from "../worker/db/tracking-domains";
+import { retryHostnameCleanup } from "../worker/lib/tracking-domain-cleanup";
 import { domainStatus, hostnameSetup } from "../worker/lib/custom-hostnames";
 import { MAX_AUTOMATIC_DOMAINS } from "../worker/routes/tracking-domains";
 import type { Env } from "../worker/types";
@@ -95,6 +96,7 @@ async function expireChecks() {
 
 async function removeAll() {
   await env.DB.prepare("DELETE FROM tracking_domains WHERE user_id = ?").bind(accountId).run();
+  await env.DB.prepare("DELETE FROM tracking_domain_cleanup").run();
 }
 
 beforeAll(async () => {
@@ -290,6 +292,53 @@ describe("automatic tracking domain setup", () => {
     const listed = await list();
     expect(cf.calls).toEqual(["GET /ch_9", "POST ", "DELETE /ch_10"]);
     expect(listed.body.tracking_domains).toEqual([]);
+  });
+
+  it("queues a leftover hostname when Cloudflare fails to delete it, and retries hourly", async () => {
+    mockCloudflare(() => ok(hostname("ch_20", "left.example.com", "pending", "initializing")));
+    await add("left.example.com");
+    vi.restoreAllMocks();
+
+    mockCloudflare(async (method) => {
+      if (method === "GET") {
+        await env.DB.prepare("DELETE FROM tracking_domains WHERE user_id = ?").bind(accountId).run();
+        return fail(404, 1436, "Custom hostname not found.");
+      }
+      if (method === "POST") return ok(hostname("ch_21", "left.example.com", "pending", "initializing"));
+      return fail(503, 1000, "Service unavailable");
+    });
+    await expireChecks();
+    await list();
+    vi.restoreAllMocks();
+    expect(await listHostnameCleanup(env.DB, 10)).toMatchObject([
+      { cf_hostname_id: "ch_21", hostname: "left.example.com", attempts: 1, last_error: "Service unavailable" },
+    ]);
+
+    // Still failing: kept, with the attempt counted.
+    mockCloudflare(() => fail(503, 1000, "Service unavailable"));
+    expect(await retryHostnameCleanup(automatic)).toEqual({ deleted: 0, failed: 1 });
+    expect((await listHostnameCleanup(env.DB, 10))[0].attempts).toBe(2);
+    vi.restoreAllMocks();
+
+    const cf = mockCloudflare(() => ok({ id: "ch_21" }));
+    expect(await retryHostnameCleanup(automatic)).toEqual({ deleted: 1, failed: 0 });
+    expect(cf.calls).toEqual(["DELETE /ch_21"]);
+    expect(await listHostnameCleanup(env.DB, 10)).toEqual([]);
+  });
+
+  it("drops a queued hostname that a domain uses again", async () => {
+    mockCloudflare(() => ok(hostname("ch_back", "back.example.com", "pending", "initializing")));
+    await add("back.example.com");
+    vi.restoreAllMocks();
+    await env.DB.prepare(
+      "INSERT INTO tracking_domain_cleanup (cf_hostname_id, hostname, created_at) VALUES ('ch_back', 'back.example.com', 1)",
+    ).run();
+
+    const cf = mockCloudflare(() => ok({ id: "ch_back" }));
+    expect(await retryHostnameCleanup(automatic)).toEqual({ deleted: 0, failed: 0 });
+    expect(cf.calls).toEqual([]);
+    expect(await listHostnameCleanup(env.DB, 10)).toEqual([]);
+    expect(await retryHostnameCleanup(manual)).toEqual({ deleted: 0, failed: 0 });
   });
 
   it("stops status checks from writing to a domain while it is removed", async () => {

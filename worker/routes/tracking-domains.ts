@@ -4,7 +4,6 @@ import {
   cancelTrackingDomainRemoval,
   createTrackingDomain,
   deleteTrackingDomain,
-  isCustomHostnameInUse,
   listTrackingDomains,
   normalizeHostname,
   saveHostnameCheck,
@@ -24,6 +23,7 @@ import {
   type HostnameSetup,
 } from "../lib/custom-hostnames";
 import { isAppHost } from "../lib/host-gate";
+import { discardHostname } from "../lib/tracking-domain-cleanup";
 import type { Env } from "../types";
 
 const MANUAL_HINT =
@@ -85,15 +85,6 @@ function due(domain: TrackingDomain, now: number): boolean {
 }
 
 /**
- * Deletes a custom hostname this request created for a domain that was removed meanwhile, so it
- * isn't left billing on the zone. Skipped if a domain uses it (the hostname was added again).
- */
-async function discardHostname(db: D1Database, setup: HostnameSetup, cfHostnameId: string) {
-  if (await isCustomHostnameInUse(db, cfHostnameId)) return;
-  await deleteCustomHostname(setup, cfHostnameId);
-}
-
-/**
  * Pulls the domain's state from Cloudflare. Registers domains that have no custom hostname yet
  * (added by hand before automatic setup was on, or deleted in Cloudflare) and restarts validation
  * after a timeout, so the domain goes live once its CNAME is in place. Returns null when the
@@ -115,7 +106,7 @@ async function sync(db: D1Database, setup: HostnameSetup, domain: TrackingDomain
     if (retried.ok) hostname = retried.result;
   }
   const saved = await saveHostnameCheck(db, domain, { hostname }, now);
-  if (!saved && created) await discardHostname(db, setup, hostname.id);
+  if (!saved && created) await discardHostname(db, setup, hostname.id, hostname.hostname);
   return saved;
 }
 
@@ -245,7 +236,7 @@ trackingDomains.post("/", async (c) => {
     }
     const saved = await saveHostnameCheck(c.env.DB, domain, { hostname: created.result });
     if (!saved) {
-      await discardHostname(c.env.DB, setup, created.result.id);
+      await discardHostname(c.env.DB, setup, created.result.id, hostname);
       return c.json({ error: `${hostname} was removed while it was being set up` }, 409);
     }
     domain = saved;

@@ -134,6 +134,44 @@ export async function isCustomHostnameInUse(db: D1Database, cfHostnameId: string
   return !!row;
 }
 
+export type HostnameCleanup = {
+  cf_hostname_id: string;
+  hostname: string;
+  attempts: number;
+  last_error: string | null;
+  created_at: number;
+};
+
+/** Records a custom hostname that must still be deleted in Cloudflare (no domain uses it). */
+export async function queueHostnameCleanup(
+  db: D1Database,
+  cfHostnameId: string,
+  hostname: string,
+  error: string,
+) {
+  await db
+    .prepare(
+      `INSERT INTO tracking_domain_cleanup (cf_hostname_id, hostname, last_error, created_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT(cf_hostname_id) DO UPDATE SET attempts = attempts + 1, last_error = excluded.last_error`,
+    )
+    .bind(cfHostnameId, hostname, error, Date.now())
+    .run();
+}
+
+export async function listHostnameCleanup(db: D1Database, limit: number): Promise<HostnameCleanup[]> {
+  const { results } = await db
+    .prepare(
+      "SELECT cf_hostname_id, hostname, attempts, last_error, created_at FROM tracking_domain_cleanup ORDER BY created_at LIMIT ?",
+    )
+    .bind(limit)
+    .all<HostnameCleanup>();
+  return results ?? [];
+}
+
+export async function finishHostnameCleanup(db: D1Database, cfHostnameId: string) {
+  await db.prepare("DELETE FROM tracking_domain_cleanup WHERE cf_hostname_id = ?").bind(cfHostnameId).run();
+}
+
 /**
  * Creates a domain. With `limit`, the insert only happens while the account has fewer domains,
  * checked in the same statement so concurrent requests can't go past it.

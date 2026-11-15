@@ -450,6 +450,14 @@ CREATE TABLE IF NOT EXISTS tracking_domains (
   deleting_at INTEGER
 );
 
+CREATE TABLE IF NOT EXISTS tracking_domain_cleanup (
+  cf_hostname_id TEXT PRIMARY KEY,
+  hostname TEXT NOT NULL,
+  attempts INTEGER NOT NULL DEFAULT 1,
+  last_error TEXT,
+  created_at INTEGER NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_tracking_domains_user ON tracking_domains(user_id);
 
 CREATE INDEX IF NOT EXISTS idx_clicks_traffic_source ON clicks(traffic_source_id);
