@@ -246,8 +246,8 @@ function dimensionSql(by: GroupDimension, tzOffsetMinutes?: number): DimensionSq
     case "asn":
       // Key is the AS number; label adds the ISP name seen on those clicks.
       return {
-        click: "c.asn",
-        conv: "c.asn",
+        click: "CAST(c.asn AS TEXT)",
+        conv: "CAST(c.asn AS TEXT)",
         label: "CASE WHEN c.asn IS NULL THEN NULL ELSE 'AS' || c.asn || COALESCE(' · ' || c.isp, '') END",
       };
     case "ip_range":

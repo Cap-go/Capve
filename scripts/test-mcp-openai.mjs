@@ -52,6 +52,17 @@ for (const name of names) {
   if (result?.isError || result?.error || (typeof result === "string" && /^Error\b/.test(result))) {
     throw new Error(`Tool returned an application error: ${name}`);
   }
+  // Hosts may serialize either the structured result or its MCP text content.
+  const content = Array.isArray(result) ? result : result?.content;
+  let data = result?.structuredContent ?? result;
+  if (Array.isArray(content) && !result?.structuredContent) {
+    const text = content.filter((item) => item.type === "text");
+    try { data = text.length === 1 ? JSON.parse(text[0].text) : null; } catch { data = null; }
+  }
+  const valid = name === "whoami" ? typeof data?.user?.id === "string"
+    : name === "list_campaigns" ? Array.isArray(data?.programs)
+      : typeof data?.settings?.timezone === "string";
+  if (!valid) throw new Error(`Tool returned an unexpected result: ${name}`);
 }
 if (calls.some((call) => !names.includes(call.name))) throw new Error("Unexpected tool call outside the allowlist.");
 console.log(JSON.stringify({

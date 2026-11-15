@@ -180,6 +180,10 @@ try {
       assert(!diagnostics.includes("Warning: tool"), "Inspector reported tool-schema portability warnings");
       const output = JSON.parse(await readFile(outputFile, "utf8"));
       assert(method === "tools/list" ? output.tools?.length > 0 : output.content?.length > 0, `Inspector ${method}: missing result`);
+      if (method === "tools/call") {
+        assert.notEqual(output.isError, true, "Inspector whoami returned a tool error");
+        assert.equal(typeof output.structuredContent?.user?.id, "string", "Inspector whoami: missing user identity");
+      }
       console.log(`Inspector 2.15.0: ${method}${method === "tools/call" ? " whoami" : ""} passed.`);
     }
 

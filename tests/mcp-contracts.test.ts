@@ -3,6 +3,7 @@ import { Validator, type Schema } from "@cfworker/json-schema";
 import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import worker from "../worker";
 import { TOOLS, TOOLS_BY_NAME } from "../worker/mcp/tools";
+import { GROUP_DIMENSIONS } from "../worker/db/reports";
 import { registerTestUser, BROWSER_HEADERS } from "./helpers";
 import { initSql } from "./schema";
 
@@ -103,12 +104,21 @@ describe("MCP tool contracts against authenticated Worker responses", () => {
     const redirect = await request(`/r/${affiliate.code}?sub1=zone-1`, { headers: BROWSER_HEADERS, redirect: "manual" });
     expect(redirect.status).toBe(302);
     const clickId = new URL(redirect.headers.get("location")!).searchParams.get("click_id");
+    await env.DB.prepare("UPDATE clicks SET asn = 64500 WHERE id = ?").bind(clickId).run();
     const conversion = await request(`/click?cnv_id=${clickId}&payout=1&event=registration&key=${key.key}`);
     expect(conversion.ok).toBe(true);
     for (const name of ["get_campaign_stats", "list_clicks", "list_conversions", "report_trends"]) await call(name, { campaign_id });
     await call("report_campaigns");
     await call("report_grouped", { by: "campaign" });
     await call("report_drilldown", { by: "campaign,sub1" });
+    for (const by of GROUP_DIMENSIONS) await call("report_grouped", { by });
+    const asnReport = await call("report_grouped", { by: "asn" });
+    expect(row(asnReport, "rows").key).toBe("64500");
+    const asnDrilldown = await call("report_drilldown", { by: "asn,campaign" });
+    expect(row(asnDrilldown, "rows").key).toBe("64500");
+    expect(row(asnDrilldown, "rows").children).toEqual(expect.arrayContaining([
+      expect.objectContaining({ key: campaign_id }),
+    ]));
     const postback = item(await call("create_postback", { campaign_id, url: "https://merchant.example.com/postback?click={click_id}" }), "postback");
     await call("update_postback", { postback_id: postback.id, event: "registration" });
     await call("list_postbacks", { campaign_id });
