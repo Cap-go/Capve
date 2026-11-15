@@ -62,8 +62,9 @@ export async function findTrackingDomainByHost(
 }
 
 /**
- * Stores the latest Cloudflare state of a domain (or only the check time and errors when it failed).
- * Returns null when the domain was removed, or is being removed, in the meantime.
+ * Stores the latest Cloudflare state of a domain. A failed check only records its errors and time:
+ * it never writes back hostname fields from its own snapshot, which a parallel check may have
+ * replaced. Returns the row as stored, or null when the domain was removed, or is being removed.
  */
 export async function saveHostnameCheck(
   db: D1Database,
@@ -71,25 +72,31 @@ export async function saveHostnameCheck(
   check: { hostname: CustomHostname } | { errors: string[] },
   now = Date.now(),
 ): Promise<TrackingDomain | null> {
-  const next: TrackingDomain =
-    "hostname" in check
-      ? {
-          ...domain,
-          cf_hostname_id: check.hostname.id,
-          cf_status: check.hostname.status ?? null,
-          cf_ssl_status: check.hostname.ssl?.status ?? null,
-          cf_errors: JSON.stringify(hostnameErrors(check.hostname)),
-          checked_at: now,
-        }
-      : { ...domain, cf_errors: JSON.stringify(check.errors), checked_at: now };
-  const result = await db
+  if (!("hostname" in check)) {
+    return db
+      .prepare(
+        `UPDATE tracking_domains SET cf_errors = ?, checked_at = ?
+         WHERE id = ? AND user_id = ? AND deleting_at IS NULL RETURNING ${COLUMNS}`,
+      )
+      .bind(JSON.stringify(check.errors), now, domain.id, domain.user_id)
+      .first<TrackingDomain>();
+  }
+  const { hostname } = check;
+  return db
     .prepare(
       `UPDATE tracking_domains SET cf_hostname_id = ?, cf_status = ?, cf_ssl_status = ?, cf_errors = ?, checked_at = ?
-       WHERE id = ? AND user_id = ? AND deleting_at IS NULL`,
+       WHERE id = ? AND user_id = ? AND deleting_at IS NULL RETURNING ${COLUMNS}`,
     )
-    .bind(next.cf_hostname_id, next.cf_status, next.cf_ssl_status, next.cf_errors, next.checked_at, domain.id, domain.user_id)
-    .run();
-  return result.meta.changes ? next : null;
+    .bind(
+      hostname.id,
+      hostname.status ?? null,
+      hostname.ssl?.status ?? null,
+      JSON.stringify(hostnameErrors(hostname)),
+      now,
+      domain.id,
+      domain.user_id,
+    )
+    .first<TrackingDomain>();
 }
 
 /**

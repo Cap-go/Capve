@@ -167,6 +167,8 @@ function TrackingDomains({ canWrite }: { canWrite: boolean }) {
         },
       );
       setHostname("");
+      // The first load may still be running (and is dropped by the version bump): fetch the list.
+      await refresh().catch(() => {});
     });
   }
 

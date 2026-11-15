@@ -292,6 +292,29 @@ describe("automatic tracking domain setup", () => {
     expect(saveDuringRemoval).toBeNull();
   });
 
+  it("keeps a newer hostname when a parallel check fails with an older snapshot", async () => {
+    mockCloudflare(() => ok(hostname("ch_old", "both.example.com", "pending", "initializing")));
+    await add("both.example.com");
+    vi.restoreAllMocks();
+    const [stale] = await listTrackingDomains(env.DB, accountId);
+
+    // One check recreates the hostname as ch_new...
+    mockCloudflare((method) =>
+      method === "GET"
+        ? fail(404, 1436, "Custom hostname not found.")
+        : ok(hostname("ch_new", "both.example.com", "pending", "initializing")),
+    );
+    await expireChecks();
+    await list();
+    vi.restoreAllMocks();
+
+    // ...while another, started from the older row, fails and saves its error.
+    const saved = await saveHostnameCheck(env.DB, stale, { errors: ["Internal error"] });
+    expect(saved).toMatchObject({ cf_hostname_id: "ch_new", cf_errors: JSON.stringify(["Internal error"]) });
+    const [row] = await listTrackingDomains(env.DB, accountId);
+    expect(row.cf_hostname_id).toBe("ch_new");
+  });
+
   it("registers domains that were added before automatic setup was on", async () => {
     const legacy = await add("legacy.example.com", manual);
     expect(legacy.body.tracking_domain).toMatchObject({ status: "manual", dns_records: [] });
