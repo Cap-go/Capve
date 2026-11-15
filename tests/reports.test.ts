@@ -184,4 +184,85 @@ describe("phase 4 reporting", () => {
     expect(trends.length).toBeGreaterThan(0);
     expect(trends[0]?.clicks).toBeGreaterThan(0);
   });
+
+  it("buckets conversions by conversion date, not click date", async () => {
+    const headers = authHeaders;
+    const programRes = await SELF.fetch("http://localhost/api/programs", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name: "Date Bucket Test", destination_url: MERCHANT }),
+    });
+    const { program, convert_secret } = await json<{ program: { id: string }; convert_secret: string }>(programRes);
+    const affiliateRes = await SELF.fetch(`http://localhost/api/programs/${program.id}/affiliates`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name: "Date Test Partner" }),
+    });
+    const { affiliate } = await json<{ affiliate: { code: string } }>(affiliateRes);
+
+    await SELF.fetch(`http://localhost/r/${affiliate.code}`, {
+      redirect: "manual",
+      headers: BROWSER_HEADERS,
+    });
+
+    const clickRow = await env.DB.prepare(
+      "SELECT id FROM clicks WHERE program_id = ? ORDER BY created_at DESC LIMIT 1"
+    )
+      .bind(program.id)
+      .first<{ id: string }>();
+    expect(clickRow).toBeTruthy();
+    const clickId = clickRow!.id;
+
+    const now = new Date();
+    const clickDate = new Date(now.getTime() - 2 * 24 * 60 * 60 * 1000);
+    const conversionDate = new Date(now.getTime() - 1 * 24 * 60 * 60 * 1000);
+    
+    await env.DB.prepare("UPDATE clicks SET created_at = ? WHERE id = ?")
+      .bind(clickDate.getTime(), clickId)
+      .run();
+
+    const convertRes = await SELF.fetch("http://localhost/api/v1/convert", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Program-Secret": convert_secret,
+      },
+      body: JSON.stringify({
+        click_id: clickId,
+        order_id: "date-test-order-1",
+        event: "registration",
+        amount: 0,
+      }),
+    });
+    if (convertRes.status !== 200) {
+      const errText = await convertRes.text();
+      throw new Error(`Convert failed with ${convertRes.status}: ${errText}`);
+    }
+
+    await env.DB.prepare("UPDATE conversions SET created_at = ? WHERE click_id = ?")
+      .bind(conversionDate.getTime(), clickId)
+      .run();
+
+    const clickDateStr = clickDate.toISOString().split("T")[0];
+    const convDateStr = conversionDate.toISOString().split("T")[0];
+
+    const trendsRes = await SELF.fetch(
+      `http://localhost/api/reports/campaigns/${program.id}/trends`,
+      { headers },
+    );
+    expect(trendsRes.status).toBe(200);
+    const { trends } = await json<{ trends: Array<{ date: string; clicks: number; leads: number; events?: Record<string, number> }> }>(trendsRes);
+
+    const clickDay = trends.find((t) => t.date === clickDateStr);
+    const convDay = trends.find((t) => t.date === convDateStr);
+
+    expect(clickDay, `clickDay not found. Dates: ${JSON.stringify(trends.map((t) => ({ d: t.date, c: t.clicks, l: t.leads })))}`).toBeTruthy();
+    expect(clickDay!.clicks).toBe(1);
+    expect(clickDay!.leads).toBe(0);
+
+    expect(convDay, `convDay not found. Dates: ${JSON.stringify(trends.map((t) => ({ d: t.date, c: t.clicks, l: t.leads })))}`).toBeTruthy();
+    expect(convDay!.clicks).toBe(0);
+    expect(convDay!.leads).toBe(1);
+    expect(convDay!.events?.registration).toBe(1);
+  });
 });
