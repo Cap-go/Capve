@@ -464,20 +464,28 @@ export async function getGroupedReport(
     return acc;
   };
 
+  const isTimeDimension = TIME_DIMENSIONS.has(by);
+  
   for (const row of clickRows.results ?? []) {
     const acc = get(row.k, row.label);
     acc.clicks += row.clicks;
     acc.unique_clicks += row.unique_clicks;
     acc.bot_clicks += row.bot_clicks;
     acc.lp_clicks += row.lp_clicks;
-    acc.leads += row.converted_clicks;
+    // For time dimensions, leads are bucketed by conversion date (from convRows).
+    // For other dimensions, accumulate converted clicks from the click's dimension.
+    if (!isTimeDimension) {
+      acc.leads += row.converted_clicks;
+    }
     acc.cost += row.cost;
   }
   const currencyCounts = new Map<string, number>();
   for (const row of convRows.results ?? []) {
     const acc = get(row.k, row.label);
     const cur = row.cur || "USD";
-    acc.leads += row.clickless;
+    // For time dimensions, ALL leads come from conversion rows (click-attached + clickless).
+    // For other dimensions, only clickless conversions are added here.
+    acc.leads += isTimeDimension ? row.units : row.clickless;
     acc.cost += row.cpa_cost;
     acc.revenue_by_currency[cur] = (acc.revenue_by_currency[cur] ?? 0) + row.revenue;
     currencyCounts.set(cur, (currencyCounts.get(cur) ?? 0) + row.units);
