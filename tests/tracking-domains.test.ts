@@ -341,6 +341,64 @@ describe("automatic tracking domain setup", () => {
     expect(await retryHostnameCleanup(manual)).toEqual({ deleted: 0, failed: 0 });
   });
 
+  it("lets only one request remove a domain at a time", async () => {
+    mockCloudflare(() => ok(hostname("ch_once", "once.example.com", "active", "active")));
+    const created = await add("once.example.com");
+    vi.restoreAllMocks();
+    const path = `/api/tracking-domains/${created.body.tracking_domain.id}`;
+
+    let second: { status: number; body: { error?: string } } | undefined;
+    const cf = mockCloudflare(async () => {
+      // A second removal arrives while the first is deleting the hostname.
+      second = await call<{ error?: string }>(path, { method: "DELETE" });
+      return ok({ id: "ch_once" });
+    });
+    const first = await call(path, { method: "DELETE" });
+    expect(first.status).toBe(200);
+    expect(second).toMatchObject({ status: 409, body: { error: "This domain is already being removed." } });
+    expect(cf.calls).toEqual(["DELETE /ch_once"]);
+    expect(await listTrackingDomains(env.DB, accountId)).toEqual([]);
+  });
+
+  it("takes over a removal claim left by a request that died", async () => {
+    mockCloudflare(() => ok(hostname("ch_stale", "stale.example.com", "active", "active")));
+    const created = await add("stale.example.com");
+    vi.restoreAllMocks();
+    await env.DB.prepare("UPDATE tracking_domains SET removal_claim = 'dead', deleting_at = 1 WHERE user_id = ?")
+      .bind(accountId)
+      .run();
+    mockCloudflare(() => ok({ id: "ch_stale" }));
+    const removed = await call(`/api/tracking-domains/${created.body.tracking_domain.id}`, { method: "DELETE" });
+    expect(removed.status).toBe(200);
+  });
+
+  it("doesn't adopt a hostname that a cleanup is deleting, and retries later", async () => {
+    await env.DB.prepare(
+      "INSERT INTO tracking_domain_cleanup (cf_hostname_id, hostname, claim, claimed_at, created_at) VALUES ('ch_dying', 'again.example.com', 'cron', ?, 1)",
+    )
+      .bind(Date.now())
+      .run();
+    mockCloudflare((method) =>
+      method === "POST"
+        ? fail(409, 1406, "Duplicate custom hostname found.")
+        : ok([hostname("ch_dying", "again.example.com", "active", "active")]),
+    );
+    const created = await add("again.example.com");
+    expect(created.status).toBe(201);
+    expect(created.body.tracking_domain).toMatchObject({ status: "failed" });
+    expect(created.body.tracking_domain.errors[0]).toContain("still deleting an earlier setup");
+    const [row] = await listTrackingDomains(env.DB, accountId);
+    expect(row.cf_hostname_id).toBeNull();
+    vi.restoreAllMocks();
+
+    // The cleanup finishes; the next check registers a fresh hostname.
+    await env.DB.prepare("DELETE FROM tracking_domain_cleanup").run();
+    mockCloudflare(() => ok(hostname("ch_fresh", "again.example.com", "pending", "initializing")));
+    await expireChecks();
+    const listed = await list();
+    expect(listed.body.tracking_domains[0]).toMatchObject({ status: "pending", errors: [] });
+  });
+
   it("stops status checks from writing to a domain while it is removed", async () => {
     mockCloudflare(() => ok(hostname("ch_11", "mark.example.com", "pending", "initializing")));
     const created = await add("mark.example.com");

@@ -23,7 +23,7 @@ import {
   type HostnameSetup,
 } from "../lib/custom-hostnames";
 import { isAppHost } from "../lib/host-gate";
-import { discardHostname } from "../lib/tracking-domain-cleanup";
+import { cleanupHostname } from "../lib/tracking-domain-cleanup";
 import type { Env } from "../types";
 
 const MANUAL_HINT =
@@ -106,14 +106,15 @@ async function sync(db: D1Database, setup: HostnameSetup, domain: TrackingDomain
     if (retried.ok) hostname = retried.result;
   }
   const saved = await saveHostnameCheck(db, domain, { hostname }, now);
-  if (!saved && created) await discardHostname(db, setup, hostname.id, hostname.hostname);
+  if (!saved && created) await cleanupHostname(db, setup, hostname.id, hostname.hostname);
   return saved;
 }
 
 /**
- * Removes a domain: marks it (status checks then stop attaching hostnames to it), deletes the
- * Cloudflare hostname it has at that moment, then the row. When Cloudflare fails, the mark is
- * cleared and the domain stays, so its hostname is never left without a row.
+ * Removes a domain: claims the removal for this request (status checks then stop attaching
+ * hostnames to it, and parallel removals get "busy"), deletes the Cloudflare hostname it has at
+ * that moment, then the row. When Cloudflare fails, the claim is given back and the domain stays,
+ * so its hostname is never left without a row.
  */
 async function removeDomain(
   db: D1Database,
@@ -123,10 +124,11 @@ async function removeDomain(
 ): Promise<{ ok: true } | { ok: false; status: 404 | 409 | 502; message: string }> {
   const removal = await beginTrackingDomainRemoval(db, domainId, userId);
   if (!removal) return { ok: false, status: 404, message: "Not found" };
+  if (removal === "busy") return { ok: false, status: 409, message: "This domain is already being removed." };
   if (removal.cf_hostname_id) {
     // Without credentials the hostname can't be deleted: keep the row, the only record of it.
     if (!setup) {
-      await cancelTrackingDomainRemoval(db, domainId, userId);
+      await cancelTrackingDomainRemoval(db, domainId, removal.claim);
       return {
         ok: false,
         status: 409,
@@ -136,11 +138,13 @@ async function removeDomain(
     }
     const removed = await deleteCustomHostname(setup, removal.cf_hostname_id);
     if (!removed.ok) {
-      await cancelTrackingDomainRemoval(db, domainId, userId);
+      await cancelTrackingDomainRemoval(db, domainId, removal.claim);
       return { ok: false, status: 502, message: `Couldn't remove the domain from Cloudflare: ${removed.message}` };
     }
   }
-  await deleteTrackingDomain(db, domainId, userId);
+  if (!(await deleteTrackingDomain(db, domainId, userId, removal.claim))) {
+    return { ok: false, status: 409, message: "This domain is already being removed." };
+  }
   return { ok: true };
 }
 
@@ -181,7 +185,7 @@ trackingDomains.get("/", async (c) => {
     const provisionable = firstDomains(domains);
     const checked = await Promise.all(
       domains.map((domain) => {
-        if (domain.deleting_at || !due(domain, now)) return domain;
+        if (domain.removal_claim || !due(domain, now)) return domain;
         // Domains added by hand are only registered within the cap, oldest first.
         if (!domain.cf_hostname_id && !provisionable.has(domain.id)) {
           return saveHostnameCheck(c.env.DB, domain, { errors: [OVER_LIMIT] }, now);
@@ -236,7 +240,7 @@ trackingDomains.post("/", async (c) => {
     }
     const saved = await saveHostnameCheck(c.env.DB, domain, { hostname: created.result });
     if (!saved) {
-      await discardHostname(c.env.DB, setup, created.result.id, hostname);
+      await cleanupHostname(c.env.DB, setup, created.result.id, hostname);
       return c.json({ error: `${hostname} was removed while it was being set up` }, 409);
     }
     domain = saved;

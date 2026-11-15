@@ -1,23 +1,43 @@
 import {
+  claimHostnameCleanup,
   finishHostnameCleanup,
   isCustomHostnameInUse,
   listHostnameCleanup,
-  queueHostnameCleanup,
+  releaseHostnameCleanup,
 } from "../db/tracking-domains";
 import { deleteCustomHostname, hostnameSetup, type HostnameSetup } from "./custom-hostnames";
 import type { Env } from "../types";
 
-/** Cloudflare deletions per run, to stay well inside the Worker's subrequest budget. */
+/** Cloudflare deletions per hourly run, to stay well inside the Worker's subrequest budget. */
 const BATCH = 50;
 
+export type CleanupResult = "deleted" | "in_use" | "busy" | "failed";
+
 /**
- * Deletes a custom hostname that no domain uses (its domain was removed while it was being set
- * up). When Cloudflare fails, the hostname is queued and the hourly job retries it.
+ * Deletes a custom hostname that no domain uses (its domain was removed while it was being set up).
+ * The cleanup is claimed in the database first: while the claim is held no domain can save this
+ * hostname, so the "unused" check below can't be overtaken by a domain adopting it. When Cloudflare
+ * fails, the hostname stays queued and the hourly job retries it.
  */
-export async function discardHostname(db: D1Database, setup: HostnameSetup, cfHostnameId: string, hostname: string) {
-  if (await isCustomHostnameInUse(db, cfHostnameId)) return;
+export async function cleanupHostname(
+  db: D1Database,
+  setup: HostnameSetup,
+  cfHostnameId: string,
+  hostname: string,
+): Promise<CleanupResult> {
+  const claim = crypto.randomUUID();
+  if (!(await claimHostnameCleanup(db, cfHostnameId, hostname, claim))) return "busy";
+  if (await isCustomHostnameInUse(db, cfHostnameId)) {
+    await finishHostnameCleanup(db, cfHostnameId, claim);
+    return "in_use";
+  }
   const removed = await deleteCustomHostname(setup, cfHostnameId);
-  if (!removed.ok) await queueHostnameCleanup(db, cfHostnameId, hostname, removed.message);
+  if (removed.ok) {
+    await finishHostnameCleanup(db, cfHostnameId, claim);
+    return "deleted";
+  }
+  await releaseHostnameCleanup(db, cfHostnameId, claim, removed.message);
+  return "failed";
 }
 
 /** Hourly: retries queued hostname deletions until Cloudflare confirms them. */
@@ -27,19 +47,9 @@ export async function retryHostnameCleanup(env: Env): Promise<{ deleted: number;
   let deleted = 0;
   let failed = 0;
   for (const item of await listHostnameCleanup(env.DB, BATCH)) {
-    // A domain added again for the same hostname may have taken this hostname over.
-    if (await isCustomHostnameInUse(env.DB, item.cf_hostname_id)) {
-      await finishHostnameCleanup(env.DB, item.cf_hostname_id);
-      continue;
-    }
-    const removed = await deleteCustomHostname(setup, item.cf_hostname_id);
-    if (removed.ok) {
-      await finishHostnameCleanup(env.DB, item.cf_hostname_id);
-      deleted++;
-    } else {
-      await queueHostnameCleanup(env.DB, item.cf_hostname_id, item.hostname, removed.message);
-      failed++;
-    }
+    const result = await cleanupHostname(env.DB, setup, item.cf_hostname_id, item.hostname);
+    if (result === "deleted") deleted++;
+    if (result === "failed") failed++;
   }
   return { deleted, failed };
 }

@@ -447,14 +447,17 @@ CREATE TABLE IF NOT EXISTS tracking_domains (
   cf_ssl_status TEXT,
   cf_errors TEXT,
   checked_at INTEGER,
+  removal_claim TEXT,
   deleting_at INTEGER
 );
 
 CREATE TABLE IF NOT EXISTS tracking_domain_cleanup (
   cf_hostname_id TEXT PRIMARY KEY,
   hostname TEXT NOT NULL,
-  attempts INTEGER NOT NULL DEFAULT 1,
+  attempts INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
+  claim TEXT,
+  claimed_at INTEGER,
   created_at INTEGER NOT NULL
 );
 
