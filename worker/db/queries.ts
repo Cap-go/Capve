@@ -13,6 +13,7 @@ import {
   approvedStatusSql,
   computeEventMetrics,
   conversionRatePct,
+  isApprovedStatus,
   primaryCurrency,
 } from "../lib/metrics";
 
@@ -530,12 +531,25 @@ export async function recordConversion(
     return { status: "duplicate", conversion: existing };
   }
 
-  await db
-    .prepare(
-      "UPDATE conversions SET status = ?, status2 = ?, amount_cents = ?, updated_at = ? WHERE id = ?",
-    )
-    .bind(next.status, next.status2, next.amount_cents, Date.now(), existing.id)
-    .run();
+  const now = Date.now();
+  // When a conversion becomes approved (not pending/rejected), update created_at so it appears
+  // on the approval date in reports, not the initial tentative postback date.
+  const becameApproved = isApprovedStatus(next.status) && !isApprovedStatus(existing.status);
+  if (becameApproved) {
+    await db
+      .prepare(
+        "UPDATE conversions SET status = ?, status2 = ?, amount_cents = ?, created_at = ?, updated_at = ? WHERE id = ?",
+      )
+      .bind(next.status, next.status2, next.amount_cents, now, now, existing.id)
+      .run();
+  } else {
+    await db
+      .prepare(
+        "UPDATE conversions SET status = ?, status2 = ?, amount_cents = ?, updated_at = ? WHERE id = ?",
+      )
+      .bind(next.status, next.status2, next.amount_cents, now, existing.id)
+      .run();
+  }
   return { status: "updated", conversion: next, previous_status: existing.status };
 }
 
