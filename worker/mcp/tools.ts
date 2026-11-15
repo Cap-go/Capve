@@ -1,5 +1,8 @@
+import { RULE_FIELDS } from "../lib/rules";
 import { GROUP_DIMENSIONS, NON_ZONE_DIMENSIONS } from "../db/reports";
 import { SOURCE_TOOLS } from "./tools-sources";
+import { outputSchemaFor } from "./output-schemas";
+import type { Schema } from "@cfworker/json-schema";
 
 /** Internal API request an MCP tool call maps to. Runs with the caller's bearer token. */
 export type ApiCall = {
@@ -16,21 +19,23 @@ type JsonSchema = {
   additionalProperties?: boolean;
 };
 
-export type McpTool = {
+export type ToolDefinition = {
   name: string;
   title: string;
   description: string;
   inputSchema: JsonSchema;
-  annotations: { readOnlyHint: boolean; destructiveHint?: boolean; idempotentHint?: boolean };
+  annotations: { readOnlyHint: boolean; destructiveHint?: boolean; idempotentHint?: boolean; openWorldHint?: boolean };
   call: (args: Args) => ApiCall;
 };
+
+export type McpTool = ToolDefinition & { outputSchema: Schema };
 
 type Args = Record<string, unknown>;
 
 const str = (description: string) => ({ type: "string", description });
 const int = (description: string) => ({ type: "integer", description });
 const bool = (description: string) => ({ type: "boolean", description });
-const nullableStr = (description: string) => ({ type: ["string", "null"], description });
+const nullableStr = (description: string) => ({ anyOf: [{ type: "string" }, { type: "null" }], description });
 const enumOf = (values: readonly string[], description: string) => ({
   type: "string",
   enum: values,
@@ -40,7 +45,7 @@ const enumOf = (values: readonly string[], description: string) => ({
 const campaignId = str("Campaign id (prg_…). Use list_campaigns to find it.");
 const dateArg = (edge: string) =>
   str(
-    `${edge} of the report window: ISO date (2026-01-31) or Unix milliseconds. A date-only end includes that whole day (UTC).`,
+    `${edge} of the report window: ISO date (2026-01-31) or Unix milliseconds. Date-only bounds use the account timezone (get_settings); a date-only end includes that whole day.`,
   );
 
 const reportFilters = {
@@ -105,7 +110,7 @@ const pathFields = {
     ["direct", "lander", "lander_offer", "offer"],
     "direct = direct_url; lander = lander only; lander_offer = lander then offer via /lp; offer = offer only.",
   ),
-  weight: int("Rotation weight, integer >= 0 (default 100). 0 = no traffic."),
+  weight: { ...int("Rotation weight, integer >= 0 (default 100). 0 = no traffic."), minimum: 0 },
   sort_order: int("Order for top_to_bottom rotation."),
   direct_url: nullableStr("Destination for flow_type=direct (http/https)."),
   lander_id: nullableStr("Lander id (lp_…)."),
@@ -114,19 +119,23 @@ const pathFields = {
   landers: {
     type: "array",
     description: "Weighted landers; replaces the list. Overrides lander_id.",
+    maxItems: 50,
     items: {
       type: "object",
-      properties: { lander_id: str("Lander id."), weight: int("Weight (default 100).") },
+      properties: { lander_id: str("Lander id."), weight: { ...int("Weight (default 100)."), minimum: 0 } },
       required: ["lander_id"],
+      additionalProperties: false,
     },
   },
   offers: {
     type: "array",
     description: "Weighted offers; replaces the list. Overrides offer_id.",
+    maxItems: 50,
     items: {
       type: "object",
-      properties: { offer_id: str("Offer id."), weight: int("Weight (default 100).") },
+      properties: { offer_id: str("Offer id."), weight: { ...int("Weight (default 100)."), minimum: 0 } },
       required: ["offer_id"],
+      additionalProperties: false,
     },
   },
 };
@@ -135,16 +144,18 @@ const ruleFields = {
   name: str("Rule name."),
   conditions: {
     type: "array",
+    maxItems: 20,
     description:
       "AND-ed conditions. field: country, continent (EU, NA…), region, city, device_type, os, browser, isp, asn, language, connection (datacenter|residential), bot (yes|no), referrer_domain, ip (IP or CIDR), weekday (mon..sun), hour (9 or 9-17), sub1..sub10. op: in | not_in.",
     items: {
       type: "object",
       properties: {
-        field: str("Click field."),
+        field: enumOf(RULE_FIELDS, "Click field to match; values must use the representation described above."),
         op: enumOf(["in", "not_in"], "Operator."),
-        values: { type: "array", items: { type: "string" }, description: "Values (any match)." },
+        values: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 500, description: "Values (any match)." },
       },
       required: ["field", "values"],
+      additionalProperties: false,
     },
   },
   timezone: str("IANA timezone for weekday/hour conditions (default UTC)."),
@@ -161,7 +172,7 @@ const postbackEvent = nullableStr(
   "Conversion event this postback fires for (registration, ftd, deposit, ...); null = every conversion.",
 );
 
-export const TOOLS: McpTool[] = [
+const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "get_stripe_setup_status", title: "Platform Stripe setup status",
     description: "Platform admins only. Read deployed billing configuration and live Stripe account, Price, portal, webhook, and tax checks. Never returns credentials or changes settings.",
@@ -177,7 +188,7 @@ export const TOOLS: McpTool[] = [
   {
     name: "whoami",
     title: "Current user",
-    description: "Show the signed-in user, team role and account id this token acts as.",
+    description: "Identify the authenticated user and account before making changes. Returns user id, email, role (owner/admin/viewer), account_id and verification status. API tokens act on their personal account.",
     inputSchema: schema({}),
     annotations: read,
     call: () => ({ method: "GET", path: "/api/auth/me" }),
@@ -195,7 +206,7 @@ export const TOOLS: McpTool[] = [
   {
     name: "get_campaign",
     title: "Get campaign",
-    description: "Get one campaign by id.",
+    description: "Read one campaign using campaign_id from list_campaigns. Returns program with its name, destination, source, group and active/paused/archived status; no conversion secret.",
     inputSchema: schema({ campaign_id: campaignId }, ["campaign_id"]),
     annotations: read,
     call: (a) => ({ method: "GET", path: `/api/programs/${id(a, "campaign_id")}` }),
@@ -259,7 +270,7 @@ export const TOOLS: McpTool[] = [
     description: "Set status, group, traffic source or tags on several campaigns at once (e.g. pause).",
     inputSchema: schema(
       {
-        campaign_ids: { type: "array", items: { type: "string" }, description: "Campaign ids." },
+        campaign_ids: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1, description: "Campaign ids from list_campaigns." },
         status: enumOf(["active", "paused", "archived"], "New status."),
         group_id: nullableStr("Group id; null to clear."),
         traffic_source_id: nullableStr("Traffic source id; null to clear."),
@@ -312,12 +323,12 @@ export const TOOLS: McpTool[] = [
   {
     name: "list_clicks",
     title: "Click log",
-    description: "Recent clicks for a campaign with geo, device, subs and bot flag.",
+    description: "Recent clicks for a campaign, newest first: click id, affiliate name/code, IP, user agent, timestamp and whether converted. Use report_grouped for geo, device, sub-token and bot breakdowns.",
     inputSchema: schema(
       {
         campaign_id: campaignId,
-        limit: int("Max rows (1-200, default 50)."),
-        offset: int("Skip rows."),
+        limit: { ...int("Max rows (1-200, default 50)."), minimum: 1, maximum: 200 },
+        offset: { ...int("Skip rows."), minimum: 0 },
         from: dateArg("Start"),
         to: dateArg("End"),
       },
@@ -342,8 +353,8 @@ export const TOOLS: McpTool[] = [
     inputSchema: schema(
       {
         campaign_id: campaignId,
-        limit: int("Max rows (1-200, default 50)."),
-        offset: int("Skip rows."),
+        limit: { ...int("Max rows (1-200, default 50)."), minimum: 1, maximum: 200 },
+        offset: { ...int("Skip rows."), minimum: 0 },
         from: dateArg("Start"),
         to: dateArg("End"),
       },
@@ -561,7 +572,7 @@ export const TOOLS: McpTool[] = [
     inputSchema: schema(
       {
         kind: enumOf(["ip", "asn", "ua"], "Entry type."),
-        values: { type: "array", items: { type: "string" }, description: "Values to block." },
+        values: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1, maxItems: 200, description: "Values to block (1-200)." },
       },
       ["kind", "values"],
     ),
@@ -587,7 +598,7 @@ export const TOOLS: McpTool[] = [
       ["offers", "offers", "offers (URL, payout, network)"],
     ] as const
   ).map(
-    ([name, route, label]): McpTool => ({
+    ([name, route, label]): ToolDefinition => ({
       name: `list_${name}`,
       title: `List ${label.split(" (")[0]}`,
       description: `List ${label}.`,
@@ -599,7 +610,7 @@ export const TOOLS: McpTool[] = [
   {
     name: "create_group",
     title: "Create group",
-    description: "Create a campaign group.",
+    description: "Create a named group for organizing campaigns. Returns group with its id; pass that id as group_id to create_campaign or update_campaign.",
     inputSchema: schema({ name: str("Group name.") }, ["name"]),
     annotations: write,
     call: (a) => ({ method: "POST", path: "/api/entities/groups", body: pick(a, ["name"]) }),
@@ -620,8 +631,8 @@ export const TOOLS: McpTool[] = [
       {
         name: str("Traffic source name."),
         cost_type: enumOf(["cpc", "cpm", "cpa"], "Cost model."),
-        default_cost_cents: int("Default cost in cents (per click, per 1000 clicks, or per conversion)."),
-        postback_percent: int("Share of conversions reported back to the source (0-100)."),
+        default_cost_cents: { ...int("Default cost in cents (per click, per 1000 clicks, or per conversion)."), minimum: 0 },
+        postback_percent: { ...int("Share of conversions reported back to the source (0-100)."), minimum: 0, maximum: 100 },
       },
       ["name"],
     ),
@@ -660,7 +671,7 @@ export const TOOLS: McpTool[] = [
         name: str("Offer name."),
         url: str("Offer URL (http/https)."),
         network_id: nullableStr("Affiliate network id."),
-        payout_cents: int("Default payout in cents when the postback has none."),
+        payout_cents: { ...int("Default payout in cents when the postback has none."), minimum: 0 },
       },
       ["name", "url"],
     ),
@@ -680,7 +691,7 @@ export const TOOLS: McpTool[] = [
       ["offer", "offers", "offer", "Offer id (off_…).", "Fails with 409 while paths use it or it has tracked clicks."],
     ] as const
   ).map(
-    ([name, route, label, idHelp, note]): McpTool => ({
+    ([name, route, label, idHelp, note]): ToolDefinition => ({
       name: `delete_${name}`,
       title: `Delete ${label}`,
       description: `Delete a ${label}. ${note}`,
@@ -698,8 +709,8 @@ export const TOOLS: McpTool[] = [
         traffic_source_id: str("Traffic source id (src_…)."),
         name: str("New name."),
         cost_type: enumOf(["cpc", "cpm", "cpa"], "Cost model."),
-        default_cost_cents: int("Default cost in cents."),
-        postback_percent: int("Share of conversions reported back to the source (0-100)."),
+        default_cost_cents: { ...int("Default cost in cents."), minimum: 0 },
+        postback_percent: { ...int("Share of conversions reported back to the source (0-100)."), minimum: 0, maximum: 100 },
       },
       ["traffic_source_id"],
     ),
@@ -749,7 +760,7 @@ export const TOOLS: McpTool[] = [
         name: str("New name."),
         url: str("New URL (http/https)."),
         network_id: nullableStr("Affiliate network id; null to clear."),
-        payout_cents: int("Default payout in cents."),
+        payout_cents: { ...int("Default payout in cents."), minimum: 0 },
       },
       ["offer_id"],
     ),
@@ -853,7 +864,7 @@ export const TOOLS: McpTool[] = [
     description:
       "Recent delivery attempts of one outgoing postback (newest first): URL sent, HTTP status, error, attempt (1 = first try, 2 = retry). Use to debug postbacks that do not reach the network or traffic source.",
     inputSchema: schema(
-      { postback_id: str("Postback id (pb_…)."), limit: int("Max attempts to return (1-100, default 20).") },
+      { postback_id: str("Postback id (pb_…)."), limit: { ...int("Max attempts to return (1-100, default 20)."), minimum: 1, maximum: 100 } },
       ["postback_id"],
     ),
     annotations: read,
@@ -963,7 +974,7 @@ export const TOOLS: McpTool[] = [
       {
         by: str(`Comma-separated dimensions, 1 to 4 of: ${GROUP_DIMENSIONS.join(", ")}.`),
         campaign_id: str("Only this campaign."),
-        limit: int("Max children per row (default 50, max 200)."),
+        limit: { ...int("Max children per row (default 50, max 200)."), minimum: 1, maximum: 200 },
         ...reportFilters,
       },
       ["by"],
@@ -983,7 +994,7 @@ export const TOOLS: McpTool[] = [
   {
     name: "get_settings",
     title: "Account settings",
-    description: "Account settings, including the report timezone (IANA).",
+    description: "Read the account report timezone (IANA name) before choosing date-only report bounds. Returns settings.timezone; changing it uses update_settings.",
     inputSchema: schema({}),
     annotations: read,
     call: () => ({ method: "GET", path: "/api/settings" }),
@@ -1029,7 +1040,7 @@ export const TOOLS: McpTool[] = [
         ),
         roi_below: { type: "number", description: "alert: fire when ROI % is below this." },
         spend_above_cents: int("alert: fire when cost in cents is above this."),
-        window_hours: int("Look-back window in hours (1-720, default 24)."),
+        window_hours: { ...int("Look-back window in hours (1-720, default 24)."), minimum: 1, maximum: 720 },
         notify_email: str("Email to notify."),
         webhook_url: str("Webhook URL (http/https) receiving a JSON POST."),
         enabled: bool("Enabled (default true)."),
@@ -1075,7 +1086,7 @@ export const TOOLS: McpTool[] = [
     name: "run_automation_rule",
     title: "Run automation rule now",
     description:
-      "Evaluate a rule immediately; returns newly blacklisted zones or whether the alert fired.",
+      "Evaluate a rule immediately; may blacklist zones and send configured email/webhook notifications. Returns newly blacklisted zones, whether the alert fired, and notification delivery status.",
     inputSchema: schema({ rule_id: str("Rule id.") }, ["rule_id"]),
     annotations: write,
     call: (a) => ({ method: "POST", path: `/api/automation/rules/${id(a, "rule_id")}/run` }),
@@ -1120,7 +1131,7 @@ export const TOOLS: McpTool[] = [
       {
         campaign_id: campaignId,
         dimension: str("Dimension (default sub1)."),
-        values: { type: "array", items: { type: "string" }, description: "Zone values." },
+        values: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1, maxItems: 500, description: "Zone values (1-500)." },
       },
       ["campaign_id", "values"],
     ),
@@ -1267,5 +1278,29 @@ export const TOOLS: McpTool[] = [
   // Traffic source templates, tokens and cost (worker/mcp/tools-sources.ts)
   ...SOURCE_TOOLS,
 ];
+
+// Annotations describe effects, including network calls and replacement of existing data.
+const EXTERNAL_TOOLS = new Set([
+  "get_stripe_setup_status", "list_tracking_domains", "add_tracking_domain", "delete_tracking_domain",
+  "sync_traffic_source_cost", "run_automation_rule",
+]);
+const OVERWRITE_TOOLS = new Set([
+  "bulk_update_campaigns", "run_automation_rule", "invite_team_member",
+]);
+export const TOOLS: McpTool[] = TOOL_DEFINITIONS.map((tool) => {
+  const readOnlyHint = tool.annotations.readOnlyHint && tool.name !== "list_tracking_domains";
+  const destructiveHint = !readOnlyHint && (tool.annotations.destructiveHint === true ||
+    tool.name.startsWith("update_") || tool.name.startsWith("set_") || OVERWRITE_TOOLS.has(tool.name));
+  return {
+    ...tool,
+    outputSchema: outputSchemaFor(tool.name),
+    annotations: {
+      readOnlyHint,
+      destructiveHint,
+      idempotentHint: readOnlyHint || (tool.annotations.idempotentHint ?? false),
+      openWorldHint: EXTERNAL_TOOLS.has(tool.name),
+    },
+  };
+});
 
 export const TOOLS_BY_NAME = new Map(TOOLS.map((tool) => [tool.name, tool]));

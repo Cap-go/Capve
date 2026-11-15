@@ -1,5 +1,5 @@
 import { TOKEN_SLOTS } from "../lib/source-templates";
-import { ToolInputError, type McpTool } from "./tools";
+import { ToolInputError, type ToolDefinition } from "./tools";
 
 // Kept in its own file so traffic-source / cost tools merge cleanly with tools.ts.
 // ToolInputError is only used lazily inside `call`, so the circular import is safe.
@@ -8,7 +8,7 @@ type Args = Record<string, unknown>;
 
 const str = (description: string) => ({ type: "string", description });
 const int = (description: string) => ({ type: "integer", description });
-const nullableStr = (description: string) => ({ type: ["string", "null"], description });
+const nullableStr = (description: string) => ({ anyOf: [{ type: "string" }, { type: "null" }], description });
 
 function schema(properties: Record<string, unknown>, required: string[] = []) {
   return { type: "object" as const, properties, required, additionalProperties: false };
@@ -30,6 +30,7 @@ const overwrite = { readOnlyHint: false, destructiveHint: true, idempotentHint: 
 
 const tokenSchema = {
   type: "array",
+  maxItems: 20,
   description:
     "Named tokens: each maps a query param of the source's traffic to a click slot and shows `name` in reports.",
   items: {
@@ -50,7 +51,7 @@ const tokenSchema = {
   },
 };
 
-export const SOURCE_TOOLS: McpTool[] = [
+export const SOURCE_TOOLS: ToolDefinition[] = [
   {
     name: "list_source_templates",
     title: "List traffic source and network templates",
@@ -69,7 +70,7 @@ export const SOURCE_TOOLS: McpTool[] = [
       {
         template_id: str("Template id from list_source_templates (e.g. adcash)."),
         name: str("Name (defaults to the template name)."),
-        default_cost_cents: int("Default cost in cents."),
+        default_cost_cents: { ...int("Default cost in cents."), minimum: 0 },
       },
       ["template_id"],
     ),
@@ -172,7 +173,7 @@ export const SOURCE_TOOLS: McpTool[] = [
         date: str("One UTC day (YYYY-MM-DD). Or use from/to."),
         from: str("Range start: ISO date/time or Unix ms."),
         to: str("Range end: ISO date/time or Unix ms (a date means end of that day)."),
-        total_cents: int("Total cost in cents for the matching clicks."),
+        total_cents: { ...int("Total cost in cents for the matching clicks."), minimum: 0 },
         filter_dim: str("Token param of the source (zoneid) or click field (sub1..sub10, country, external_id)."),
         filter_value: str("Value to match, e.g. the zone id."),
       },

@@ -75,7 +75,7 @@ describe("MCP server", () => {
 
     const notified = await SELF.fetch("http://localhost/mcp", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+      headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", Authorization: `Bearer ${token}` },
       body: JSON.stringify({ jsonrpc: "2.0", method: "notifications/initialized" }),
     });
     expect(notified.status).toBe(202);

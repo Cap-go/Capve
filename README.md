@@ -53,6 +53,8 @@ Cursor / VS Code / Windsurf (`mcp.json`):
 
 Tokens act as the user who created them, can be revoked from the dashboard, and cannot create more tokens. Only a SHA-256 hash is stored.
 
+See [MCP testing](docs/mcp-testing.md) for Inspector, Manufact, Cloudflare, MCPJam and OpenAI checks. The OpenAI Responses API can supply a bearer token; direct authenticated ChatGPT plugins require OAuth, which Capve does not currently implement.
+
 ## Quick install
 
 1. Click **Deploy to Cloudflare** above (or use the [deploy button docs](https://developers.cloudflare.com/workers/platform/deploy-buttons/)).
