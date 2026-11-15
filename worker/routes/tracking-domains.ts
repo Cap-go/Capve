@@ -107,6 +107,30 @@ async function sync(db: D1Database, setup: HostnameSetup, domain: TrackingDomain
   return saved;
 }
 
+/**
+ * Removes a domain: marks it (status checks then stop attaching hostnames to it), deletes the
+ * Cloudflare hostname it has at that moment, then the row. When Cloudflare fails, the mark is
+ * cleared and the domain stays, so its hostname is never left without a row.
+ */
+async function removeDomain(
+  db: D1Database,
+  setup: HostnameSetup | null,
+  domainId: string,
+  userId: string,
+): Promise<{ ok: true } | { ok: false; notFound: boolean; message: string }> {
+  const removal = await beginTrackingDomainRemoval(db, domainId, userId);
+  if (!removal) return { ok: false, notFound: true, message: "Not found" };
+  if (setup && removal.cf_hostname_id) {
+    const removed = await deleteCustomHostname(setup, removal.cf_hostname_id);
+    if (!removed.ok) {
+      await cancelTrackingDomainRemoval(db, domainId, userId);
+      return { ok: false, notFound: false, message: removed.message };
+    }
+  }
+  await deleteTrackingDomain(db, domainId, userId);
+  return { ok: true };
+}
+
 /** Hostnames that belong to the install itself: the app host, its subdomains and the CNAME target. */
 function reservedHostname(hostname: string, env: Env, setup: HostnameSetup | null): boolean {
   if (isAppHost(hostname, env)) return true;
@@ -171,7 +195,8 @@ trackingDomains.post("/", async (c) => {
   if (setup) {
     const created = await createCustomHostname(setup, hostname);
     if (!created.ok) {
-      await deleteTrackingDomain(c.env.DB, domain.id, session.account_id);
+      // A status check may have provisioned the new row meanwhile: remove it the same way as DELETE.
+      await removeDomain(c.env.DB, setup, domain.id, session.account_id);
       const userError = created.status >= 400 && created.status < 500 && created.status !== 401 && created.status !== 403;
       return c.json(
         { error: `Cloudflare couldn't set up ${hostname}: ${created.message}` },
@@ -191,21 +216,10 @@ trackingDomains.post("/", async (c) => {
 trackingDomains.delete("/:id", async (c) => {
   const session = await requireWrite(c);
   if (session instanceof Response) return session;
-  const domainId = c.req.param("id");
-  // Marking first means a concurrent status check can't attach a new hostname after this read.
-  const removal = await beginTrackingDomainRemoval(c.env.DB, domainId, session.account_id);
-  if (!removal) return c.json({ error: "Not found" }, 404);
-  const setup = hostnameSetup(c.env);
-  if (setup && removal.cf_hostname_id) {
-    const removed = await deleteCustomHostname(setup, removal.cf_hostname_id);
-    if (!removed.ok) {
-      await cancelTrackingDomainRemoval(c.env.DB, domainId, session.account_id);
-      return c.json({ error: `Couldn't remove the domain from Cloudflare: ${removed.message}` }, 502);
-    }
-  }
-  const ok = await deleteTrackingDomain(c.env.DB, domainId, session.account_id);
-  if (!ok) return c.json({ error: "Not found" }, 404);
-  return c.json({ ok: true });
+  const removed = await removeDomain(c.env.DB, hostnameSetup(c.env), c.req.param("id"), session.account_id);
+  if (removed.ok) return c.json({ ok: true });
+  if (removed.notFound) return c.json({ error: "Not found" }, 404);
+  return c.json({ error: `Couldn't remove the domain from Cloudflare: ${removed.message}` }, 502);
 });
 
 /** Pick the tracking domain of a campaign (null = default app URL). */

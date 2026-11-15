@@ -209,6 +209,24 @@ describe("automatic tracking domain setup", () => {
     expect((await list(manual)).body.tracking_domains).toEqual([]);
   });
 
+  it("removes a hostname a status check attached before a failed add rolled back", async () => {
+    const cf = mockCloudflare(async (method) => {
+      if (method === "POST") {
+        // A parallel list provisions the new row while this add is still waiting on Cloudflare.
+        const [row] = await listTrackingDomains(env.DB, accountId);
+        await saveHostnameCheck(env.DB, row, {
+          hostname: hostname("ch_parallel", "racy.example.com", "pending", "initializing"),
+        });
+        return fail(503, 1000, "Service unavailable");
+      }
+      return ok({ id: "ch_parallel" });
+    });
+    const failed = await add("racy.example.com");
+    expect(failed.status).toBe(502);
+    expect(cf.calls).toEqual(["POST ", "DELETE /ch_parallel"]);
+    expect(await listTrackingDomains(env.DB, accountId)).toEqual([]);
+  });
+
   it("reserves the app host, its subdomains and the CNAME target", async () => {
     const cf = mockCloudflare(() => ok(hostname("ch_x", "x", "pending", "initializing")));
     for (const reserved of ["capve.test", "track.capve.test", "domains.capve.test"]) {

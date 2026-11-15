@@ -13,7 +13,7 @@ Capve sets domains up one of two ways:
 
 Each hostname becomes a [Cloudflare for SaaS custom hostname](https://developers.cloudflare.com/cloudflare-for-platforms/cloudflare-for-saas/) on the platform zone (`capve.app` for the hosted service).
 
-1. **Add.** `POST /api/tracking-domains` stores the domain and creates the custom hostname with HTTP domain validation. If Cloudflare refuses, the domain is not saved and the user sees Cloudflare's reason.
+1. **Add.** `POST /api/tracking-domains` stores the domain and creates the custom hostname with HTTP domain validation. If Cloudflare refuses, the domain is removed the same way as in step 5 (including any hostname a parallel status check attached) and the user sees Cloudflare's reason.
 2. **Point DNS.** The response and the Settings page show one record: `CNAME track.example.com → domains.capve.app`. Users on Cloudflare DNS set it to DNS only.
 3. **Go live.** `GET /api/tracking-domains` re-checks domains with Cloudflare: pending ones at most every 15 seconds, active ones hourly. The Settings page polls while a domain is waiting. Statuses: `pending` (waiting for DNS or the certificate), `active`, `failed` (for example the CNAME was removed, or Cloudflare blocked the hostname) and `manual`. Cloudflare's verification errors are shown under the domain.
 4. **Recover.** When certificate validation times out, the next check restarts it. A domain added by hand before automatic setup was turned on, or whose custom hostname was deleted in Cloudflare, is registered again on the next check.
