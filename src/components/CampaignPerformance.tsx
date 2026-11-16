@@ -280,14 +280,26 @@ function DualAxisChart({
         ) + padding * 2;
         const tooltipHeight = tooltipLines.length * lineHeight + padding * 2;
         
-        let tooltipX = leftPts[hoveredIndex][0] + 12;
-        let tooltipY = Math.min(leftPts[hoveredIndex][1], rightPts[hoveredIndex][1]) - 10;
+        const dataPointY = Math.min(leftPts[hoveredIndex][1], rightPts[hoveredIndex][1]);
+        const dataPointX = leftPts[hoveredIndex][0];
+        
+        let tooltipX = dataPointX + 12;
+        let tooltipY = dataPointY - 10;
         
         if (tooltipX + tooltipWidth > width - pad.r) {
-          tooltipX = leftPts[hoveredIndex][0] - tooltipWidth - 12;
+          tooltipX = dataPointX - tooltipWidth - 12;
         }
+        
+        if (tooltipX < pad.l) {
+          tooltipX = pad.l;
+        }
+        
         if (tooltipY - tooltipHeight < pad.t) {
-          tooltipY = Math.max(leftPts[hoveredIndex][1], rightPts[hoveredIndex][1]) + tooltipHeight + 10;
+          tooltipY = Math.max(leftPts[hoveredIndex][1], rightPts[hoveredIndex][1]) + 18;
+        }
+        
+        if (tooltipY > height - pad.b) {
+          tooltipY = height - pad.b;
         }
         
         return (
