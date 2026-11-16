@@ -15,7 +15,8 @@
     "remove-access": "bun run scripts/remove-access.mjs",
     "test:mcp:clients": "node scripts/test-mcp-clients.mjs",
     "test:mcp:external": "node scripts/test-mcp-clients.mjs --external",
-    "test:mcp:openai": "node scripts/test-mcp-openai.mjs"
+    "test:mcp:openai": "node scripts/test-mcp-openai.mjs",
+    "test:browser": "playwright test"
   },
   "dependencies": {
     "@cfworker/json-schema": "^4.1.6",
@@ -32,7 +33,9 @@
     "@cloudflare/workers-types": "^4.20250826.0",
     "@modelcontextprotocol/client": "2.4.0",
     "@modelcontextprotocol/sdk": "^1.32.2",
+    "@playwright/test": "1.61.1",
     "@tailwindcss/vite": "^4.1.12",
+    "@types/node": "^24",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",
     "@vitejs/plugin-react": "^5.0.2",
