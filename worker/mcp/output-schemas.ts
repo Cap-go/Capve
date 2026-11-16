@@ -97,7 +97,23 @@ const trigger = object({ ...entityFields, program_id: nullableText, event: text,
 const success = object({ ok: { type: "boolean", const: true } });
 const postbackUrls = object({ default: text, registration: text, ftd: text });
 
+const biddingConfig = object({
+  enabled: boolean, dimension: text, currency: text, window_hours: integer,
+  conversion_lag_hours: integer, min_clicks: integer, min_spend_cents: integer,
+  min_conversions: integer, target_roi: integer, max_change_pct: integer,
+});
+const biddingSettings = { config: biddingConfig, revision: integer, next_run_at: timestamp };
+const biddingRun = object({ id: text, created_at: timestamp, result: object({
+  model: text, from: timestamp, to: timestamp, config: biddingConfig,
+  decisions: array(object({ zone: text, clicks: integer, conversions: integer, cost_cents: cents,
+    revenue_cents: cents, roi: nullableNumber, change_pct: integer, reason: text })),
+}) });
+
 const contracts: Record<string, Schema> = {
+  get_bidding_settings: object({ ...biddingSettings, available: boolean, model: text, beta: boolean }),
+  set_bidding_settings: object(biddingSettings),
+  analyze_bidding: object({ run: biddingRun }),
+  get_bid_recommendations: object({ run: nullable(biddingRun) }),
   whoami: object({ user: nullable(object({
     id: text, email: text, role: text, account_id: text, account_email: text,
     impersonating: boolean, is_platform_admin: boolean, email_verified: boolean,
