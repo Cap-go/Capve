@@ -557,4 +557,40 @@ CREATE TABLE IF NOT EXISTS audit_log (
 );
 
 CREATE INDEX IF NOT EXISTS idx_audit_log_account ON audit_log(account_id, created_at);
+
+CREATE TABLE IF NOT EXISTS traffic_source_daily_stats (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  program_id TEXT NOT NULL REFERENCES programs(id) ON DELETE CASCADE,
+  traffic_source_id TEXT NOT NULL REFERENCES traffic_sources(id) ON DELETE CASCADE,
+  date TEXT NOT NULL,
+  external_campaign_id TEXT,
+  external_zone_id TEXT,
+  impressions INTEGER NOT NULL DEFAULT 0,
+  spend_cents INTEGER NOT NULL,
+  origin TEXT NOT NULL DEFAULT 'api',
+  created_at INTEGER NOT NULL,
+  updated_at INTEGER NOT NULL,
+  UNIQUE(program_id, date, external_campaign_id, external_zone_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_traffic_source_daily_stats_program_date 
+  ON traffic_source_daily_stats(program_id, date);
+CREATE INDEX IF NOT EXISTS idx_traffic_source_daily_stats_source_date 
+  ON traffic_source_daily_stats(traffic_source_id, date);
+
+CREATE TABLE IF NOT EXISTS traffic_source_campaign_mapping (
+  id TEXT PRIMARY KEY,
+  user_id TEXT NOT NULL REFERENCES users(id),
+  traffic_source_id TEXT NOT NULL REFERENCES traffic_sources(id) ON DELETE CASCADE,
+  program_id TEXT NOT NULL REFERENCES programs(id) ON DELETE CASCADE,
+  external_campaign_id TEXT NOT NULL,
+  created_at INTEGER NOT NULL,
+  UNIQUE(traffic_source_id, external_campaign_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_traffic_source_campaign_mapping_source 
+  ON traffic_source_campaign_mapping(traffic_source_id, external_campaign_id);
+CREATE INDEX IF NOT EXISTS idx_traffic_source_campaign_mapping_program 
+  ON traffic_source_campaign_mapping(program_id);
 `;

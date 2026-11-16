@@ -209,23 +209,23 @@ describe("traffic source templates, tokens and cost", () => {
     await api("PUT", `/api/sources/${source.id}/settings`, { api_provider: "nope" }, 400);
   });
 
-  it("Adcash adapter parses spend rows from a mocked API", async () => {
+  it("Adcash adapter parses spend rows with impressions from a mocked API", async () => {
     const calls: string[] = [];
     const rows = await adcashProvider.fetchSpend("k", { from: "2026-10-14", to: "2026-10-15" }, async (url, init) => {
       calls.push(url);
       expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer k");
       return Response.json({
         data: [
-          { date: "2026-10-14", campaign_id: 77, zone_id: "123", spend: "1.5" },
-          { day: "2026-10-15", campaign: "77", zone: "456", cost: 2 },
+          { date: "2026-10-14", campaign_id: 77, zone_id: "123", spend: "1.5", impressions: 1000 },
+          { day: "2026-10-15", campaign: "77", zone: "456", cost: 2, imps: 2500 },
           { date: "2026-10-15", spend: "oops" },
         ],
       });
     });
     expect(calls[0]).toContain("date_from=2026-10-14");
     expect(rows).toEqual([
-      { date: "2026-10-14", campaign_id: "77", zone_id: "123", spend_cents: 150 },
-      { date: "2026-10-15", campaign_id: "77", zone_id: "456", spend_cents: 200 },
+      { date: "2026-10-14", campaign_id: "77", zone_id: "123", spend_cents: 150, impressions: 1000 },
+      { date: "2026-10-15", campaign_id: "77", zone_id: "456", spend_cents: 200, impressions: 2500 },
     ]);
 
     await expect(
@@ -245,12 +245,12 @@ describe("traffic source templates, tokens and cost", () => {
       days: [day],
       fetchFn: async () =>
         Response.json([
-          { date: day, campaign_id: "77", zone_id: "123", spend: 3 },
-          { date: day, campaign_id: "77", zone_id: "456", spend: 1.25 },
+          { date: day, campaign_id: "77", zone_id: "123", spend: 3, impressions: 5000 },
+          { date: day, campaign_id: "77", zone_id: "456", spend: 1.25, impressions: 2000 },
           { date: "2000-01-01", campaign_id: "77", zone_id: "123", spend: 99 },
         ]),
     });
-    expect(result).toMatchObject({ updates: 2, clicks_updated: 2, total_cents: 425 });
+    expect(result).toMatchObject({ updates: 2, clicks_updated: 2, total_cents: 425, total_impressions: 0 });
     expect((await clickRow(z1))!.cost_cents).toBe(300);
     expect((await clickRow(z2))!.cost_cents).toBe(125);
 

@@ -18,6 +18,8 @@ export type CampaignReportRow = Program & {
   event_metrics: Record<string, EventMetrics>;
   currency: string;
   revenue_by_currency: Record<string, number>;
+  impressions?: number;
+  cost_source?: "daily_stats" | "clicks";
 };
 
 /** Approved conversions per event (registration, ftd, ...). Plain conversions are not listed. */
@@ -31,6 +33,8 @@ export type TrendPoint = {
   revenue_cents: number;
   cost_cents: number;
   events: EventCounts;
+  impressions?: number;
+  cost_source?: "daily_stats" | "clicks";
 };
 
 type ProgramRow = Program & {
@@ -316,6 +320,8 @@ export type GroupedReportRow = {
   currency: string;
   /** Approved revenue per currency (cents); currencies are never summed together. */
   revenue_by_currency: Record<string, number>;
+  impressions?: number;
+  cost_source?: "daily_stats" | "clicks";
 };
 
 export type GroupedReportOptions = ReportFilters & {
@@ -577,18 +583,64 @@ export async function listCampaignReports(
   const empty = computeMetrics({ clicks: 0, lp_clicks: 0, leads: 0, revenue_cents: 0, cost_cents: 0 });
   const currency = grouped[0]?.currency ?? "USD";
 
-  return (results ?? []).map((program) => ({
-    ...program,
-    group_name: program.group_name,
-    traffic_source_name: program.traffic_source_name,
-    cost_type: program.cost_type,
-    default_cost_cents: program.default_cost_cents ?? 0,
-    metrics: byCampaign.get(program.id)?.metrics ?? empty,
-    events: byCampaign.get(program.id)?.events ?? {},
-    event_metrics: byCampaign.get(program.id)?.event_metrics ?? {},
-    currency,
-    revenue_by_currency: byCampaign.get(program.id)?.revenue_by_currency ?? {},
-  }));
+  // Fetch daily stats for campaigns with imported cost/impressions
+  const dailyStatsMap = new Map<string, { impressions: number; cost_cents: number }>();
+  const programIds = (results ?? []).map((p) => p.id);
+  if (filters.from != null && filters.to != null && programIds.length > 0) {
+    const fromDate = new Date(filters.from).toISOString().slice(0, 10);
+    const toDate = new Date(filters.to).toISOString().slice(0, 10);
+    const placeholders = programIds.map(() => "?").join(",");
+    const { results: statsRows } = await db
+      .prepare(
+        `SELECT program_id, SUM(impressions) AS impressions, SUM(spend_cents) AS cost_cents
+         FROM traffic_source_daily_stats
+         WHERE program_id IN (${placeholders}) AND date >= ? AND date <= ?
+         GROUP BY program_id`,
+      )
+      .bind(...programIds, fromDate, toDate)
+      .all<{ program_id: string; impressions: number; cost_cents: number }>();
+    for (const row of statsRows ?? []) {
+      dailyStatsMap.set(row.program_id, { impressions: row.impressions, cost_cents: row.cost_cents });
+    }
+  }
+
+  return (results ?? []).map((program) => {
+    const clickMetrics = byCampaign.get(program.id)?.metrics ?? empty;
+    const dailyStats = dailyStatsMap.get(program.id);
+    const hasDailyStats = dailyStats && dailyStats.cost_cents > 0;
+    
+    // When daily stats exist, use their cost instead of click-based cost
+    const metrics = hasDailyStats
+      ? computeMetrics({
+          clicks: clickMetrics.clicks,
+          lp_clicks: clickMetrics.lp_clicks,
+          leads: clickMetrics.leads,
+          revenue_cents: clickMetrics.revenue_cents,
+          cost_cents: dailyStats!.cost_cents,
+        })
+      : clickMetrics;
+
+    const result: CampaignReportRow = {
+      ...program,
+      group_name: program.group_name,
+      traffic_source_name: program.traffic_source_name,
+      cost_type: program.cost_type,
+      default_cost_cents: program.default_cost_cents ?? 0,
+      metrics,
+      events: byCampaign.get(program.id)?.events ?? {},
+      event_metrics: byCampaign.get(program.id)?.event_metrics ?? {},
+      currency,
+      revenue_by_currency: byCampaign.get(program.id)?.revenue_by_currency ?? {},
+    };
+    
+    // Include impressions and cost_source when daily stats exist
+    if (dailyStats !== undefined) {
+      result.impressions = dailyStats.impressions;
+      result.cost_source = hasDailyStats ? "daily_stats" : "clicks";
+    }
+    
+    return result;
+  });
 }
 
 export async function getCampaignTrends(
@@ -603,17 +655,51 @@ export async function getCampaignTrends(
     campaign_id: programId,
     tz_offset_minutes: filters.tz_offset_minutes,
   });
+
+  // Fetch daily stats for each date
+  const dailyStatsMap = new Map<string, { impressions: number; cost_cents: number }>();
+  if (filters.from != null && filters.to != null) {
+    const fromDate = new Date(filters.from).toISOString().slice(0, 10);
+    const toDate = new Date(filters.to).toISOString().slice(0, 10);
+    const { results: statsRows } = await db
+      .prepare(
+        `SELECT date, SUM(impressions) AS impressions, SUM(spend_cents) AS cost_cents
+         FROM traffic_source_daily_stats
+         WHERE program_id = ? AND date >= ? AND date <= ?
+         GROUP BY date`,
+      )
+      .bind(programId, fromDate, toDate)
+      .all<{ date: string; impressions: number; cost_cents: number }>();
+    for (const row of statsRows ?? []) {
+      dailyStatsMap.set(row.date, { impressions: row.impressions, cost_cents: row.cost_cents });
+    }
+  }
+
   return rows
     .filter((row) => row.key)
-    .map((row) => ({
-      date: row.key as string,
-      clicks: row.metrics.clicks,
-      lp_clicks: row.metrics.lp_clicks,
-      leads: row.metrics.leads,
-      revenue_cents: row.metrics.revenue_cents,
-      cost_cents: row.metrics.cost_cents,
-      events: row.events,
-    }));
+    .map((row) => {
+      const date = row.key as string;
+      const dailyStats = dailyStatsMap.get(date);
+      const hasDailyStats = dailyStats && dailyStats.cost_cents > 0;
+
+      const result: TrendPoint = {
+        date,
+        clicks: row.metrics.clicks,
+        lp_clicks: row.metrics.lp_clicks,
+        leads: row.metrics.leads,
+        revenue_cents: row.metrics.revenue_cents,
+        cost_cents: hasDailyStats ? dailyStats!.cost_cents : row.metrics.cost_cents,
+        events: row.events,
+      };
+      
+      // Include impressions and cost_source when daily stats exist
+      if (dailyStats !== undefined) {
+        result.impressions = dailyStats.impressions;
+        result.cost_source = hasDailyStats ? "daily_stats" : "clicks";
+      }
+      
+      return result;
+    });
 }
 
 /** Hard cap on rows per CSV export; exports are streamed in keyset-paginated pages. */
