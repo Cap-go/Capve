@@ -77,7 +77,7 @@ function llmsTxt(pages: PageMeta[]): string {
   const lines = [
     "# Capve",
     "",
-    "> Capve is an open-source campaign and affiliate tracker (a Binom alternative) that runs on Cloudflare Workers and D1. It records ad clicks at the edge, routes them with rules and weighted rotations, receives conversions by S2S postback (Binom-style `cnv_id`, `payout`, `cnv_status`), filters bots, and reports profit, ROI, EPC and CR by any dimension. It includes an MCP server so AI assistants can manage campaigns. Hosted at https://capve.app from $74.50/month for 1M clicks (Pro: $149.50/month for 60M clicks), with a 14-day free trial and no card; the source is public at https://github.com/Cap-go/Capve.",
+    "> Capve is an open-source tracker for casino affiliates (a Binom alternative) that runs on Cloudflare Workers and D1. It connects paid traffic to registration, first-time deposit (FTD) and deposit events from affiliate programs. Compare traffic costs, reported payouts and cost per FTD by source, zone, geo, lander or offer. Routing rules, weighted offer tests, S2S postbacks and an MCP server support the casino affiliate workflow. Revenue reflects the payout amounts programs report; player deposits are not automatically affiliate earnings. Hosted at https://capve.app from $74.50/month for 1M clicks (Pro: $149.50/month for 60M clicks), with a 14-day free trial and no card; the source is public at https://github.com/Cap-go/Capve.",
     "",
   ];
   for (const section of sections) {

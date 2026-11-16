@@ -131,8 +131,8 @@ describe("MCP server", () => {
 
     const list = await rpc("tools/list");
     const names = list.result?.tools?.map((t) => t.name) ?? [];
-    // Landing page and README advertise "97 tools".
-    expect(names).toHaveLength(97);
+    // Landing page and README advertise "103 tools".
+    expect(names).toHaveLength(103);
     expect(names).toContain("list_activity");
     expect(names).toContain("get_billing_status");
     expect(names).toContain("get_stripe_setup_status");

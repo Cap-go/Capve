@@ -1,3 +1,4 @@
+import platforms from "./routes/platforms";
 import { discovery, oauth } from "./routes/oauth";
 import { oauthIssuer, OAUTH_SCOPE, registeredOAuthOrigin } from "./lib/oauth";
 import { billing } from "./routes/billing";
@@ -109,6 +110,7 @@ app.route("/api/campaigns", routing);
 app.route("/api/programs", campaignCosts);
 app.route("/api/campaigns", campaignCosts);
 app.route("/api/sources", sources);
+app.route("/api/platforms", platforms);
 app.route("/api/v1/convert", convert);
 app.route("/api/ops", ops);
 app.route("/api/reports/drilldown", drilldown);

@@ -1,7 +1,7 @@
 import { Link } from "react-router-dom";
 import { Icon } from "../../components/Icon";
 import { Pricing } from "../../components/Pricing";
-import { claudeCodeCommand, MCP_EXAMPLE_PROMPTS } from "../../lib/mcp";
+import { claudeCodeCommand } from "../../lib/mcp";
 import { PRODUCTION_APP_URL } from "../../lib/constants";
 import {
   CardGrid,
@@ -22,12 +22,18 @@ import { SOLUTIONS } from "../content/solutions";
 import { MarketingLayout } from "../Layout";
 import { ProductMock } from "../ProductMock";
 
+const CASINO_PROMPTS = [
+  "Compare cost per FTD and ROI by traffic source for my casino campaigns.",
+  "Show zones with registrations but no FTDs in the last seven days.",
+  "Set up a 50/50 split between these two casino offers and track registration and FTD events.",
+];
+
 const FLOW = [
-  { title: "Traffic source", body: "Pastes your campaign link with its tokens." },
+  { title: "Traffic source", body: "Sends paid traffic with campaign, creative and zone tokens." },
   { title: "Capve edge", body: "Records the click, applies rules, filters bots, picks a path." },
   { title: "Lander and offer", body: "Get the click id through URL macros." },
-  { title: "Postback", body: "The network calls Capve when the visitor converts." },
-  { title: "Report", body: "ROI by zone, creative, geo or sub ID. Sources get their postback." },
+  { title: "Postback", body: "The affiliate program reports registration, FTD and deposit events." },
+  { title: "Report", body: "Compare cost per FTD and reported revenue by source, zone and offer." },
 ];
 
 const PROOF = [
@@ -46,14 +52,14 @@ export function HomePage() {
         <Container className="relative grid items-center gap-12 pb-16 pt-10 sm:pt-16 lg:grid-cols-[1.05fr_1fr] lg:pb-24">
           <div className="min-w-0">
             <Link className="mk-eyebrow" to="/compare/binom">
-              <b>Open source</b> The Binom alternative on Cloudflare
+              <b>For casino affiliates</b> Open-source tracking on Cloudflare
               <Icon name="arrow" size={14} />
             </Link>
-            <h1 className="mk-h1 mt-6">Know which clicks make money.</h1>
+            <h1 className="mk-h1 mt-6">Casino affiliate tracking, from click to FTD.</h1>
             <p className="mk-lead mt-6 max-w-xl">
-              Capve is the campaign and affiliate tracker that runs on Cloudflare's edge. Fast redirects, S2S
-              postbacks, routing rules and ROI down to the sub ID, at half the price of Binom. And your AI
-              assistant can run it.
+              Connect traffic costs to registrations, first-time deposits and the revenue your affiliate programs
+              report. Compare casino offers, landers and zones in one place, then act through the dashboard
+              or your AI assistant.
             </p>
             <div className="mt-8">
               <TrialButtons secondary={{ label: "Compare trackers", href: "/compare" }} />
@@ -82,8 +88,8 @@ export function HomePage() {
           <SectionHeading
             center
             kicker="How it works"
-            title="From click to profit, in one place."
-            lead="The same model Binom users know: a campaign link in the traffic source, a postback URL in the network, and reports in between."
+            title="Follow the click through to the first deposit."
+            lead="A campaign link in the traffic source, event postbacks from the casino affiliate program, and the cost and conversion data you need to compare them."
           />
           <ol className="mk-flow mt-12">
             {FLOW.map((step, index) => (
@@ -101,8 +107,8 @@ export function HomePage() {
         <Container>
           <SectionHeading
             kicker="Product"
-            title="Everything a performance tracker should do."
-            lead="Tracking, routing, anti-fraud, postbacks, reports and automation. Every plan includes all of it."
+            title="The tools behind your next traffic decision."
+            lead="Track registrations and FTDs separately, compare offers by geo, and investigate zones that spend without converting. Every plan includes these tracking features."
           />
           <div className="mt-10">
             <CardGrid
@@ -115,13 +121,13 @@ export function HomePage() {
             />
           </div>
           <div className="mt-10 flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-sm font-semibold">Templates for</span>
+            <span className="mr-1 text-sm font-semibold">Tracking templates for</span>
             {[...SOURCE_TEMPLATE_NAMES, ...NETWORK_TEMPLATE_NAMES].map((name) => (
               <span className="mk-chip" key={name}>
                 {name}
               </span>
             ))}
-            <span className="mk-muted text-sm">and any source or network that can call a URL.</span>
+            <span className="mk-muted text-sm">with editable macros for your source and affiliate program.</span>
           </div>
         </Container>
       </section>
@@ -129,15 +135,15 @@ export function HomePage() {
       <section className="mk-dark py-16 sm:py-24">
         <Container className="grid items-center gap-12 lg:grid-cols-2">
           <div className="min-w-0">
-            <p className="mk-kicker">AI-native</p>
-            <h2 className="mk-h2 mt-2">Run your campaigns from Claude, Cursor or VS Code.</h2>
+            <p className="mk-kicker">Your affiliate workflow, through MCP</p>
+            <h2 className="mk-h2 mt-2">Ask about FTDs. Act on the evidence.</h2>
             <p className="mk-lead mt-4">
               Capve ships an MCP server with {MCP_TOOL_COUNT} tools. Connect your assistant with one token and
-              ask it to build campaigns, rotate landers, read reports and pause what loses money, with the same
-              permissions as your account.
+              ask it to compare cost per FTD, investigate weak zones, rotate casino offers and manage your Capve
+              campaigns, with your account's permissions.
             </p>
             <ul className="mt-6 space-y-3">
-              {MCP_EXAMPLE_PROMPTS.map((prompt) => (
+              {CASINO_PROMPTS.map((prompt) => (
                 <li className="border-l-2 border-[var(--color-brand)] pl-4 text-[15px] text-[#d6d6d3]" key={prompt}>
                   “{prompt}”
                 </li>
@@ -157,12 +163,12 @@ export function HomePage() {
             <div className="mk-card p-5 text-sm">
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-[#8d8d8a]">Example</p>
               <p className="font-semibold text-white">You</p>
-              <p className="mt-1 text-[#d6d6d3]">Which zones on my push campaigns lost money yesterday?</p>
+              <p className="mt-1 text-[#d6d6d3]">Which zones have spent without generating an FTD this week?</p>
               <p className="mt-4 font-semibold text-white">Assistant</p>
               <p className="mt-1 text-[#d6d6d3]">
                 Called <code className="mk-inline-code">report_grouped</code> by <code className="mk-inline-code">sub1</code>{" "}
-                for 3 campaigns. 14 zones spent $612 with no conversions. Want me to add them to the zone
-                blacklist?
+                for 3 casino campaigns. In this example, 14 zones spent $612 with no FTDs. Review their
+                conversion delay before adding them to a blacklist for export.
               </p>
             </div>
           </div>
@@ -173,8 +179,8 @@ export function HomePage() {
         <Container>
           <SectionHeading
             kicker="Solutions"
-            title="Made for the people who buy traffic."
-            lead="Solo buyers, teams, iGaming affiliates, brands with partner programs and developers each get a setup that fits."
+            title="Built around the casino affiliate workflow."
+            lead="From a solo media buyer testing an offer to a team managing several programs, keep traffic, conversion events and reported revenue together."
           />
           <div className="mt-10">
             <CardGrid
@@ -189,7 +195,7 @@ export function HomePage() {
                 {
                   icon: "swap",
                   title: "Switching trackers",
-                  body: "Step-by-step guides with term, macro and postback mappings for each tracker.",
+                  body: "Move casino campaigns with term, macro and postback mappings, then compare registration and FTD counts.",
                   href: "/migrate",
                 },
               ]}
@@ -204,7 +210,7 @@ export function HomePage() {
             <SectionHeading
               kicker="Compare"
               title="Clicks, not events. No server, no overage."
-              lead="How Capve stacks up against the trackers media buyers use most. Prices are each vendor's own published monthly list price."
+              lead="Compare the tracking infrastructure and pricing behind your casino affiliate campaigns. Prices are each vendor's own published monthly list price."
             />
             <div className="mt-10 overflow-x-auto rounded-2xl border border-[var(--velo-border)]">
               <table className="mk-table min-w-[720px]">
@@ -255,8 +261,8 @@ export function HomePage() {
           <div>
             <SectionHeading
               kicker="Switching"
-              title="Move over in an afternoon."
-              lead="Capve's postback uses Binom's parameter names: `cnv_id`, `payout`, `cnv_status`. Macros like `{clickid}` work as you expect. Each guide maps terms, tokens and postbacks for your current tracker."
+              title="Move one casino campaign first."
+              lead="Map your offers, source tokens and postbacks to Capve, then run a controlled slice of traffic. Compare registration, FTD and revenue totals before moving the rest."
             />
             <div className="mt-8 flex flex-wrap gap-3">
               <Link className="btn btn-primary mk-btn-lg" to="/migrate">
@@ -268,8 +274,8 @@ export function HomePage() {
             </div>
           </div>
           <CodeSnippet
-            label="Postback URL for your network"
-            text={`${PRODUCTION_APP_URL}/click?cnv_id={clickid}&payout={payout}&cnv_status={status}&key=YOUR_POSTBACK_KEY`}
+            label="FTD postback URL for your affiliate program"
+            text={`${PRODUCTION_APP_URL}/click?cnv_id={clickid}&payout={payout}&cnv_status={status}&event=ftd&key=YOUR_POSTBACK_KEY`}
           />
         </Container>
       </section>
@@ -285,7 +291,7 @@ export function HomePage() {
 
       <section className="py-16 sm:py-24">
         <Container className="grid gap-10 lg:grid-cols-[0.8fr_1.2fr]">
-          <SectionHeading kicker="FAQ" title="Questions buyers ask first" />
+          <SectionHeading kicker="FAQ" title="Questions casino affiliates ask first" />
           <FaqList faqs={HOME_FAQS} />
         </Container>
       </section>

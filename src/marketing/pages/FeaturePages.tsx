@@ -85,8 +85,8 @@ export function FeaturesIndexPage() {
       <PageHero
         crumbs={[{ label: "Home", href: "/" }, { label: "Product" }]}
         eyebrow="Product"
-        lead="Click tracking, routing, anti-fraud, postbacks, reports, automation and an MCP server. Every plan includes all of it."
-        title="One tracker for the whole funnel."
+        lead="Follow casino traffic from source and zone to registration, FTD and reported revenue. Tracking, routing, event postbacks and reports are included on every plan."
+        title="One tracker for your casino affiliate campaigns."
       />
       <section className="pb-16">
         <Container>
@@ -156,8 +156,8 @@ export function SolutionsIndexPage() {
       <PageHero
         crumbs={[{ label: "Home", href: "/" }, { label: "Solutions" }]}
         eyebrow="Solutions"
-        lead="Capve serves solo media buyers, buying teams, iGaming affiliates, brands with partner programs and developers. Pick the setup closest to yours."
-        title="Tracking for every side of performance marketing."
+        lead="Build a casino affiliate workflow around the way you buy traffic, compare offers, work as a team and automate decisions."
+        title="From your first casino offer to a full buying team."
       />
       <section className="pb-16">
         <Container>

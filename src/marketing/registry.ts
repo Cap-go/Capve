@@ -17,9 +17,9 @@ export type PageMeta = {
   jsonLd?: object[];
 };
 
-export const DEFAULT_TITLE = "Capve — Open-source campaign and affiliate tracking";
+export const DEFAULT_TITLE = "Capve — Casino affiliate tracking";
 export const DEFAULT_DESCRIPTION =
-  "Capve is an open-source Binom alternative: click tracking, S2S postbacks, ROI reports, and an MCP server for AI assistants. Runs on Cloudflare.";
+  "Open-source tracking for casino affiliates: registrations, FTDs, postbacks, offer comparisons and ROI by traffic source, with an MCP server for AI assistants.";
 
 const BRAND_SUFFIX = " | Capve";
 
@@ -58,7 +58,7 @@ const SOFTWARE_LD = {
   name: "Capve",
   url: absoluteUrl("/"),
   applicationCategory: "BusinessApplication",
-  applicationSubCategory: "Affiliate and campaign tracking",
+  applicationSubCategory: "Casino affiliate campaign tracking",
   operatingSystem: "Web",
   license: "https://www.gnu.org/licenses/agpl-3.0.html",
   description: DEFAULT_DESCRIPTION,
@@ -88,9 +88,9 @@ export const PAGES: PageMeta[] = [
   page({
     path: "/",
     section: "Home",
-    title: "Capve — Open-source campaign and affiliate tracker, a Binom alternative",
+    title: "Capve — Casino affiliate tracker for registrations, FTDs and ROI",
     description:
-      "Track ad clicks and affiliate conversions on Cloudflare's edge: S2S postbacks, routing rules, bot filtering and ROI by sub ID, with an MCP server for AI assistants. From $74.50/month.",
+      "Track casino affiliate campaigns from paid click to registration and FTD. Compare costs, reported revenue and offers by source, zone and geo. From $74.50/month.",
     jsonLd: [ORGANIZATION_LD, SOFTWARE_LD, faqLd(HOME_FAQS)],
   }),
   page({
@@ -104,9 +104,9 @@ export const PAGES: PageMeta[] = [
   page({
     path: "/features",
     section: "Product",
-    title: "Features: click tracking, postbacks, routing, reports and MCP",
+    title: "Casino affiliate tracking features: FTDs, postbacks, reports and MCP",
     description:
-      "Everything in Capve: edge click tracking, S2S postbacks with events, routing rules and rotations, bot filtering, reports with drilldown, automation and an MCP server.",
+      "Track casino offers with registration and FTD postbacks, lander rotation, bot filtering, cost and revenue reports, zone blacklist rules and an MCP server.",
     jsonLd: [breadcrumbLd([["Home", "/"], ["Product", "/features"]])],
   }),
   ...FEATURES.map((feature) =>
@@ -124,9 +124,9 @@ export const PAGES: PageMeta[] = [
   page({
     path: "/solutions",
     section: "Solutions",
-    title: "Solutions for media buyers, teams, iGaming, brands and developers",
+    title: "Casino affiliate workflows: media buying, offers, teams and automation",
     description:
-      "How media buyers, buying teams, iGaming affiliates, SaaS and e-commerce brands, and developers use Capve to track clicks, conversions and ROI.",
+      "How casino affiliates use Capve for paid traffic, registration and FTD attribution, offer testing, shared reporting and API automation.",
     jsonLd: [breadcrumbLd([["Home", "/"], ["Solutions", "/solutions"]])],
   }),
   ...SOLUTIONS.map((solution) =>
@@ -146,7 +146,7 @@ export const PAGES: PageMeta[] = [
     section: "Compare",
     title: "Capve vs Binom, Voluum, RedTrack, Keitaro and other trackers",
     description:
-      "Compare Capve with other campaign trackers on price, hosting, source code, AI access and free trial, using each vendor's own published pages.",
+      "Compare trackers for your casino affiliate workflow on price, hosting, source code, AI access and trial terms, using published vendor information.",
     jsonLd: [breadcrumbLd([["Home", "/"], ["Compare", "/compare"]])],
   }),
   ...COMPETITORS.map((competitor) =>
@@ -164,9 +164,9 @@ export const PAGES: PageMeta[] = [
   page({
     path: "/migrate",
     section: "Migrate",
-    title: "Migration guides: switch to Capve from another tracker",
+    title: "Move your casino affiliate tracking to Capve",
     description:
-      "Step-by-step guides to move from Binom, Voluum, RedTrack, Keitaro and other trackers to Capve, with term, macro and postback mappings and a parallel run.",
+      "Move casino campaigns from Binom, Voluum, RedTrack, Keitaro and other trackers to Capve. Map source tokens and event postbacks, then compare a parallel run.",
     jsonLd: [breadcrumbLd([["Home", "/"], ["Migration guides", "/migrate"]])],
   }),
   ...COMPETITORS.map((competitor) =>
@@ -214,7 +214,7 @@ export const PAGES: PageMeta[] = [
     path: docHref(doc.slug),
     section: "Docs" as const,
     title: `${doc.title} · Capve Docs`,
-    description: `${doc.description}. Capve documentation for open-source campaign and affiliate tracking.`,
+    description: `${doc.description}. Capve documentation for casino affiliate campaign tracking.`,
     jsonLd: [
       breadcrumbLd(
         doc.slug ? [["Home", "/"], ["Docs", "/docs"], [doc.title, docHref(doc.slug)]] : [["Home", "/"], ["Docs", "/docs"]],

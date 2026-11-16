@@ -54,7 +54,7 @@ export function SiteFooter() {
             {BRAND_NAME}
           </Link>
           <p className="mt-3 text-[var(--velo-muted)]">
-            Open-source campaign and affiliate tracking on Cloudflare. A Binom alternative at half the price.
+            Open-source casino affiliate tracking on Cloudflare. Follow traffic costs, registrations, FTDs and reported revenue.
           </p>
           <p className="mt-4 text-[var(--velo-muted)]">
             <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>

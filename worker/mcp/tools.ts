@@ -1,5 +1,6 @@
 import { RULE_FIELDS } from "../lib/rules";
 import { GROUP_DIMENSIONS, NON_ZONE_DIMENSIONS } from "../db/reports";
+import { PLATFORM_TOOLS } from "./tools-platforms";
 import { SOURCE_TOOLS } from "./tools-sources";
 import { outputSchemaFor } from "./output-schemas";
 import type { Schema } from "@cfworker/json-schema";
@@ -1277,6 +1278,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
 
   // Traffic source templates, tokens and cost (worker/mcp/tools-sources.ts)
   ...SOURCE_TOOLS,
+  ...PLATFORM_TOOLS,
   {
     name: "get_bidding_settings", title: "Get bidding beta settings",
     description: "Read campaign opt-in, decision limits and Workers AI availability. Beta is off by default.",
@@ -1329,7 +1331,7 @@ export const TOOLS: McpTool[] = TOOL_DEFINITIONS.map((tool) => {
       readOnlyHint,
       destructiveHint,
       idempotentHint: readOnlyHint || (tool.annotations.idempotentHint ?? false),
-      openWorldHint: EXTERNAL_TOOLS.has(tool.name),
+      openWorldHint: EXTERNAL_TOOLS.has(tool.name) || tool.annotations.openWorldHint === true,
     },
   };
 });

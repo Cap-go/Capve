@@ -168,7 +168,7 @@ export function CompareIndexPage() {
       <PageHero
         crumbs={[{ label: "Home", href: "/" }, { label: "Compare" }]}
         eyebrow="Compare"
-        lead="How Capve compares with the trackers media buyers and affiliates use most: price, hosting, source code and AI access, from each vendor's own published pages."
+        lead="Compare the trackers for your casino affiliate workflow: registration and FTD reporting, costs, hosting and AI access. Vendor prices and capabilities below link to their published sources."
         title="Capve vs other campaign trackers."
       />
       <section className="pb-16">
@@ -328,7 +328,7 @@ export function MigratePage() {
 
       <section className="py-16 sm:py-20">
         <Container>
-          <SectionHeading kicker="Step by step" title={`Move from ${competitor.name} without losing a conversion.`} />
+          <SectionHeading kicker="Step by step" title={`Validate your casino campaign before switching from ${competitor.name}.`} />
           <ol className="mt-10 divide-y divide-[var(--velo-border)] border-y border-[var(--velo-border)]">
             {guide.steps.map((step, index) => (
               <li className="grid gap-4 py-8 lg:grid-cols-[0.8fr_1.2fr] lg:gap-12" key={step.title}>
@@ -392,8 +392,8 @@ export function MigrateIndexPage() {
       <PageHero
         crumbs={[{ label: "Home", href: "/" }, { label: "Migration guides" }]}
         eyebrow="Migration guides"
-        lead="Each guide maps your current tracker's terms, macros and postback URL to Capve, then walks through a parallel run so you switch without losing conversions."
-        title="Switch trackers without losing a conversion."
+        lead="Map your casino offers, source tokens and event postbacks to Capve. Run a slice of traffic in parallel and compare registrations, FTDs and reported revenue before switching."
+        title="Move your casino affiliate workflow to Capve."
       />
       <section className="pb-16">
         <Container>
@@ -421,7 +421,7 @@ export function MigrateIndexPage() {
               ["Recreate networks and offers", "Swap the old click id macro for `{clickid}` in each offer URL."],
               ["Build one campaign", "Mirror a live campaign's paths, weights and rules in Capve."],
               ["Run both in parallel", "Point a slice of traffic at the Capve link and add Capve's postback in the network."],
-              ["Compare, then switch", "When clicks and conversions line up, move the rest and retire the old tracker."],
+              ["Compare, then switch", "Compare clicks, registration and FTD counts, and reported payouts before moving the rest."],
             ].map(([title, body], index) => (
               <li className="rounded-2xl border border-[var(--velo-border)] p-5" key={title}>
                 <span className="text-xs font-semibold text-[var(--color-brand-deep)]">0{index + 1}</span>

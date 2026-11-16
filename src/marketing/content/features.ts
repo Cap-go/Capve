@@ -1,7 +1,7 @@
 import type { Feature } from "./types";
 
 /** Number of MCP tools in worker/mcp/tools.ts (tests/marketing.test.ts keeps it in sync). */
-export const MCP_TOOL_COUNT = 97;
+export const MCP_TOOL_COUNT = 103;
 
 export const FEATURES: Feature[] = [
   {
@@ -9,12 +9,12 @@ export const FEATURES: Feature[] = [
     icon: "cursor",
     name: "Click tracking",
     summary: "Edge redirects with geo, device, ISP, 10 sub IDs and cost",
-    title: "Click tracking software that runs on Cloudflare's edge",
+    title: "Casino affiliate click tracking on Cloudflare's edge",
     description:
-      "Track every ad click with redirects served from Cloudflare's global network: geo, device, ISP, 10 sub IDs, unique and bot flags, external click IDs and per-click cost.",
+      "Track casino affiliate traffic with geo, device, source tokens, external click IDs and per-click cost. Connect each click to its lander, offer and conversion events.",
     eyebrow: "Click tracking",
-    h1: "Every click, recorded at the edge.",
-    lead: "Capve campaign links redirect from Cloudflare's global network and keep the context you need to optimize: where the click came from, what it was shown and what it cost.",
+    h1: "Know which traffic reached each casino offer.",
+    lead: "Keep the source, zone, creative and cost attached to each click. Capve redirects visitors through your landers and offers, then connects the affiliate program's registration and FTD postbacks to that traffic.",
     highlights: [
       {
         icon: "globe",
@@ -98,8 +98,8 @@ export const FEATURES: Feature[] = [
     description:
       "Server-to-server conversion tracking: Binom-style postback URLs, registration and FTD events, status updates, a postback key, outgoing postbacks to traffic sources and a JSON convert API.",
     eyebrow: "Postback tracking",
-    h1: "Conversions that arrive server to server.",
-    lead: "Networks call Capve's postback URL with the click id. Capve records the conversion, updates it when the status changes and passes it on to your traffic source. No pixel, no third-party cookie.",
+    h1: "Registrations, FTDs and deposits. Separate events.",
+    lead: "Your casino affiliate program calls Capve with a click ID and event. Record registrations, first-time deposits and repeat deposits separately, with the payout and status the program reports. Forward selected events to your traffic source.",
     highlights: [
       {
         icon: "swap",
@@ -142,8 +142,8 @@ export const FEATURES: Feature[] = [
         ],
       },
       {
-        title: "Convert API for your own checkout",
-        body: "Brands and SaaS teams can skip the network. Call `POST /api/v1/convert` with the campaign's `X-Program-Secret`. Calls are idempotent by order id, and CORS is enabled.",
+        title: "Conversion data from your own backend",
+        body: "If your affiliate workflow receives conversion data in a backend, send it to `POST /api/v1/convert` with the campaign's `X-Program-Secret`. Calls are idempotent by order ID, and CORS is enabled. Keep the secret on your server.",
         code: {
           label: "JSON convert API",
           text: `curl -X POST "https://capve.app/api/v1/convert" \\
@@ -154,7 +154,7 @@ export const FEATURES: Feature[] = [
       },
       {
         title: "Delivery log",
-        body: "Every outgoing postback is logged with its response for 30 days, so you can prove a source was told about a sale.",
+        body: "Inspect outgoing postbacks and their HTTP responses for 30 days. Check what Capve sent when a traffic source's conversion count differs from your report.",
       },
     ],
     docs: [
@@ -173,11 +173,11 @@ export const FEATURES: Feature[] = [
       },
       {
         q: "Which networks have templates?",
-        a: "TUNE (HasOffers), Everflow, CAKE, Affise, Cellxpert, Affilka (SOFTSWISS), MyAffiliates and a generic template. Any network that can call a URL works.",
+        a: "Editable presets include Cellxpert, Affilka (SOFTSWISS), MyAffiliates, TUNE, Everflow, CAKE and Affise. Verify the macros your affiliate program actually provides before sending traffic; a template is a starting point, not a verified connection to an operator.",
       },
       {
-        q: "Can I track sales without an affiliate network?",
-        a: "Yes. Your backend calls the postback URL or the JSON convert API after a sale, for example from a Stripe webhook.",
+        q: "Can my own backend report conversions?",
+        a: "Yes. Your backend can call the postback URL or JSON convert API with the click ID and reported conversion data. Capve records what you send; it does not calculate the commission owed by an affiliate program.",
       },
     ],
   },
@@ -186,12 +186,12 @@ export const FEATURES: Feature[] = [
     icon: "route",
     name: "Routing and rotation",
     summary: "Rules, paths, weighted landers and offers, LP clicks",
-    title: "Traffic routing rules, lander and offer rotation (TDS)",
+    title: "Casino offer routing, lander tests and traffic rotation",
     description:
       "Route each click by geo, device, OS, browser, ISP, language, time or sub ID. Weighted, sticky, pinned or top-to-bottom rotation across landers and offers, with LP click tracking.",
     eyebrow: "Routing",
-    h1: "Send every click where it converts best.",
-    lead: "Rules decide which path a click takes. Paths split traffic across landers and offers by weight. Capve stores what each click was shown, so the split test reads itself.",
+    h1: "Test casino offers with rules and weights.",
+    lead: "Match traffic to the casino offers and landers you choose for each geo and device. Split traffic by weight, then compare registrations, FTDs and reported revenue for each variant.",
     highlights: [
       {
         icon: "route",
@@ -316,12 +316,12 @@ export const FEATURES: Feature[] = [
     icon: "reports",
     name: "Reports and drilldown",
     summary: "ROI by any dimension, 4-level drilldown, CSV",
-    title: "Affiliate reporting: ROI, EPC and CR by any dimension",
+    title: "Casino affiliate reports: cost per FTD, offer ROI and drilldown",
     description:
       "Campaign reports with clicks, uniques, bots, LP clicks, conversions per event, revenue, cost, profit, ROI, EPC and CR, grouped by country, device, sub ID, offer or lander, with a 4-level drilldown and CSV export.",
     eyebrow: "Reports",
-    h1: "Find the sub ID that pays for the rest.",
-    lead: "Group any campaign by any click dimension and drill four levels deep. Every report shows the metrics a media buyer decides with, per event, in your timezone.",
+    h1: "Compare traffic cost with FTDs and reported revenue.",
+    lead: "Drill from a casino campaign into its zones, geos, landers and offers. See registration and FTD counts beside spend, cost per event and ROI, using the payouts your affiliate programs report.",
     highlights: [
       {
         icon: "reports",
@@ -354,8 +354,8 @@ export const FEATURES: Feature[] = [
         body: "Set the account timezone and every date bucket follows it. `YYYY-MM-DD` ranges are calendar days where you work, not UTC.",
       },
       {
-        title: "Revenue you can trust",
-        body: "Rejected conversions are excluded from revenue. Conversions are dated by when the postback arrived, so yesterday's numbers don't change because a network was slow.",
+        title: "Revenue follows the reported payout",
+        body: "Rejected conversions are excluded from revenue. A later status or payout update can change a conversion's contribution to your totals. Send affiliate earnings as payout when you want ROI to reflect those earnings; a player's deposit amount is not automatically your commission.",
       },
       {
         title: "Ask instead of clicking",
@@ -379,11 +379,11 @@ export const FEATURES: Feature[] = [
     icon: "mcp",
     name: "AI and MCP server",
     summary: `${MCP_TOOL_COUNT} MCP tools for Claude, Cursor and VS Code`,
-    title: "The ad tracker with an MCP server for AI assistants",
-    description: `Connect Claude, Cursor, VS Code or any MCP client to Capve. ${MCP_TOOL_COUNT} tools build campaigns, rotate landers, read reports, pause losers and manage postbacks with your account's permissions.`,
+    title: "Casino affiliate workflows through MCP and AI assistants",
+    description: `Connect Claude, Cursor, VS Code or any MCP client to Capve. ${MCP_TOOL_COUNT} tools for casino campaign setup, offer rotation, registration and FTD reports, postbacks and traffic costs.`,
     eyebrow: "AI and MCP",
-    h1: "Let your AI assistant run the boring parts.",
-    lead: `Capve ships an MCP server with ${MCP_TOOL_COUNT} tools. Connect Claude, Cursor or any MCP client with one token, then ask it to build campaigns, read reports and act on them.`,
+    h1: "Give your assistant the affiliate workflow.",
+    lead: `Use ${MCP_TOOL_COUNT} MCP tools to compare cost per FTD, set up casino offers, change lander weights and inspect postbacks. Connect an MCP client through OAuth or a personal API token, then review the changes it proposes.`,
     highlights: [
       {
         icon: "mcp",
@@ -393,12 +393,12 @@ export const FEATURES: Feature[] = [
       {
         icon: "lock",
         title: "Same permissions as you",
-        body: "Each tool replays a normal API call with your personal token. Viewers can read; owners and admins can write.",
+        body: "Tools use Capve's authenticated API. The same API checks apply when a tool reads a report or changes a campaign.",
       },
       {
         icon: "terminal",
         title: "One line to connect",
-        body: "Streamable HTTP at `/mcp` with a bearer token. Works with Claude Code, Claude Desktop, Cursor, VS Code and Windsurf.",
+        body: "Streamable HTTP at `/mcp`, with OAuth discovery and personal API tokens. Connect from Claude Code, Claude Desktop, Cursor, VS Code or Windsurf.",
       },
       {
         icon: "users",
@@ -421,11 +421,11 @@ export const FEATURES: Feature[] = [
         title: "Things people ask it",
         body: "Plain requests turn into a few tool calls each.",
         bullets: [
-          "Which campaigns lost money last week, and on which countries?",
-          "Create a campaign for my new offer, split 50/50 between my two landers.",
-          "Pause every campaign with ROI below -30% over the last 7 days.",
-          "Group yesterday's conversions by sub1 and tell me which placements to cut.",
-          "Here's my Binom offer export. Create these offers and landers in Capve.",
+          "Compare cost per FTD and ROI across my casino campaigns last week.",
+          "Set up this casino offer with a 50/50 split between my two landers.",
+          "Which zones have registrations but no FTDs in the last 7 days?",
+          "Compare these casino offers by country and reported payout.",
+          "Check the delivery log for FTD postbacks to this traffic source.",
         ],
       },
       {
@@ -441,11 +441,11 @@ export const FEATURES: Feature[] = [
       },
       {
         q: "Can the assistant break something?",
-        a: "It can do what your account can do, so use a viewer account's token for read-only analysis. Destructive tools are marked, and most clients ask before running them.",
+        a: "An assistant can make changes allowed by the credentials you connect. Review its proposed actions before approving them. Tools advertise read-only or destructive hints, but your MCP client controls how it presents confirmations.",
       },
       {
         q: "Does Capve send my data to an AI provider?",
-        a: "No. Capve answers tool calls from the client you connect. What your assistant does with the answers is between you and that provider.",
+        a: "Your MCP client receives the results of the tools it calls, so review that assistant provider's data settings. Separately, the optional AI bidding beta sends aggregate zone metrics to Cloudflare Workers AI when you enable it and run an analysis. That beta is disabled by default.",
       },
     ],
   },
@@ -454,12 +454,12 @@ export const FEATURES: Feature[] = [
     icon: "bolt",
     name: "Automation and costs",
     summary: "Zone blacklists, ROI alerts, cost sync",
-    title: "Automated zone blacklists, ROI alerts and cost sync",
+    title: "Casino traffic monitoring, zone blacklists and cost updates",
     description:
-      "Capve blacklists zones that spend without converting, alerts you by email or webhook when ROI or spend crosses a line, and pulls traffic costs from your source every hour.",
+      "Review casino traffic with no FTDs, record zones for a source blocklist, set ROI and spend alerts, and keep recorded traffic costs current.",
     eyebrow: "Automation",
-    h1: "Stop losses while you sleep.",
-    lead: "Automation rules watch your campaigns every 15 minutes. They blacklist dead zones, warn you when ROI drops or spend runs away, and keep costs current without spreadsheets.",
+    h1: "Find casino traffic that needs a closer look.",
+    lead: "Set rules for zones with clicks but no FTDs, and alerts for campaign spend or ROI. Capve evaluates rules every 15 minutes and records matching zones for review and export. Choose a window that allows for conversion delays.",
     highlights: [
       {
         icon: "admin",
@@ -488,8 +488,8 @@ export const FEATURES: Feature[] = [
         body: "Each rule is scoped to a campaign, evaluated on a schedule and can also be run on demand. Results land in the zone blacklist with the reason.",
       },
       {
-        title: "Costs that match your invoice",
-        body: "Traffic sources rarely pass an exact cost per click. `POST /api/campaigns/:id/costs` spreads a total evenly over the matching clicks for a date range, optionally filtered by a token such as the zone, so ROI reflects what you were billed.",
+        title: "Keep recorded costs current",
+        body: "Use the cost API to spread a spend total over matching clicks for a date range, optionally filtered by a token such as the zone. Reports use the cost you provide, so check the total and date range against your source's report.",
       },
       {
         title: "Webhooks for everything else",
@@ -503,8 +503,8 @@ export const FEATURES: Feature[] = [
         a: "Adcash today, using an API key encrypted at rest. For other sources, send cost on the link or post totals to the cost API.",
       },
       {
-        q: "Does Capve pause campaigns at the traffic source?",
-        a: "Not directly. It builds the blacklist and alerts you. Your AI assistant or your own script can act on them through the API.",
+        q: "Do blacklist rules automatically stop spend?",
+        a: "No. These rules record matching zones in Capve and can send alerts. Applying a blocklist or pausing a campaign at the traffic source is a separate action. Review the conversion window before changing a campaign.",
       },
     ],
   },
@@ -513,7 +513,7 @@ export const FEATURES: Feature[] = [
     icon: "code",
     name: "Open source on Cloudflare",
     summary: "Source on GitHub, runs on Workers + D1",
-    title: "Open-source ad tracker on Cloudflare Workers and D1",
+    title: "Open-source casino affiliate tracker on Cloudflare",
     description:
       "Capve's source is public on GitHub. Use the hosted service at capve.app, or run your own copy on Cloudflare Workers and D1. No VPS, no license server, no lock-in.",
     eyebrow: "Open source",
