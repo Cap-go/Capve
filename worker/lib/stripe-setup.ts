@@ -71,7 +71,9 @@ export async function stripeSetupStatus(env: Env): Promise<StripeSetupStatus> {
     }),
     probe("portal", "Customer portal", `${dashboard}settings/billing/portal`, async () => {
       if (!env.STRIPE_PORTAL_CONFIGURATION) return [{ id: "portal", label: "Customer portal", status: "attention", detail: "No dedicated portal configuration is selected in the Worker." }];
-      const portal = await stripe.billingPortal.configurations.retrieve(env.STRIPE_PORTAL_CONFIGURATION);
+      const portal = await stripe.billingPortal.configurations.retrieve(env.STRIPE_PORTAL_CONFIGURATION, {
+        expand: ["features.subscription_update.products"],
+      });
       const products = portal.features.subscription_update.products ?? [];
       const allowed = products.flatMap((product) => product.prices);
       const plansMatch = [env.STRIPE_PRICE_STARTER, env.STRIPE_PRICE_PRO].every((price) => price && allowed.includes(price));

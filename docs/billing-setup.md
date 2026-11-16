@@ -2,6 +2,25 @@
 
 Billing is opt-in with `BILLING_ENABLED = "true"`. Self-hosted installs leave it unset and keep unrestricted reports. The landing page advertises hosted plans at capve.app. Configuration changes take effect through the deployment workflow; billing activation remains a separate step.
 
+## Production activation — November 16, 2026
+
+Hosted billing is enabled in the running `velo` Worker. The replacement webhook
+`we_1UYnLwPth1byRSsbKJut6qQf` is enabled; the superseded endpoint remains disabled.
+The existing four standard-duration rollout trials were reset using
+`scripts/reset-rollout-trials.sql` to November 16–30, 2026 (20:49:55 UTC).
+Medialab's courtesy trial still ends October 25, 2029; newer signup-based trials
+were not changed. Do not rerun the corrective SQL on subsequent deployments.
+
+The Capve Bento site now exists, with runtime credentials installed as encrypted
+Worker secrets and eight immediate billing-notice branches. Production sends
+from `support@capve.app`: Bento rejected `noreply@capve.app` during sender
+validation. See `docs/bento-emails.md` for the flow and sender details.
+
+Automatic tax remains disabled pending confirmation of actual tax registrations.
+The historical staging notes below describe the earlier setup, not the current
+billing activation state. Keep the production variables in `wrangler.toml` in
+sync so a future deployment cannot turn billing off or restore the rejected sender.
+
 ## Admin setup status
 
 Open `/app/admin` as a verified platform admin to see the running Worker's Stripe connection, account and mode, billing/tax switches, credential presence, plan Prices, portal policies, webhook endpoint, account requirements, and tax registrations. Refresh runs read-only Stripe checks. Failed checks remain “Not verified”; the view never returns secrets or enables billing. Webhook settings do not prove that the signing secret matches: verify a signed delivery in Stripe Workbench.
