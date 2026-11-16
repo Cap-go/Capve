@@ -83,6 +83,7 @@ describe("assistant tool loop", () => {
   });
   it("proposes changes without executing, then executes only the confirmed arguments", async () => {
     const calls: Record<string, unknown>[] = [];
+    const onMutation = vi.fn();
     let proposed = false;
     vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
       expect((init.headers as Record<string, string>)["X-Capve-Account"]).toBe("account1");
@@ -98,12 +99,36 @@ describe("assistant tool loop", () => {
       if (!proposed) { proposed = true; return stream([{ type: "function_call", namespace: "capve", name: "create_campaign", call_id: "call1", arguments: '{"name":"New campaign"}' }]); }
       return stream([{ type: "message", content: [{ type: "output_text", text: "Review your action." }] }]);
     }));
-    const options = { accessToken: "test-loop-token", accountId: "account1", messages: [{ role: "user" as const, content: "Create a campaign" }], context: {} };
+    const options = { onMutation, accessToken: "test-loop-token", accountId: "account1", messages: [{ role: "user" as const, content: "Create a campaign" }], context: {} };
     const proposal = await runAssistant(options);
     expect(calls).toHaveLength(0); expect(proposal.cards[0].type).toBe("confirm");
+    expect(onMutation).not.toHaveBeenCalled();
     await runAssistant({ ...options, confirm: { tool: "create_campaign", arguments: { name: "New campaign" } } });
     expect(calls).toEqual([{ name: "create_campaign", arguments: { name: "New campaign" } }]);
+    expect(onMutation).toHaveBeenCalledTimes(1);
   });
+  it.each([
+    { ok: true, readOnly: false }, { ok: false, readOnly: false }, { ok: true, readOnly: true },
+  ])("notifies the dashboard only for successful mutations before summarizing: %j", async ({ ok, readOnly }) => {
+    const onMutation = vi.fn();
+    const confirmedTool = { ...tool, annotations: { readOnlyHint: readOnly, openWorldHint: true } };
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith("/mcp")) {
+        if (JSON.parse(init.body as string).method === "tools/list") return Response.json({ result: { tools: [confirmedTool] } });
+        return Response.json({ result: { isError: !ok, content: [{ text: ok ? "Created" : "Forbidden" }] } });
+      }
+      if (url.endsWith("/models")) return Response.json({ models: [] });
+      expect(onMutation).toHaveBeenCalledTimes(ok && !readOnly ? 1 : 0);
+      return Response.json({ error: { code: "unavailable" } }, { status: 503 });
+    }));
+    const run = runAssistant({ accessToken: "mutation-test", accountId: "account1", messages: [], context: {}, onMutation,
+      confirm: { tool: "create_campaign", arguments: { name: "New campaign" } },
+    });
+    if (ok) expect((await run).actions[0].ok).toBe(true);
+    else await expect(run).rejects.toThrow();
+    expect(onMutation).toHaveBeenCalledTimes(ok && !readOnly ? 1 : 0);
+  });
+
   it.each(["", "Choose an option."])("preserves question cards when the assistant summary is %j", async (summary) => {
     const inputs: Array<Array<{ role: string; content?: string }>> = [];
     let responseCount = 0;

@@ -83,7 +83,11 @@ function Chat({ userId, accountId, accountName }: { userId: string; accountId: s
       const accessToken = await getChatGptAccessToken(userId, false, abort.signal);
       abort.signal.throwIfAborted();
       if (!accessToken) throw new Error("chatgpt_reconnect_required");
-      const result = await runAssistant({ accessToken, accountId, signal: abort.signal, messages: next, context: { path: pathname, accountId, accountName }, confirm });
+      const result = await runAssistant({
+        accessToken, accountId, signal: abort.signal, messages: next,
+        context: { path: pathname, accountId, accountName }, confirm,
+        onMutation: () => window.dispatchEvent(new CustomEvent("capve:assistant-mutation", { detail: { accountId } })),
+      });
       if (!abort.signal.aborted) setMessages([...next, { role: "assistant", content: result.reply, ...result }]);
     } catch (err) {
       if (abort.signal.aborted) return;

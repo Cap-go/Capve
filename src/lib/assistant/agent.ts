@@ -329,6 +329,7 @@ async function callModel(accessToken: string, prompt: string, input: InputItem[]
 export interface RunAssistantOptions {
   accessToken: string
   signal?: AbortSignal
+  onMutation?: () => void
   accountId: string
   messages: AssistantTurn[]
   context: AssistantContext
@@ -357,6 +358,7 @@ export async function runAssistant(options: RunAssistantOptions): Promise<Assist
       throw new Error('invalid_confirm')
     const result = await callMcpTool(options.accountId, tool.name, options.confirm.arguments, options.signal)
     actions.push({ tool: tool.name, title: tool.title ?? tool.annotations?.title ?? tool.name, ok: result.ok })
+    if (result.ok && tool.annotations?.readOnlyHint !== true) options.onMutation?.()
     input.push({
       role: 'user',
       content: `I confirmed the action ${tool.name} with ${JSON.stringify(options.confirm.arguments)}. Result (${result.ok ? 'success' : 'error'}):\n${clip(result.text)}\nSummarize the outcome and link the affected page.`,
