@@ -51,8 +51,8 @@ export function HomePage() {
         <div aria-hidden="true" className="mk-glow pointer-events-none absolute inset-0" />
         <Container className="relative grid items-center gap-12 pb-16 pt-10 sm:pt-16 lg:grid-cols-[1.05fr_1fr] lg:pb-24">
           <div className="min-w-0">
-            <Link className="mk-eyebrow" to="/compare/binom">
-              <b>For casino affiliates</b> Open-source tracking on Cloudflare
+            <Link className="mk-eyebrow" to="/solutions/affiliate-programs">
+              <b>For casino affiliates</b> Your tracking, in one place
               <Icon name="arrow" size={14} />
             </Link>
             <h1 className="mk-h1 mt-6">One tracking dashboard for casino affiliates.</h1>

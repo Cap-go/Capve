@@ -1,3 +1,4 @@
+import { useAuth } from "../lib/auth";
 import { FormEvent, useEffect, useState } from "react";
 import {
   api,
@@ -54,6 +55,7 @@ export function OpsPanel({ role, accountId }: { role: TeamRole; accountId: strin
 }
 
 function SessionsPanel() {
+  const { logoutAll } = useAuth();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -62,8 +64,7 @@ function SessionsPanel() {
     setBusy(true);
     setError("");
     try {
-      await api.logoutAll();
-      window.location.href = "/login";
+      await logoutAll();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not sign out");
       setBusy(false);

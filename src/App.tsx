@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { api } from "./lib/api";
 import { useAuth } from "./lib/auth";
+import { AssistantChat } from "./components/AssistantChat";
 import { OAuthConsentPage } from "./pages/OAuthConsent";
 import { DOC_CONTENT } from "./lib/docs-content";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
@@ -39,6 +40,7 @@ export function App() {
     <AuthProvider>
       <BrowserRouter>
         <AppRoutes />
+        <AssistantChat />
       </BrowserRouter>
     </AuthProvider>
   );

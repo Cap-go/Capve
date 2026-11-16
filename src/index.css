@@ -3206,3 +3206,25 @@ a.mk-card:hover {
 #pricing {
   scroll-margin-top: 5rem;
 }
+
+/* Console assistant */
+.assistant-launcher { position: fixed; right: 24px; bottom: 24px; z-index: 40; box-shadow: 0 5px 20px #0002; }
+.assistant-dialog { position: fixed; inset: auto 20px 20px auto; margin: 0; padding: 0; width: min(470px, calc(100vw - 32px)); height: min(760px, calc(100dvh - 40px)); max-height: calc(100dvh - 40px); border: 1px solid var(--velo-border); border-radius: 18px; background: #fff; color: var(--velo-ink); box-shadow: 0 24px 80px #0003; }
+.assistant-dialog[open] { display: flex; flex-direction: column; }
+.assistant-dialog::backdrop { background: #1112; }
+.assistant-header { display: flex; align-items: center; gap: 12px; padding: 18px 20px; border-bottom: 1px solid var(--velo-border); }
+.assistant-mark { display: grid; place-items: center; flex-shrink: 0; width: 40px; height: 40px; border-radius: 12px; background: var(--velo-accent-soft); }
+.assistant-body { flex: 1; min-height: 0; padding: 22px; overflow: auto; }
+.assistant-connect { padding: 12px 2px; }
+.assistant-examples { display: grid; gap: 14px; margin: 28px 0; font-size: 13px; }
+.assistant-examples p { display: flex; align-items: center; gap: 10px; }
+.assistant-composer { padding: 16px 20px; border-top: 1px solid var(--velo-border); }
+.assistant-message { padding: 14px; border-radius: 12px; overflow-wrap: anywhere; background: #fafaf9; }
+.assistant-message.user { margin-left: 30px; background: var(--velo-accent-soft); }
+.assistant-card { margin-top: 12px; padding: 12px; border: 1px solid var(--velo-border); border-radius: 10px; background: #fff; font-size: 13px; }
+.assistant-suggestion { display: flex; justify-content: space-between; align-items: center; gap: 12px; text-align: left; width: 100%; padding: 14px; border: 1px solid var(--velo-border); border-radius: 10px; font-size: 13px; }
+.assistant-suggestion:hover { background: var(--velo-accent-soft); }
+@media (max-width: 600px) {
+  .assistant-dialog { inset: 8px; width: calc(100vw - 16px); height: calc(100dvh - 16px); max-height: none; }
+  .assistant-launcher { right: 16px; bottom: 16px; }
+}
