@@ -1,10 +1,21 @@
 # Bento setup and copy
 
-Configure these flows manually in the Capve Bento site. This PR does not create or activate flows in the connected Capgo Bento account.
+The Capve site was configured on November 16, 2026, separately from the Capgo
+site. Site ID: `site_3MWRvwE7xj3QSVJVnkVe8Pr2`. The live **Capve billing notices**
+flow (`flow_4Gg2B7AL8ARxs1ejpqmZdoWw`) has eight independent event branches,
+one immediate transactional email per branch, and a subscriber-status guard on
+each trial branch (`visitor.capve_subscription_status != "active"`). Templates
+126028–126035 use the copy below. No delayed sequence is used.
+
+The accepted default sender is **Capve <support@capve.app>**. Bento rejects
+`noreply@capve.app` during sender validation. The running Worker has all three
+Bento secrets and `EMAIL_FROM = "support@capve.app"`. Sender DKIM and bounce
+records were added to the capve.app zone; existing Cloudflare mail records were
+preserved. End-to-end test-message delivery still needs verification.
 
 ## Sender and API
 
-1. Create/select the Capve site. Authenticate `capve.app` DNS in Bento and add `noreply@capve.app` as an approved author. Set a monitored reply-to address in Bento.
+1. Create/select the Capve site. Authenticate `capve.app` DNS in Bento and add `support@capve.app` as an approved author. Set a monitored reply-to address in Bento.
 2. Set Worker secrets `BENTO_SITE_UUID`, `BENTO_PUBLISHABLE_KEY`, and `BENTO_SECRET_KEY` with `bunx wrangler secret put NAME --env production`. Do not put them in git. The client uses Basic auth, a server-side User-Agent, and site_uuid on `/api/v1/batch/events` and `/api/v1/batch/emails`.
 3. When all three are set, password reset, email verification and operational alert emails use Bento's transactional API. Existing Cloudflare EMAIL remains a fallback for self-hosted installs with no Bento configuration. Auth mail is sent immediately, not through a sequence. Do not create a second verification or reset flow. Authentication emails include per-send directives disabling click rewriting, open tracking, and UTMs.
 4. Lifecycle scans run at minutes 2, 17, 32 and 47 of each hour when billing is enabled, in a separate invocation from automation. Each invocation reserves at most 50 D1 queries, including fixed overhead and worst-case per-account event recovery, It processes at most three verified accounts and stops starting another account after 20 seconds. D1 stores the scan cursor and an overlap lease. A complete scan takes approximately `ceil(verified accounts / 3) × 15 minutes`, or longer if the time budget stops a batch early. They only target verified account owners, not team members. This means an unverified signup may not get a trial email until verification. The trial clock still starts at signup.
@@ -26,7 +37,7 @@ The event details include `event_key`, `period` and `unique.key`. D1 stores deli
 
 ## Flow rules
 
-Create one event-triggered flow per event below, containing one immediate email. If Bento requires a sequence, make one single-email sequence per flow with zero delay. Do not create a day-7/day-11 delayed sequence from signup. Capve emits reminders at the correct time using the actual trial dates, including courtesy extensions. A cron delayed across multiple milestones emits only the currently relevant notice rather than sending obsolete reminders together.
+Create an independent event-triggered branch per event below, containing one immediate email. Separate flows are also supported. If Bento requires a sequence, make one single-email sequence per flow with zero delay. Do not create a day-7/day-11 delayed sequence from signup. Capve emits reminders at the correct time using the actual trial dates, including courtesy extensions. A cron delayed across multiple milestones emits only the currently relevant notice rather than sending obsolete reminders together.
 
 For trial-related flows, add a condition excluding `capve_subscription_status = active`. The backend also suppresses these notices for active paid subscriptions. The halfway event occurs at 50% of the stored trial interval, ending occurs within the final three days, and expiry occurs after the stored end. Each milestone is accepted once per account/trial-end combination. Ongoing subscription/traffic notices have their own keys. Do not add promotional follow-ups to these service notices. Optional onboarding tips belong in a separate opt-in marketing flow with an unsubscribe link.
 

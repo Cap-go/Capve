@@ -67,7 +67,7 @@ name = "velo"
 # Automatic tracking domains (docs/tracking-domains.md): custom hostnames are created on the capve.app
 # zone and customers CNAME to TRACKING_DOMAIN_CNAME_TARGET. Off until the TRACKING_DOMAIN_API_TOKEN
 # secret is set: bunx wrangler secret put TRACKING_DOMAIN_API_TOKEN --env production
-vars = { APP_URL = "https://capve.app", EMAIL_FROM = "noreply@capve.app", PLATFORM_ADMIN_EMAILS = "martindonadieu@gmail.com", BILLING_ENABLED = "false", STRIPE_AUTOMATIC_TAX = "false", STRIPE_PRICE_STARTER = "price_1UUFc0Pth1byRSsbw73wF7yf", STRIPE_PRICE_PRO = "price_1UUFcCPth1byRSsbOwrw6lvS", STRIPE_PORTAL_CONFIGURATION = "bpc_1UUFeHPth1byRSsb0svtijZb", TRACKING_DOMAIN_ZONE_ID = "05d1d78a5f2325a1058c7c0ad370d0a1", TRACKING_DOMAIN_CNAME_TARGET = "domains.capve.app" }
+vars = { APP_URL = "https://capve.app", EMAIL_FROM = "support@capve.app", PLATFORM_ADMIN_EMAILS = "martindonadieu@gmail.com", BILLING_ENABLED = "true", STRIPE_AUTOMATIC_TAX = "false", STRIPE_PRICE_STARTER = "price_1UUFc0Pth1byRSsbw73wF7yf", STRIPE_PRICE_PRO = "price_1UUFcCPth1byRSsbOwrw6lvS", STRIPE_PORTAL_CONFIGURATION = "bpc_1UUFeHPth1byRSsb0svtijZb", TRACKING_DOMAIN_ZONE_ID = "05d1d78a5f2325a1058c7c0ad370d0a1", TRACKING_DOMAIN_CNAME_TARGET = "domains.capve.app" }
 
 [[env.production.send_email]]
 name = "EMAIL"

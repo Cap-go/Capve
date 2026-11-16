@@ -34,7 +34,8 @@ function mockStripe(options: { webhookEnabled?: boolean; wrongPrice?: boolean; f
         recurring: { interval: "month", interval_count: 1, usage_type: "licensed" }, product: { id: `prod_${id}`, active: true } });
     }
     if (url.pathname === "/v1/billing_portal/configurations/bpc_test") return Response.json({ active: true,
-      features: { subscription_update: { enabled: true, products: [{ product: "prod_starter", prices: ["price_starter"] }, { product: "prod_pro", prices: ["price_pro"] }] },
+      features: { subscription_update: { enabled: true, ...(url.searchParams.getAll("expand[0]").includes("features.subscription_update.products")
+        ? { products: [{ product: "prod_starter", prices: ["price_starter"] }, { product: "prod_pro", prices: ["price_pro"] }] } : {}) },
         subscription_cancel: { enabled: true }, invoice_history: { enabled: true }, payment_method_update: { enabled: true } },
       business_profile: { privacy_policy_url: "https://capve.example/privacy", terms_of_service_url: "https://capve.example/terms" } });
     if (url.pathname === "/v1/webhook_endpoints") return Response.json({ data: [{ id: "we_test", url: "https://capve.example/api/billing/webhook",
