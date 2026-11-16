@@ -2,6 +2,8 @@
 
 Connect an OAuth-capable MCP client to `https://capve.app/mcp`, select OAuth, sign in to Capve, and approve the consent screen. Personal API tokens continue to work for scripts and clients that use manual headers.
 
+Public client configuration is available at `/mcp.json` and `/.well-known/mcp.json`; it contains the MCP URL and no credentials. Ordinary browser or plain GET visits to `/mcp` redirect to `/docs/mcp`. Requests advertising JSON, SSE, protocol headers, or bearer credentials retain the MCP authentication behavior, and POST requests always require authentication.
+
 The client name is supplied during registration and is not an endorsement by Capve. Consent displays the callback address and the actual personal account being authorized. The `mcp:tools` scope permits reading and changing personal account campaigns, reports, settings, team and integrations, including deletion. Team accounts, platform administration, billing checkout, token management and connection management remain unavailable through OAuth tokens. Existing billing/report gates still apply.
 
 ## Protocol endpoints
@@ -38,7 +40,7 @@ No new Cloudflare bindings, secrets or external identity provider are needed. Ke
 
 Merge only after CI/review approval. The normal deployment workflow applies `0031_mcp_oauth.sql` before deploying the Worker. For a manual self-hosted rollout, apply D1 migrations before publishing the build. This PR does not deploy production.
 
-After deployment, verify the unauthenticated `/mcp` response includes `WWW-Authenticate` with `resource_metadata`, connect with an OAuth-capable MCP client, approve consent, call `whoami`, then disconnect and verify the old token gets 401. Repeat the hosted checker from the reported screenshot after deployment; local tests do not establish its hosted score.
+After deployment, verify an unauthenticated `/mcp` request with `Accept: application/json` includes `WWW-Authenticate` with `resource_metadata`, connect with an OAuth-capable MCP client, approve consent, call `whoami`, then disconnect and verify the old token gets 401. Repeat the hosted checker from the reported screenshot after deployment; local tests do not establish its hosted score.
 
 ## Validation and screenshots
 

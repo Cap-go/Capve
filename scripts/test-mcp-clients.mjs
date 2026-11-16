@@ -89,6 +89,16 @@ try {
   }
   assert(ready, "Local Worker did not become ready within 30 seconds");
 
+  for (const path of ["/mcp.json", "/.well-known/mcp.json"]) {
+    const manifest = await fetch(`${base}${path}`);
+    assert.equal(manifest.status, 200);
+    assert.deepEqual(await manifest.json(), { mcpServers: { capve: { url: `${base}/mcp` } } });
+  }
+  const setup = await fetch(`${base}/mcp`, { headers: { Accept: "text/html" }, redirect: "manual" });
+  assert.equal(setup.status, 302);
+  assert.equal(setup.headers.get("Location"), "/docs/mcp");
+  console.log("Public MCP manifests and setup-guide redirect passed.");
+
   const registration = await fetch(`${base}/api/auth/register`, {
     method: "POST", headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
