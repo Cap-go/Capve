@@ -43,7 +43,7 @@ const CAPVE = {
   source: "Public on GitHub under AGPL-3.0.",
   seats: "No per-seat price. Owner, admin and viewer roles.",
   retention: "Not limited by plan.",
-  ai: "MCP server with 97 tools on every plan.",
+  ai: "MCP server with 103 tools on every plan.",
   trial: "14 days, every feature, no card.",
   events: "Named events (`event=registration`, `event=ftd`), each its own conversion and report column.",
 };
@@ -62,7 +62,7 @@ const PARALLEL_STEP = {
 
 const COMPARE_STEP = (name: string) => ({
   title: "Compare, then switch",
-  body: `After a few days, compare clicks, conversions and payouts per day in both trackers. When they line up, point the rest of your traffic at Capve links. Keep ${name} running, with its postback URL, database and subscription live, until the conversion window of every offer and each network's status-update period (approvals, rejections, chargebacks) have passed for its last clicks. Networks keep sending those click ids to ${name}, and Capve can't record them. A quiet day doesn't mean no more updates are coming. After that, keep ${name} read-only for as long as you need its history.`,
+  body: `Compare clicks, registrations, FTDs and reported payouts per day in both trackers. Allow for your offers' conversion delay before judging the results. When they line up, point the rest of your traffic at Capve links. Keep ${name} running, with its postback URL, database and subscription live, until the conversion window of every offer and each network's status-update period (approvals, rejections, chargebacks) have passed for its last clicks. Networks keep sending those click ids to ${name}, and Capve can't record them. A quiet day doesn't mean no more updates are coming. After that, keep ${name} read-only for as long as you need its history.`,
 });
 
 export const COMPETITORS: Competitor[] = [
@@ -136,7 +136,7 @@ export const COMPETITORS: Competitor[] = [
       {
         icon: "mcp",
         title: "Named events and AI access",
-        body: "Registrations and FTDs as named events with their own columns, and an MCP server with 97 tools.",
+        body: "Registrations and FTDs as named events with their own columns, and an MCP server with 103 tools.",
       },
     ],
     stayReasons: [
@@ -398,7 +398,7 @@ export const COMPETITORS: Competitor[] = [
     menuSummary: "Flat price, no seats, no event overage",
     title: "Capve vs RedTrack: a RedTrack alternative for affiliates",
     description:
-      "Compare Capve and RedTrack for affiliate and lead-gen tracking: price, event metering, seats, overage, data retention, ad-platform integrations and AI access.",
+      "Compare Capve and RedTrack for casino affiliate tracking: price, event metering, seats, overage, data retention, ad-platform integrations and AI access.",
     h1: "A RedTrack alternative with no seats and no overage.",
     lead: "RedTrack prices by events and seats, and bills overage. Capve prices by clicks, includes every team member, and pauses reports instead of billing more.",
     facts: {
@@ -848,7 +848,7 @@ export const COMPETITORS: Competitor[] = [
     faqs: [
       {
         q: "Is Capve's MCP the same as ClickFlare's AI Copilot?",
-        a: "No. Copilot is an assistant inside ClickFlare. Capve's MCP server lets the assistant you already use, such as Claude or Cursor, call 97 Capve tools with your permissions.",
+        a: "No. Copilot is an assistant inside ClickFlare. Capve's MCP server lets the assistant you already use, such as Claude or Cursor, call 103 Capve tools with your permissions.",
       },
       {
         q: "How do I map ClickFlare's `ct` conversion types?",

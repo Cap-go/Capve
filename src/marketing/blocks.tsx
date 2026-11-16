@@ -245,7 +245,7 @@ export function DocLinks({ links }: { links: Array<{ label: string; href: string
 }
 
 export function CtaBand({
-  title = "Start tracking in ten minutes.",
+  title = "Track your next casino campaign with Capve.",
   body = "14-day free trial with every feature. No card, no server, no sales call.",
 }: {
   title?: string;
@@ -279,15 +279,12 @@ export function CtaBand({
   );
 }
 
-/** Text chips for the built-in traffic-source and network templates (worker/lib/source-templates.ts). */
+/** Featured tracking templates for casino affiliate workflows; the full catalog remains in the dashboard. */
 export const SOURCE_TEMPLATE_NAMES = [
-  "Meta",
-  "Google Ads",
-  "TikTok Ads",
   "PropellerAds",
   "Zeropark",
   "TrafficStars",
   "RichAds",
   "Adcash",
 ];
-export const NETWORK_TEMPLATE_NAMES = ["TUNE", "Everflow", "CAKE", "Affise", "Cellxpert", "Affilka", "MyAffiliates"];
+export const NETWORK_TEMPLATE_NAMES = ["Cellxpert", "Affilka", "MyAffiliates", "TUNE", "Everflow", "CAKE", "Affise"];

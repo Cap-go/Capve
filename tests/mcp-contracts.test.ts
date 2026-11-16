@@ -157,6 +157,20 @@ describe("MCP tool contracts against authenticated Worker responses", () => {
     await call("list_team");
     await call("remove_team_member", { member_id: member.id });
     await call("list_activity");
+    await call("list_platform_integrations");
+    await call("get_platform_connection", { traffic_source_id: source.id });
+    await call("configure_platform_connection", { traffic_source_id: source.id, provider: "richads", enabled: true, allow_writes: true, credential: "contract-management-key", revision: 0 });
+    const remote = vi.spyOn(globalThis, "fetch").mockImplementation(async (input) => {
+      expect(String(input)).toMatch(/^https:\/\/api\.richads\.com\/api\/v2\/campaigns\/123/);
+      return Response.json({ id: 123, bid: 0.05 });
+    });
+    await call("read_platform_data", { traffic_source_id: source.id, revision: 1, action: "get_campaign", params: { campaign_id: "123" } });
+    const operation = { traffic_source_id: source.id, revision: 1, action: "set_bid", params: { campaign_id: "123", bid: 0.05 }, operation_id: crypto.randomUUID() };
+    await call("execute_platform_action", operation);
+    await call("execute_platform_action", operation);
+    expect(remote).toHaveBeenCalledTimes(2); // One read plus one deduplicated write.
+    await call("list_platform_operations", { traffic_source_id: source.id });
+    vi.restoreAllMocks();
     await call("list_source_templates");
     await call("create_traffic_source_from_template", { template_id: "adcash" });
     await call("create_network_from_template", { template_id: "generic" });

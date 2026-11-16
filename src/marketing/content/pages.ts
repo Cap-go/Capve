@@ -6,7 +6,7 @@ export const SUPPORT_EMAIL = "support@capgo.app";
 export const HOME_FAQS: Faq[] = [
   {
     q: "What is Capve?",
-    a: "A campaign and affiliate tracker. It records ad clicks, routes them to landers and offers, receives conversions by S2S postback and shows profit and ROI per campaign, source, zone and sub ID. It runs on Cloudflare, and its source is public.",
+    a: "An open-source tracker for casino affiliates. It connects paid traffic to registration, first-time deposit (FTD) and deposit events sent by your affiliate programs, with cost and reported revenue by campaign, source, zone and offer.",
   },
   {
     q: "How is Capve different from Binom?",
@@ -21,8 +21,12 @@ export const HOME_FAQS: Faq[] = [
     a: "There's no overage fee and no traffic is dropped. Redirects, postbacks and conversions keep working. Reports, logs and exports pause until the monthly allowance resets or you upgrade.",
   },
   {
-    q: "Which traffic sources and networks work?",
-    a: "Any source that can pass URL parameters and any network that can call a postback URL. Templates cover Meta, Google Ads, TikTok Ads, PropellerAds, Zeropark, TrafficStars, RichAds, Adcash, TUNE, Everflow, CAKE, Affise, Cellxpert, Affilka and MyAffiliates.",
+    q: "Which traffic sources and casino affiliate platforms work?",
+    a: "Tracking templates include Adcash, PropellerAds, RichAds, Zeropark and TrafficStars, plus affiliate platform presets for Cellxpert, Affilka and MyAffiliates. You can edit the macros to match your program. URL tracking and postback presets do not, by themselves, grant access to a provider’s management API.",
+  },
+  {
+    q: "Can I compare registrations, FTDs and affiliate revenue?",
+    a: "Yes, when your affiliate program sends those events and payouts to Capve. Report registrations and FTDs separately, compare cost per event, and review reported revenue by offer, source or zone. Deposit amounts are not automatically affiliate earnings: report the payout you want counted as revenue.",
   },
   {
     q: "Can I self-host Capve?",
@@ -37,7 +41,7 @@ export const HOME_FAQS: Faq[] = [
 export const PLAN_FEATURES = [
   "Unlimited campaigns, traffic sources, offers and landers",
   "Routing rules, weighted landers and offers, LP clicks",
-  "S2S postbacks with events, outgoing postbacks, convert API",
+  "Registration, FTD and deposit postbacks, outgoing postbacks, convert API",
   "Reports by any dimension, 4-level drilldown, CSV export",
   "Bot filtering, blocklists and safe pages",
   "Zone blacklist rules, ROI and spend alerts",

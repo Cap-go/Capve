@@ -493,6 +493,28 @@ const contracts: Record<string, Schema> = {
   update_campaign_cost: object({ cost_update: costUpdate }),
 };
 
+const platformSettings = object({
+  traffic_source_id: text, provider: nullableText, enabled: boolean, allow_writes: boolean,
+  has_credential: boolean, revision: integer,
+});
+const platformResult = object({
+  provider: text, action: text, status: { type: "string", enum: ["accepted", "failed", "unknown"] },
+  data: { description: "Provider-specific JSON response with credentials redacted; null for transport failures. Interpret using the provider action documentation." },
+  operation_id: nullableText, message: text,
+});
+contracts.list_platform_integrations = object({ beta: boolean, providers: array(object({
+  id: text, name: text, credential_label: text, setup: text, documentation_url: text, limitation: nullableText,
+  actions: array(object({ id: text, title: text, description: text, read_only: boolean, input_schema: { type: "object", description: "JSON Schema for the provider-specific action parameters." } })),
+})) });
+contracts.get_platform_connection = object({ settings: platformSettings });
+contracts.configure_platform_connection = object({ settings: platformSettings });
+contracts.read_platform_data = object({ result: platformResult });
+contracts.execute_platform_action = object({ result: platformResult });
+contracts.list_platform_operations = object({ operations: array(object({
+  operation_id: text, actor_id: text, provider: text, action: text, created_at: timestamp,
+  request: { type: "object", description: "Provider, connection revision, action and parameters recorded before dispatch." }, result: nullable(platformResult),
+})) });
+
 for (const name of [
   "delete_campaign", "delete_path", "delete_rule", "remove_from_blocklist", "delete_group",
   "delete_traffic_source", "delete_network", "delete_lander", "delete_offer", "delete_postback",

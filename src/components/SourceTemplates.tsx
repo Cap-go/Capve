@@ -1,3 +1,4 @@
+import { PlatformIntegration } from "./PlatformIntegration";
 import { FormEvent, useEffect, useState } from "react";
 import { CodeBlock } from "./CodeBlock";
 import { ErrorBox, Field } from "./ui";
@@ -405,6 +406,8 @@ export function SourceSettingsPanel({
           </form>
         )}
       </div>
+
+      {sourceId && <PlatformIntegration key={sourceId} sourceId={sourceId} canWrite={canWrite} />}
 
       <div className="card p-5">
         <h2 className="font-semibold">
