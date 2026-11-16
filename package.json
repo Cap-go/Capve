@@ -7,7 +7,7 @@
     "build": "vite build && bun scripts/prerender.tsx",
     "deploy": "CLOUDFLARE_ENV=production bun run build && wrangler deploy --env production --var APP_URL:https://capve.app",
     "preview": "vite preview",
-    "test": "vitest run",
+    "test": "node scripts/test-workers.mjs",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply velo-db --local",
