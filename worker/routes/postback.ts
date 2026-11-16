@@ -48,28 +48,48 @@ postback.get("/", async (c) => {
   let lenientMode = false;
 
   if (!resolved) {
+    // Unknown click ID - check for campaign_id or affiliate_code parameter
+    const programId = c.req.query("campaign_id")?.trim() || c.req.query("program_id")?.trim();
     const affiliateCode = c.req.query("affiliate_code")?.trim();
-    if (!affiliateCode) {
+    
+    if (!programId && !affiliateCode) {
       return c.text("click not found", 404);
     }
 
-    const affiliateResult = await c.env.DB
-      .prepare(`SELECT a.id, a.code, a.program_id,
-                       p.id AS p_id, p.user_id, p.lenient_postbacks, p.traffic_source_id
-                FROM affiliates a
-                JOIN programs p ON p.id = a.program_id
-                WHERE a.code = ?
-                LIMIT 1`)
-      .bind(affiliateCode)
-      .first<{
-        id: string;
-        code: string;
-        program_id: string;
-        p_id: string;
-        user_id: string;
-        lenient_postbacks: number;
-        traffic_source_id: string | null;
-      }>();
+    let affiliateResult: {
+      id: string;
+      code: string;
+      program_id: string;
+      p_id: string;
+      user_id: string;
+      lenient_postbacks: number;
+      traffic_source_id: string | null;
+    } | null;
+
+    if (programId) {
+      // Use campaign_id to find first affiliate of that program
+      affiliateResult = await c.env.DB
+        .prepare(`SELECT a.id, a.code, a.program_id,
+                         p.id AS p_id, p.user_id, p.lenient_postbacks, p.traffic_source_id
+                  FROM affiliates a
+                  JOIN programs p ON p.id = a.program_id
+                  WHERE p.id = ?
+                  ORDER BY a.created_at ASC
+                  LIMIT 1`)
+        .bind(programId)
+        .first();
+    } else {
+      // Use affiliate_code to identify both program and affiliate
+      affiliateResult = await c.env.DB
+        .prepare(`SELECT a.id, a.code, a.program_id,
+                         p.id AS p_id, p.user_id, p.lenient_postbacks, p.traffic_source_id
+                  FROM affiliates a
+                  JOIN programs p ON p.id = a.program_id
+                  WHERE a.code = ?
+                  LIMIT 1`)
+        .bind(affiliateCode)
+        .first();
+    }
 
     if (!affiliateResult || affiliateResult.lenient_postbacks !== 1) {
       return c.text("click not found", 404);

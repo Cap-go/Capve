@@ -70,8 +70,46 @@ describe("lenient conversion postbacks", () => {
     ({ authHeaders } = await registerTestUser());
   });
 
-  it("lenient mode (default) accepts unknown click id when affiliate_code provided", async () => {
+  it("lenient mode (default) accepts unknown click id when campaign_id provided", async () => {
     const { program, convert_secret } = await createProgram(1);
+    await createAffiliate(program.id);
+
+    const postbackRes = await SELF.fetch(
+      `http://localhost/click?cnv_id=clk_unknown&campaign_id=${program.id}&payout=10&cnv_status=ftd&event=ftd`,
+      { redirect: "manual" },
+    );
+    expect(postbackRes.status).toBe(200);
+    const data = await json<{ ok: boolean; conversion: any }>(postbackRes);
+    expect(data.ok).toBe(true);
+    expect(data.conversion.warning_flags).toBe("unknown_click_id");
+  });
+
+  it("strict mode (lenient_postbacks=0) rejects unknown click id with 404", async () => {
+    const { program, convert_secret } = await createProgram(0);
+    await createAffiliate(program.id);
+
+    const postbackRes = await SELF.fetch(
+      `http://localhost/click?cnv_id=clk_unknown&campaign_id=${program.id}&payout=10&cnv_status=ftd&event=ftd`,
+      { redirect: "manual" },
+    );
+    expect(postbackRes.status).toBe(404);
+    expect(await postbackRes.text()).toBe("click not found");
+  });
+
+  it("unknown click without campaign_id or affiliate_code is rejected", async () => {
+    const { program } = await createProgram(1);
+    await createAffiliate(program.id);
+
+    const postbackRes = await SELF.fetch(
+      "http://localhost/click?cnv_id=clk_unknown&payout=10&cnv_status=ftd&event=ftd",
+      { redirect: "manual" },
+    );
+    expect(postbackRes.status).toBe(404);
+    expect(await postbackRes.text()).toBe("click not found");
+  });
+
+  it("lenient mode accepts unknown click with affiliate_code (backward compat)", async () => {
+    const { program } = await createProgram(1);
     const affiliateCode = await createAffiliate(program.id);
 
     const postbackRes = await SELF.fetch(
@@ -84,36 +122,12 @@ describe("lenient conversion postbacks", () => {
     expect(data.conversion.warning_flags).toBe("unknown_click_id");
   });
 
-  it("strict mode (lenient_postbacks=0) rejects unknown click id with 404", async () => {
-    const { program, convert_secret } = await createProgram(0);
-    const affiliateCode = await createAffiliate(program.id);
-
-    const postbackRes = await SELF.fetch(
-      `http://localhost/click?cnv_id=clk_unknown&affiliate_code=${affiliateCode}&payout=10&cnv_status=ftd&event=ftd`,
-      { redirect: "manual" },
-    );
-    expect(postbackRes.status).toBe(404);
-    expect(await postbackRes.text()).toBe("click not found");
-  });
-
-  it("unknown click without affiliate_code is rejected even in lenient mode", async () => {
-    const { program } = await createProgram(1);
+  it("lenient mode accepts unknown click id, flags it, attributes to campaign", async () => {
+    const { program, convert_secret } = await createProgram(1);
     await createAffiliate(program.id);
 
     const postbackRes = await SELF.fetch(
-      "http://localhost/click?cnv_id=clk_unknown&payout=10&cnv_status=ftd&event=ftd",
-      { redirect: "manual" },
-    );
-    expect(postbackRes.status).toBe(404);
-    expect(await postbackRes.text()).toBe("click not found");
-  });
-
-  it("lenient mode accepts unknown click id, flags it, attributes to campaign", async () => {
-    const { program, convert_secret } = await createProgram(1);
-    const affiliateCode = await createAffiliate(program.id);
-
-    const postbackRes = await SELF.fetch(
-      `http://localhost/click?cnv_id=1791919925099900ZA29b1801c6470cb1dI&affiliate_code=${affiliateCode}&payout=50&cnv_status=ftd&event=ftd`,
+      `http://localhost/click?cnv_id=1791919925099900ZA29b1801c6470cb1dI&campaign_id=${program.id}&payout=50&cnv_status=ftd&event=ftd`,
       { redirect: "manual" },
     );
     expect(postbackRes.status).toBe(200);
@@ -161,18 +175,18 @@ describe("lenient conversion postbacks", () => {
 
   it("dedupe: same cnv_id + event only counts once", async () => {
     const { program } = await createProgram(1);
-    const affiliateCode = await createAffiliate(program.id);
+    await createAffiliate(program.id);
 
     const cnvId = "clk_dedupetest";
     const postback1 = await SELF.fetch(
-      `http://localhost/click?cnv_id=${cnvId}&affiliate_code=${affiliateCode}&payout=20&cnv_status=ftd&event=ftd`,
+      `http://localhost/click?cnv_id=${cnvId}&campaign_id=${program.id}&payout=20&cnv_status=ftd&event=ftd`,
     );
     expect(postback1.status).toBe(200);
     const data1 = await json<{ status: string }>(postback1);
     expect(data1.status).toBe("created");
 
     const postback2 = await SELF.fetch(
-      `http://localhost/click?cnv_id=${cnvId}&affiliate_code=${affiliateCode}&payout=20&cnv_status=ftd&event=ftd`,
+      `http://localhost/click?cnv_id=${cnvId}&campaign_id=${program.id}&payout=20&cnv_status=ftd&event=ftd`,
     );
     expect(postback2.status).toBe(200);
     const data2 = await json<{ status: string }>(postback2);
@@ -187,15 +201,15 @@ describe("lenient conversion postbacks", () => {
 
   it("different events on same cnv_id create separate conversions", async () => {
     const { program } = await createProgram(1);
-    const affiliateCode = await createAffiliate(program.id);
+    await createAffiliate(program.id);
 
     const cnvId = "clk_multitest";
     
     await SELF.fetch(
-      `http://localhost/click?cnv_id=${cnvId}&affiliate_code=${affiliateCode}&payout=5&cnv_status=lead&event=registration`,
+      `http://localhost/click?cnv_id=${cnvId}&campaign_id=${program.id}&payout=5&cnv_status=lead&event=registration`,
     );
     await SELF.fetch(
-      `http://localhost/click?cnv_id=${cnvId}&affiliate_code=${affiliateCode}&payout=50&cnv_status=ftd&event=ftd`,
+      `http://localhost/click?cnv_id=${cnvId}&campaign_id=${program.id}&payout=50&cnv_status=ftd&event=ftd`,
     );
 
     const conversions = await env.DB
@@ -252,10 +266,10 @@ describe("lenient conversion postbacks", () => {
 
   it("conversions list includes warning_flags", async () => {
     const { program } = await createProgram(1);
-    const affiliateCode = await createAffiliate(program.id);
+    await createAffiliate(program.id);
 
     await SELF.fetch(
-      `http://localhost/click?cnv_id=clk_test999&affiliate_code=${affiliateCode}&payout=10&cnv_status=ftd&event=ftd`,
+      `http://localhost/click?cnv_id=clk_test999&campaign_id=${program.id}&payout=10&cnv_status=ftd&event=ftd`,
     );
 
     const listRes = await SELF.fetch(
