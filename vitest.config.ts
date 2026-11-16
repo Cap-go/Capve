@@ -4,7 +4,7 @@ export default defineWorkersConfig({
   test: {
     poolOptions: {
       workers: {
-        // Avoid one concurrent workerd process per file exhausting CI runners.
+        // scripts/test-workers.mjs runs each file in a fresh runtime, sequentially.
         singleWorker: true,
         isolatedStorage: true,
         wrangler: { configPath: "./wrangler.vitest.toml" },
