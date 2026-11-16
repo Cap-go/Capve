@@ -61,6 +61,7 @@ export async function modelDecisions(ai: NonNullable<Env["AI"]>, decisions: BidD
           { role: "user", content: JSON.stringify(evidence) },
         ],
         stream: false, temperature: 0, max_completion_tokens: 4096,
+        chat_template_kwargs: { enable_thinking: false },
         response_format: { type: "json_object" },
       }),
       new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error("timeout")), 25000); }),

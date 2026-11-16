@@ -13,7 +13,7 @@ const exercised = new Set<string>();
 
 async function request(path: string, init: RequestInit = {}) {
   const ctx = createExecutionContext();
-  const res = await worker.fetch(new Request(`http://localhost${path}`, { ...init, headers: { ...headers, ...init.headers } }), env, ctx);
+  const res = await worker.fetch(new Request(`http://localhost${path}`, { ...init, headers: { ...headers, ...init.headers } }), { ...env, AI: { run: async () => { throw new Error("Empty cohort must not invoke AI"); } } }, ctx);
   await waitOnExecutionContext(ctx);
   return res;
 }
@@ -78,6 +78,12 @@ describe("MCP tool contracts against authenticated Worker responses", () => {
     for (const name of ["list_groups", "list_traffic_sources", "list_networks", "list_landers", "list_offers"]) await call(name);
     const campaign = item(await call("create_campaign", { name: "Contract campaign", destination_url: "https://merchant.example.com/", group_id: group.id, traffic_source_id: source.id }), "program");
     const campaign_id = campaign.id;
+    expect((await call("get_bidding_settings", { campaign_id })).config).toMatchObject({ enabled: false });
+    expect((await call("get_bid_recommendations", { campaign_id })).run).toBeNull();
+    await call("set_bidding_settings", { campaign_id, enabled: true });
+    expect(item(await call("analyze_bidding", { campaign_id }), "run").result).toMatchObject({ decisions: [] });
+    expect((await call("get_bid_recommendations", { campaign_id })).run).not.toBeNull();
+    await call("set_bidding_settings", { campaign_id, enabled: false });
     await call("update_campaign", { campaign_id, name: "Updated campaign" });
     await call("bulk_update_campaigns", { campaign_ids: [campaign_id], tags: "contract" });
     await call("get_campaign", { campaign_id });
