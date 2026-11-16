@@ -1,3 +1,4 @@
+import { assistant } from "./routes/assistant";
 import platforms from "./routes/platforms";
 import { discovery, oauth } from "./routes/oauth";
 import { oauthIssuer, OAUTH_SCOPE, registeredOAuthOrigin } from "./lib/oauth";
@@ -97,6 +98,25 @@ app.use("/api/reports/*", requireReports);
 for (const prefix of ["/api/programs", "/api/campaigns"]) {
   for (const suffix of ["stats", "clicks", "conversions"]) app.use(`${prefix}/:id/${suffix}`, requireReports);
 }
+// Reuse the MCP catalog with the browser's selected account, without minting a personal token.
+assistant.post("/mcp", (c) => handleMcpRequest(c.req.raw, ({ method, path, query, body }) => {
+  const url = new URL(path, c.req.url);
+  for (const [key, value] of Object.entries(query ?? {})) {
+    if (value !== undefined && value !== "") url.searchParams.set(key, String(value));
+  }
+  return Promise.resolve(app.fetch(new Request(url, {
+    method,
+    headers: {
+      cookie: c.req.header("cookie")!,
+      "X-Capve-Account": c.req.header("X-Capve-Account")!,
+      "content-type": "application/json",
+    },
+    body: body === undefined ? undefined : JSON.stringify(body),
+    signal: c.req.raw.signal,
+  }), c.env, c.executionCtx));
+}));
+app.route("/api/assistant", assistant);
+
 app.route("/api/billing", billing);
 app.route("/api/auth", accounts);
 app.route("/api/auth", auth);

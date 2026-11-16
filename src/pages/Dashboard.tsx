@@ -117,6 +117,23 @@ function dayEnd(value: string): number | undefined {
 }
 
 export function DashboardPage({ page }: { page: DashboardView }) {
+  const { user } = useAuth();
+  const accountId = user?.account_id ?? user?.id;
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    const refresh = (event: Event) => {
+      if (accountId && (event as CustomEvent<{ accountId: string }>).detail?.accountId === accountId)
+        setRevision(value => value + 1);
+    };
+    window.addEventListener("capve:assistant-mutation", refresh);
+    return () => window.removeEventListener("capve:assistant-mutation", refresh);
+  }, [accountId]);
+  // Each dashboard panel owns its fetched data. Remount them after a confirmed write;
+  // the assistant is outside this tree, so its dialog and conversation stay open.
+  return <DashboardContent key={`${user?.id}:${accountId}:${revision}`} page={page} />;
+}
+
+function DashboardContent({ page }: { page: DashboardView }) {
   const { user, loading, logout } = useAuth();
   const navigate = useNavigate();
   const { section: sectionParam, campaignId = "" } = useParams();

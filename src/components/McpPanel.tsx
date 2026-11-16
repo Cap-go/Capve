@@ -65,6 +65,11 @@ export function McpPanel() {
   return (
     <div className="space-y-6">
       <div className="card p-5">
+        <h2 className="font-semibold">Chat with Capve in this console</h2>
+        <p className="mt-2 max-w-2xl text-sm text-[var(--velo-muted)]">Connect your ChatGPT account to explore reports and manage campaigns here. Uses your eligible ChatGPT plan, with a confirmation before every change.</p>
+        <button className="btn btn-primary mt-4" onClick={() => window.dispatchEvent(new Event("capve:open-assistant"))}>Open Capve assistant</button>
+      </div>
+      <div className="card p-5">
         <h2 className="font-semibold">Use Capve from your AI assistant</h2>
         <p className="mt-1 max-w-2xl text-sm text-[var(--velo-muted)]">
           Capve is an MCP server. Connect Claude Code, Cursor, VS Code or any MCP client and manage

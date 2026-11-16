@@ -1,3 +1,4 @@
+import { logoutSession } from "./logout";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, setRequestAccount, type User } from "./api";
 
@@ -7,6 +8,7 @@ type AuthState = {
   refresh: () => Promise<void>;
   setUser: (user: User | null) => void;
   logout: () => Promise<void>;
+  logoutAll: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthState | null>(null);
@@ -29,7 +31,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
-    await api.logout().catch(() => undefined);
+    await logoutSession(user?.id, "current").catch(() => undefined);
+    setUser(null);
+  };
+
+  const logoutAll = async () => {
+    await logoutSession(user?.id, "all");
     setUser(null);
   };
 
@@ -38,7 +45,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, loading, refresh, setUser, logout }}>
+    <AuthContext.Provider value={{ user, loading, refresh, setUser, logout, logoutAll }}>
       {children}
     </AuthContext.Provider>
   );
