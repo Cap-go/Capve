@@ -1277,6 +1277,37 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
 
   // Traffic source templates, tokens and cost (worker/mcp/tools-sources.ts)
   ...SOURCE_TOOLS,
+  {
+    name: "get_bidding_settings", title: "Get bidding beta settings",
+    description: "Read campaign opt-in, decision limits and Workers AI availability. Beta is off by default.",
+    inputSchema: schema({ campaign_id: str("Campaign id.") }, ["campaign_id"]), annotations: read,
+    call: (a) => ({ method: "GET", path: `/api/bidding/${id(a, "campaign_id")}/settings` }),
+  },
+  {
+    name: "set_bidding_settings", title: "Configure bidding beta",
+    description: "Explicitly opt a campaign into or out of AI bidding recommendations. Replaces settings; omitted limits use defaults. Does not change Adcash bids.",
+    inputSchema: schema({ campaign_id: str("Campaign id."), enabled: bool("Explicit campaign opt-in."),
+      dimension: enumOf(Array.from({length: 10}, (_, i) => `sub${i+1}`), "Adcash zone token."),
+      currency: enumOf(["USD", "EUR"], "Confirmed spend currency."),
+      window_hours: int("1–720 hours, before conversion delay."), conversion_lag_hours: int("1–168 hours."),
+      min_clicks: int("10–1000000 clicks."), min_spend_cents: int("1–100000000 cents."),
+      min_conversions: int("1–1000000 converted clicks before increase."), target_roi: int("0–1000 percent."),
+      max_change_pct: int("1–20 percent.") }, ["campaign_id", "enabled"]), annotations: destroy,
+    call: (a) => ({ method: "PUT", path: `/api/bidding/${id(a, "campaign_id")}/settings`,
+      body: pick(a, ["enabled", "dimension", "currency", "window_hours", "conversion_lag_hours", "min_clicks", "min_spend_cents", "min_conversions", "target_roi", "max_change_pct"]) }),
+  },
+  {
+    name: "analyze_bidding", title: "Analyze zone bidding (beta)",
+    description: "Run Workers AI on aggregate mature zone metrics after opt-in; at most once per 15 minutes. Stores review-only recommendations; never changes external bids.",
+    inputSchema: schema({ campaign_id: str("Campaign id.") }, ["campaign_id"]), annotations: write,
+    call: (a) => ({ method: "POST", path: `/api/bidding/${id(a, "campaign_id")}/analyze` }),
+  },
+  {
+    name: "get_bid_recommendations", title: "Get bid recommendations",
+    description: "Latest beta recommendations for current settings, including evidence, reasons, model and click window. Returns null after settings change.",
+    inputSchema: schema({ campaign_id: str("Campaign id.") }, ["campaign_id"]), annotations: read,
+    call: (a) => ({ method: "GET", path: `/api/bidding/${id(a, "campaign_id")}/recommendations` }),
+  },
 ];
 
 // Annotations describe effects, including network calls and replacement of existing data.

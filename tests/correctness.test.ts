@@ -237,7 +237,7 @@ describe("metrics correctness", () => {
     );
     for (const res of responses) expect(res.status).toBe(302);
     const affiliates = await env.DB.prepare(
-      "SELECT COUNT(*) AS n FROM affiliates WHERE program_id = ? AND code LIKE 'c_%'",
+      "SELECT COUNT(*) AS n FROM affiliates WHERE program_id = ? AND code GLOB 'c_*'",
     )
       .bind(program.id)
       .first<{ n: number }>();

@@ -1676,6 +1676,7 @@ a.campaign-item {
 
 .campaign-edit {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 16px;
 }
 .campaign-edit-head {
