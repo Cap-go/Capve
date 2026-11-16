@@ -1,6 +1,6 @@
 import type { Env } from "../types";
 import { bentoConfigured, bentoRequest } from "../lib/bento";
-import { onboardingStatus } from "../lib/onboarding";
+import { onboardingSnapshot } from "../lib/onboarding";
 
 /** Three accounts per invocation keeps even failure recovery below 50 D1 queries. */
 export async function onboardingEmails(env: Env, now = Date.now()) {
@@ -13,19 +13,19 @@ export async function onboardingEmails(env: Env, now = Date.now()) {
   if (!progress) return;
   let cursor = progress.cursor;
   try {
-    const page = await env.DB.prepare(`SELECT u.id, u.email, o.consent_at FROM users u
+    const page = await env.DB.prepare(`SELECT u.id, u.email FROM users u
       JOIN account_onboarding o ON o.account_id = u.id
       WHERE u.id > ? AND u.email_verified = 1 AND o.email_tips = 1 AND o.dismissed = 0
       AND NOT EXISTS (SELECT 1 FROM onboarding_email_events e
         WHERE e.event_key = u.id || ':onboarding:completed' AND e.delivered_at IS NOT NULL)
-      ORDER BY u.id LIMIT 3`).bind(cursor).all<{ id: string; email: string; consent_at: number }>();
+      ORDER BY u.id LIMIT 3`).bind(cursor).all<{ id: string; email: string }>();
     let processed = 0;
     for (const user of page.results) {
       if (Date.now() - started >= 20_000) break;
-      const status = await onboardingStatus(env.DB, user.id);
+      const { status, consentAt } = await onboardingSnapshot(env.DB, user.id);
       // Recheck consent after reading the page, before dispatching any event.
-      if (status.emailTips && !status.dismissed) {
-        const age = now - user.consent_at;
+      if (status.emailTips && !status.dismissed && status.steps.verify && consentAt !== null) {
+        const age = now - consentAt;
         const stage = status.complete ? "completed" : age >= 3 * 86400_000 ? "reminder_3d" : age >= 86400_000 ? "reminder_1d" : "welcome";
         const key = `${user.id}:onboarding:${stage}`;
         const event = await env.DB.prepare(`INSERT INTO onboarding_email_events (event_key, account_id) VALUES (?, ?)

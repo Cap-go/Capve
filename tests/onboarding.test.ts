@@ -207,3 +207,26 @@ it("keeps the setup guide available when the billing trial expires", async () =>
   await waitOnExecutionContext(ctx);
   expect(response.status).toBe(200);
 });
+
+it("uses renewed consent when it changes while an earlier Bento request is pending", async () => {
+  await prefs({ emailTips: true });
+  const other = await registerTestUser();
+  expect((await call("/api/onboarding", "PUT", { emailTips: true }, other.authHeaders)).status).toBe(200);
+  await env.DB.prepare("UPDATE account_onboarding SET consent_at = ? WHERE email_tips = 1")
+    .bind(Date.now() - 4 * 86400_000).run();
+  const accounts = await env.DB.prepare("SELECT account_id FROM account_onboarding WHERE email_tips = 1 ORDER BY account_id")
+    .all<{ account_id: string }>();
+  const laterId = accounts.results[1].account_id;
+  const laterHeaders = laterId === accountId ? headers : other.authHeaders;
+  const mock = mockBento().mockImplementationOnce(async () => {
+    // The scan already read both accounts, but has not yet accepted this first request.
+    expect((await call("/api/onboarding", "PUT", { emailTips: false }, laterHeaders)).status).toBe(200);
+    expect((await call("/api/onboarding", "PUT", { emailTips: true }, laterHeaders)).status).toBe(200);
+    return Response.json({ results: 1 });
+  });
+  await onboardingEmails(bentoEnv);
+  expect(sent(mock)).toMatchObject([
+    { type: "capve_onboarding_reminder_3d", fields: { capve_account_id: accounts.results[0].account_id } },
+    { type: "capve_onboarding_welcome", fields: { capve_account_id: laterId } },
+  ]);
+});
