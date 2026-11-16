@@ -1,3 +1,4 @@
+import { signOutChatGpt } from "./assistant/chatgptAuth";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { api, setRequestAccount, type User } from "./api";
 
@@ -29,6 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = async () => {
+    if (user) signOutChatGpt(user.id);
     await api.logout().catch(() => undefined);
     setUser(null);
   };

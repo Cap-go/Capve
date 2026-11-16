@@ -140,6 +140,7 @@ export function DocsMcp() {
   return (
     <>
       <h1>MCP server</h1>
+      <p>You can also use ChatGPT directly inside the dashboard: open <strong>Ask Capve</strong>, connect your ChatGPT account, and follow the callback instructions. The assistant uses your selected account and asks you to confirm every change. This is separate from connecting an external MCP client below.</p>
       <p>
         Capve is a remote{" "}
         <a href="https://modelcontextprotocol.io" target="_blank" rel="noreferrer">
