@@ -102,6 +102,7 @@ CREATE TABLE IF NOT EXISTS programs (
   tags TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   tracking_domain_id TEXT,
+  lenient_postbacks INTEGER NOT NULL DEFAULT 0,
   created_at INTEGER NOT NULL
 );
 
@@ -254,6 +255,7 @@ CREATE TABLE IF NOT EXISTS conversions (
   status2 TEXT,
   currency TEXT NOT NULL DEFAULT 'USD',
   event TEXT,
+  warning_flags TEXT,
   created_at INTEGER NOT NULL,
   updated_at INTEGER,
   UNIQUE(program_id, order_id)

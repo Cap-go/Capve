@@ -95,6 +95,7 @@ programs.post("/", async (c) => {
     traffic_source_id: trafficSourceId,
     tags: null,
     status: "active",
+    lenient_postbacks: 0,
     created_at: Date.now(),
   };
   const program = await withUniqueCampaignKey(name, async (campaign_key) => {

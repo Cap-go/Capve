@@ -67,6 +67,7 @@ export type Program = {
   traffic_source_id: string | null;
   tags: string | null;
   status: string;
+  lenient_postbacks: number;
   created_at: number;
 };
 
@@ -96,6 +97,7 @@ export type Conversion = {
   status2: string | null;
   event: string | null;
   currency: string;
+  warning_flags: string | null;
   created_at: number;
 };
 
