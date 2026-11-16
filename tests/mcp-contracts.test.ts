@@ -29,9 +29,11 @@ async function call(name: string, args: Record<string, unknown> = {}): Promise<R
   });
   const raw = await res.text();
   expect(res.ok, `${name}: ${res.status} ${raw}`).toBe(true);
-  const reply = JSON.parse(raw) as { result?: { isError?: boolean; structuredContent?: Record<string, unknown> } };
+  const reply = JSON.parse(raw) as { result?: { isError?: boolean; structuredContent?: Record<string, unknown>; content?: Array<{ type: string; text?: string }> } };
   expect(reply.result?.isError, `${name}: ${raw}`).toBe(false);
   const body = reply.result?.structuredContent;
+  const text = reply.result?.content?.find((item) => item.type === "text")?.text;
+  expect(JSON.parse(text!), `${name} text and structured content agree`).toEqual(body);
   const output = new Validator(tool.outputSchema).validate(body);
   expect(output.valid, `${name} output: ${JSON.stringify(output.errors)} ${raw}`).toBe(true);
   exercised.add(name);
@@ -142,7 +144,8 @@ describe("MCP tool contracts against authenticated Worker responses", () => {
     const zone = row(await call("list_zone_blacklist", { campaign_id }), "blacklist");
     const exported = await call("list_zone_blacklist", { campaign_id, format: "txt" });
     expect(exported.result).toBe("123\n");
-    await call("list_zone_blacklist", { campaign_id, format: "csv" });
+    const csv = await call("list_zone_blacklist", { campaign_id, format: "csv" });
+    expect(csv.result).toBe(`dimension,value,reason,rule_id,blacklisted_at\nsub1,123,manual,,${new Date(zone.created_at as number).toISOString()}\n`);
     await call("remove_blacklisted_zone", { entry_id: zone.id });
     const domain = item(await call("add_tracking_domain", { hostname: "track.contract.example" }), "tracking_domain");
     await call("list_tracking_domains");

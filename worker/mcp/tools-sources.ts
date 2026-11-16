@@ -38,7 +38,7 @@ const tokenSchema = {
     properties: {
       param: str("Query parameter on the campaign URL, e.g. zoneid."),
       name: str("Label shown in reports, e.g. Zone."),
-      slot: { type: "string", enum: TOKEN_SLOTS, description: "Where the value is stored." },
+      slot: { type: "string", enum: TOKEN_SLOTS, description: "Click field that stores this incoming query parameter; use it as the dimension in reports, blacklist rules or bidding analysis." },
       macro: str("The source's placeholder, e.g. [zone] or ${SUBID}."),
       kind: {
         type: "string",
@@ -56,7 +56,7 @@ export const SOURCE_TOOLS: ToolDefinition[] = [
     name: "list_source_templates",
     title: "List traffic source and network templates",
     description:
-      "Built-in traffic source presets (Adcash, PropellerAds, RichAds, Zeropark, TrafficStars, Facebook, Google Ads, TikTok) with tokens, macros and outgoing postback, plus affiliate network postback presets.",
+      "Read built-in traffic-source presets with cost models, token mappings, macros and outgoing postback templates, plus affiliate-network presets with incoming postback URLs and offer URL suffixes. Also returns available cost API providers; template ids feed the create-from-template tools.",
     inputSchema: schema({}),
     annotations: read,
     call: () => ({ method: "GET", path: "/api/sources/templates" }),
@@ -69,8 +69,8 @@ export const SOURCE_TOOLS: ToolDefinition[] = [
     inputSchema: schema(
       {
         template_id: str("Template id from list_source_templates (e.g. adcash)."),
-        name: str("Name (defaults to the template name)."),
-        default_cost_cents: { ...int("Default cost in cents."), minimum: 0 },
+        name: str("Display label for the new account record; omission uses the template’s name."),
+        default_cost_cents: { ...int("Fallback charge in cents using the template cost model: per click for CPC, per thousand clicks for CPM, or once per converted click for CPA."), minimum: 0 },
       },
       ["template_id"],
     ),
@@ -89,7 +89,7 @@ export const SOURCE_TOOLS: ToolDefinition[] = [
     inputSchema: schema(
       {
         template_id: str("Network template id from list_source_templates (e.g. everflow)."),
-        name: str("Name (defaults to the template name)."),
+        name: str("Display label for the new account record; omission uses the template’s name."),
       },
       ["template_id"],
     ),
@@ -104,7 +104,7 @@ export const SOURCE_TOOLS: ToolDefinition[] = [
     name: "get_traffic_source_settings",
     title: "Get traffic source settings",
     description: "Tokens, cost API provider and last cost sync of a traffic source. The API key is never returned.",
-    inputSchema: schema({ traffic_source_id: str("Traffic source id.") }, ["traffic_source_id"]),
+    inputSchema: schema({ traffic_source_id: str("Source whose integration settings or cost data to use; take its id from list_traffic_sources.") }, ["traffic_source_id"]),
     annotations: read,
     call: (a) => ({ method: "GET", path: `/api/sources/${id(a, "traffic_source_id")}/settings` }),
   },
@@ -112,10 +112,10 @@ export const SOURCE_TOOLS: ToolDefinition[] = [
     name: "update_traffic_source_settings",
     title: "Update traffic source settings",
     description:
-      "Replace the named tokens and/or set the cost API (api_provider: adcash) and API key (null clears it).",
+      "Update this traffic source’s integration settings. Supplied tokens replace the whole mapping; omitted fields stay unchanged. Configure api_provider and an encrypted API key for cost synchronization, or clear either with null. Returns settings with a key-presence flag, never the key.",
     inputSchema: schema(
       {
-        traffic_source_id: str("Traffic source id."),
+        traffic_source_id: str("Source whose integration settings or cost data to use; take its id from list_traffic_sources."),
         tokens: tokenSchema,
         api_provider: nullableStr("Cost API provider (adcash) or null."),
         api_key: nullableStr("Cost API key; stored encrypted, never returned. null clears it."),
@@ -133,9 +133,9 @@ export const SOURCE_TOOLS: ToolDefinition[] = [
     name: "sync_traffic_source_cost",
     title: "Sync cost from traffic source API",
     description:
-      "Pull spend from the source's cost API now (default: yesterday and today, UTC) and write it onto its campaigns' clicks.",
+      "Fetch spend using this source’s configured cost provider and stored API key, then replace costs on matching non-bot clicks across its campaigns. Campaign/zone token mappings determine matching; without them spend is spread across the source’s non-bot clicks for that day. Returns day, row, update, click and spend totals.",
     inputSchema: schema(
-      { traffic_source_id: str("Traffic source id."), date: str("Only this day (YYYY-MM-DD).") },
+      { traffic_source_id: str("Source whose integration settings or cost data to use; take its id from list_traffic_sources."), date: str("UTC spend day to synchronize, as YYYY-MM-DD. Omit to synchronize yesterday and today in UTC.") },
       ["traffic_source_id"],
     ),
     annotations: overwrite,
@@ -149,16 +149,16 @@ export const SOURCE_TOOLS: ToolDefinition[] = [
     name: "get_campaign_source_link",
     title: "Get campaign link for its traffic source",
     description:
-      "Campaign URL with the traffic source's macros appended (paste into the source), plus token labels (sub1 → Zone).",
-    inputSchema: schema({ campaign_id: str("Campaign id (prg_…).") }, ["campaign_id"]),
+      "Build the campaign’s tracking_url with its traffic source macros appended for pasting into the source. Also returns the base campaign_url, source id, token mappings and report labels. URL fields can be null when the campaign has no tracking key.",
+    inputSchema: schema({ campaign_id: str("Campaign whose source link or cost records to use; take its id from list_campaigns.") }, ["campaign_id"]),
     annotations: read,
     call: (a) => ({ method: "GET", path: `/api/campaigns/${id(a, "campaign_id")}/source-link` }),
   },
   {
     name: "list_cost_updates",
     title: "List cost updates",
-    description: "Manual and API cost updates applied to a campaign.",
-    inputSchema: schema({ campaign_id: str("Campaign id (prg_…).") }, ["campaign_id"]),
+    description: "Read the latest cost-update records relevant to a campaign: its manual updates and source-wide API updates. Records describe the time window, filters, total spend, affected click count and origin, newest first.",
+    inputSchema: schema({ campaign_id: str("Campaign whose source link or cost records to use; take its id from list_campaigns.") }, ["campaign_id"]),
     annotations: read,
     call: (a) => ({ method: "GET", path: `/api/campaigns/${id(a, "campaign_id")}/costs` }),
   },
@@ -166,16 +166,16 @@ export const SOURCE_TOOLS: ToolDefinition[] = [
     name: "update_campaign_cost",
     title: "Update campaign cost",
     description:
-      "Set the total cost of a campaign for a day or date range, optionally only for one token value (e.g. filter_dim=zoneid, filter_value=123). The total is spread evenly over matching clicks and replaces their previous cost.",
+      "Replace costs on this campaign’s non-bot clicks for a UTC day or date range; provide date or both from and to. Optionally restrict to an exact token value with filter_dim and filter_value. The total is spread evenly over matching clicks and replaces their previous cost. Returns the recorded update, including the affected click count.",
     inputSchema: schema(
       {
-        campaign_id: str("Campaign id (prg_…)."),
+        campaign_id: str("Campaign whose source link or cost records to use; take its id from list_campaigns."),
         date: str("One UTC day (YYYY-MM-DD). Or use from/to."),
         from: str("Range start: ISO date/time or Unix ms."),
         to: str("Range end: ISO date/time or Unix ms (a date means end of that day)."),
-        total_cents: { ...int("Total cost in cents for the matching clicks."), minimum: 0 },
+        total_cents: { ...int("Aggregate spend in cents for the entire matching click set, not a per-click amount; divided evenly among those clicks."), minimum: 0 },
         filter_dim: str("Token param of the source (zoneid) or click field (sub1..sub10, country, external_id)."),
-        filter_value: str("Value to match, e.g. the zone id."),
+        filter_value: str("Exact captured value to match in filter_dim, such as a traffic-source zone identifier; used together with filter_dim."),
       },
       ["campaign_id", "total_cents"],
     ),
