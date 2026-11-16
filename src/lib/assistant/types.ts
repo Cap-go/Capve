@@ -25,4 +25,3 @@ export interface AssistantContext {
   accountId?: string
   accountName?: string
 }
-
