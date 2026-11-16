@@ -23,17 +23,17 @@ import { MarketingLayout } from "../Layout";
 import { ProductMock } from "../ProductMock";
 
 const CASINO_PROMPTS = [
-  "Compare cost per FTD and ROI by traffic source for my casino campaigns.",
+  "Compare the reported commissions and traffic costs for the casino affiliate programs I promote.",
   "Show zones with registrations but no FTDs in the last seven days.",
   "Set up a 50/50 split between these two casino offers and track registration and FTD events.",
 ];
 
 const FLOW = [
-  { title: "Traffic source", body: "Sends paid traffic with campaign, creative and zone tokens." },
-  { title: "Capve edge", body: "Records the click, applies rules, filters bots, picks a path." },
-  { title: "Lander and offer", body: "Get the click id through URL macros." },
-  { title: "Postback", body: "The affiliate program reports registration, FTD and deposit events." },
-  { title: "Report", body: "Compare cost per FTD and reported revenue by source, zone and offer." },
+  { title: "Add your affiliate programs", body: "Organize the casino offers you promote by the affiliate program or network you work with." },
+  { title: "Use your tracking links", body: "Send visitors through Capve to your landing pages and casino offers." },
+  { title: "Connect conversion reports", body: "Configure each program’s postbacks to send registrations, first-time deposits and your reported commissions." },
+  { title: "Compare results together", body: "See tracked conversions and reported commissions beside traffic costs, by program, offer and source." },
+  { title: "Improve your campaigns", body: "Test offers and landing pages, adjust traffic splits, and choose which placements to keep or change." },
 ];
 
 const PROOF = [
@@ -55,11 +55,11 @@ export function HomePage() {
               <b>For casino affiliates</b> Open-source tracking on Cloudflare
               <Icon name="arrow" size={14} />
             </Link>
-            <h1 className="mk-h1 mt-6">Casino affiliate tracking, from click to FTD.</h1>
+            <h1 className="mk-h1 mt-6">One tracking dashboard for casino affiliates.</h1>
             <p className="mk-lead mt-6 max-w-xl">
-              Connect traffic costs to registrations, first-time deposits and the revenue your affiliate programs
-              report. Compare casino offers, landers and zones in one place, then act through the dashboard
-              or your AI assistant.
+              Bring the casino offers you promote, your traffic costs and the conversions and commissions
+              your affiliate programs report into one dashboard. Compare performance across programs and
+              traffic sources, then improve your campaigns.
             </p>
             <div className="mt-8">
               <TrialButtons secondary={{ label: "Compare trackers", href: "/compare" }} />
@@ -88,8 +88,8 @@ export function HomePage() {
           <SectionHeading
             center
             kicker="How it works"
-            title="Follow the click through to the first deposit."
-            lead="A campaign link in the traffic source, event postbacks from the casino affiliate program, and the cost and conversion data you need to compare them."
+            title="Several affiliate programs. One view of your performance."
+            lead="Work with different casino affiliate programs and platforms? Bring the results they send through postbacks into Capve, so you can compare the offers you promote alongside the traffic you buy."
           />
           <ol className="mk-flow mt-12">
             {FLOW.map((step, index) => (
@@ -107,8 +107,8 @@ export function HomePage() {
         <Container>
           <SectionHeading
             kicker="Product"
-            title="The tools behind your next traffic decision."
-            lead="Track registrations and FTDs separately, compare offers by geo, and investigate zones that spend without converting. Every plan includes these tracking features."
+            title="Find the offers and traffic that earn their place."
+            lead="Compare your affiliate programs by tracked conversions, reported commissions and traffic cost. Test landing pages, route visitors to the offers you choose and review which campaigns deserve more budget."
           />
           <div className="mt-10">
             <CardGrid
@@ -121,13 +121,18 @@ export function HomePage() {
             />
           </div>
           <div className="mt-10 flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-sm font-semibold">Tracking templates for</span>
-            {[...SOURCE_TEMPLATE_NAMES, ...NETWORK_TEMPLATE_NAMES].map((name) => (
+            <span className="mr-1 text-sm font-semibold">Affiliate platform templates</span>
+            {NETWORK_TEMPLATE_NAMES.map((name) => (
               <span className="mk-chip" key={name}>
                 {name}
               </span>
             ))}
-            <span className="mk-muted text-sm">with editable macros for your source and affiliate program.</span>
+            <span className="mk-muted text-sm">Editable postback presets for the programs you work with.</span>
+          </div>
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <span className="mr-1 text-sm font-semibold">Paid traffic templates</span>
+            {SOURCE_TEMPLATE_NAMES.map((name) => <span className="mk-chip" key={name}>{name}</span>)}
+            <span className="mk-muted text-sm">Track the sources you buy traffic from.</span>
           </div>
         </Container>
       </section>
@@ -179,8 +184,8 @@ export function HomePage() {
         <Container>
           <SectionHeading
             kicker="Solutions"
-            title="Built around the casino affiliate workflow."
-            lead="From a solo media buyer testing an offer to a team managing several programs, keep traffic, conversion events and reported revenue together."
+            title="Built for the affiliate behind the campaign."
+            lead="Whether you promote one casino or work with several affiliate programs, keep your offers, tracked conversions and reported earnings together. Share that view with your team as you grow."
           />
           <div className="mt-10">
             <CardGrid

@@ -6,7 +6,15 @@ export const SUPPORT_EMAIL = "support@capgo.app";
 export const HOME_FAQS: Faq[] = [
   {
     q: "What is Capve?",
-    a: "An open-source tracker for casino affiliates. It connects paid traffic to registration, first-time deposit (FTD) and deposit events sent by your affiliate programs, with cost and reported revenue by campaign, source, zone and offer.",
+    a: "A tracking and optimization dashboard for people who promote casino offers as affiliates. Organize the programs you work with, track the visitors you send, and compare the conversions and commissions those programs report alongside your traffic costs.",
+  },
+  {
+    q: "Who is Capve built for?",
+    a: "Independent casino affiliates and affiliate teams who want better tracking across the programs they have joined. Use it to compare offers, test landing pages and decide where to send traffic. Your affiliate programs continue to manage their player accounts and pay your commissions.",
+  },
+  {
+    q: "Can I bring results from different affiliate platforms together?",
+    a: "Yes. Add the offers from each program or network you work with, then configure its postbacks to send conversion events and payouts to Capve. Compare that tracked performance in one dashboard. Presets for Cellxpert, Affilka and MyAffiliates help with setup; each program must support the tracking parameters and postbacks you configure. Capve does not automatically import every balance or historical report from your affiliate accounts.",
   },
   {
     q: "How is Capve different from Binom?",

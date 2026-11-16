@@ -54,7 +54,7 @@ export function SiteFooter() {
             {BRAND_NAME}
           </Link>
           <p className="mt-3 text-[var(--velo-muted)]">
-            Open-source casino affiliate tracking on Cloudflare. Follow traffic costs, registrations, FTDs and reported revenue.
+            Tracking and optimization for casino affiliates. Bring the offers you promote, traffic costs and reported commissions into one dashboard.
           </p>
           <p className="mt-4 text-[var(--velo-muted)]">
             <a href={`mailto:${SUPPORT_EMAIL}`}>{SUPPORT_EMAIL}</a>
