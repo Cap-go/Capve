@@ -79,7 +79,7 @@ The modern profile's two unexecuted probes require a log-producing tool and a to
 
 [Manufact's mcp-use CLI](https://docs.mcp-use.com/typescript/tooling/client-cli) 2.12.4 with `@mcp-use/client` 2.4.5 connected in `legacy`, `auto` and `modern` modes, listed 93 tools, called `whoami` and `list_campaigns`, and correctly rejected `get_campaign` without its ID. Modern mode failed before modern protocol support and passed afterward. The public Manufact catalog lookup for Capve returned 404; its hosted evaluation score has not been measured.
 
-MCPJam's OpenAI readiness check passed the tool annotation, description, input-schema and name-length requirements. It remained **not ready** for directory submission: the local URL is plaintext HTTP, OAuth discovery is absent, and a real domain-verification token/submission profile is not supplied. Its separate host-compatibility catalog reported 28 compatible tool surfaces, but that uses supplied credentials and host profiles. It does not demonstrate that those 28 clients can authenticate or that real ChatGPT connection succeeds.
+MCPJam's OpenAI readiness check passed the tool annotation, description, input-schema and name-length requirements. It remained **not ready** for directory submission: the local URL is plaintext HTTP, OAuth discovery was absent in that revision, and a real domain-verification token/submission profile is not supplied. Its separate host-compatibility catalog reported 28 compatible tool surfaces, but that uses supplied credentials and host profiles. It does not demonstrate that those 28 clients can authenticate or that real ChatGPT connection succeeds.
 
 ## OpenAI Responses API
 
@@ -93,7 +93,7 @@ Running this sends the disposable account's MCP token and tool results to OpenAI
 
 ### ChatGPT authentication boundary
 
-OpenAI's [ChatGPT authentication guide](https://developers.openai.com/plugins/build/auth) requires an OAuth flow for account-linked remote plugins and says ChatGPT cannot present custom API keys. Capve currently provides personal bearer tokens, so direct authenticated ChatGPT plugin connection remains unsupported. A working Responses API call does not remove that limitation. Do not make private Capve tools anonymous to bypass it. OAuth authorization, consent, discovery and revocation would be a separate implementation.
+OpenAI's [ChatGPT authentication guide](https://developers.openai.com/plugins/build/auth) requires an OAuth flow for account-linked remote plugins and says ChatGPT cannot present custom API keys. Capve now implements OAuth discovery, dynamic registration, PKCE consent, token refresh and revocation; see [MCP OAuth](mcp-oauth.md). Both official MCP SDK generations are tested locally. A real ChatGPT connection and hosted directory evaluation must still be verified after deployment; a passing Responses API or local SDK check does not establish either.
 
 ### Workflow evaluation set
 
@@ -117,3 +117,9 @@ Tool descriptions should explain when to use a tool, prerequisites and limits. A
 ## Hosted retest after deployment
 
 Martin must merge only after review and CI approval and allow the production deploy workflow to finish; agents must not deploy this repository. Then rerun Inspector and the optional OpenAI smoke check against `https://capve.app/mcp`, refresh cached tool metadata in connected clients, and request a new Manufact evaluation using a disposable account. Record the deployed commit, tool count, test versions, report URLs, scores and unresolved findings. Until a new external report exists, report local results separately and leave the hosted score unverified.
+
+## OAuth regression coverage
+
+`bun run test` includes `tests/oauth.test.ts`: discovery, registration, PKCE, redirect and audience validation, CSRF, consent expiry, concurrent code/refresh redemption, replay revocation, password reset, account isolation, and connection management.
+
+`bun run test:mcp:clients` also runs the OAuth flow through both installed official MCP SDK generations against an isolated Worker and migrated D1. It begins without credentials, discovers the authorization server, registers a client, obtains consent using a disposable local user, exchanges the PKCE code, calls tools, automatically refreshes after a 401, and verifies revocation. These checks run in PR CI without production credentials or a paid AI model. Browser screenshots use local fixtures; they are not a hosted checker score.

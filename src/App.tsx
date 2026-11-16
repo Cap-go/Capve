@@ -1,3 +1,4 @@
+import { OAuthConsentPage } from "./pages/OAuthConsent";
 import { DOC_CONTENT } from "./lib/docs-content";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
 import { DocsLayout } from "./components/DocsLayout";
@@ -60,6 +61,7 @@ export function AppRoutes() {
         <Route path="/imprint" element={<ImprintPage />} />
         <Route path="/privacy" element={<PrivacyPage />} />
         <Route path="/terms" element={<TermsPage />} />
+        <Route path="/oauth/consent" element={<OAuthConsentPage />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/register" element={<RegisterPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />

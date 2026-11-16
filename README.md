@@ -28,11 +28,15 @@ Capve is also an **MCP server**: connect Claude Code, Cursor, VS Code or any MCP
 | `/api/v1/convert` | Public — conversion API (`X-Program-Secret`) |
 | `/api/v1/snippet` | Public — browser attribution snippet |
 | `/api/programs/*` | Signed-in users (session cookie or API token) |
-| `/mcp` | MCP server (`Authorization: Bearer capve_…`) |
+| `/mcp` | MCP server (OAuth or personal API token) |
 
 Each program stores a **destination URL**. Tracking links redirect there and append `velo_ref=<code>` for merchant-site attribution.
 
 ## MCP
+
+**OAuth:** Add `https://capve.app/mcp` to your MCP client, choose OAuth, sign in and approve the app. No API token is needed. Manage connected apps in **API & MCP**. OAuth connections cover your personal account and expire after 30 days; team accounts and platform administration are excluded. See [OAuth setup and security](docs/mcp-oauth.md).
+
+**Manual token setup:**
 
 1. Sign in, open **AI / MCP** in the dashboard and create a token (`capve_…`, shown once).
 2. Add the server to your client:
@@ -53,7 +57,7 @@ Cursor / VS Code / Windsurf (`mcp.json`):
 
 Tokens act as the user who created them, can be revoked from the dashboard, and cannot create more tokens. Only a SHA-256 hash is stored.
 
-See [MCP testing](docs/mcp-testing.md) for Inspector, Manufact, Cloudflare, MCPJam and OpenAI checks. The OpenAI Responses API can supply a bearer token; direct authenticated ChatGPT plugins require OAuth, which Capve does not currently implement.
+See [MCP testing](docs/mcp-testing.md) for Inspector, Manufact, Cloudflare, MCPJam and OpenAI checks. The OpenAI Responses API can supply a bearer token; interactive MCP clients can use the OAuth flow above.
 
 ## Quick install
 

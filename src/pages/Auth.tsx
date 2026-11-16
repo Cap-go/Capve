@@ -1,3 +1,4 @@
+import { oauthReturnTo } from "../lib/oauth";
 import { isPlanId } from "../../shared/billing";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
@@ -8,12 +9,16 @@ import { useAuth } from "../lib/auth";
 export function LoginPage() {
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
+  const returnTo = oauthReturnTo(window.location.search, window.location.origin);
+  useEffect(() => {
+    if (user && returnTo) window.location.assign(returnTo);
+  }, [user, returnTo]);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to="/app" replace />;
+  if (user) return returnTo ? <p className="p-6">Continuing to authorization…</p> : <Navigate to="/app" replace />;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -22,7 +27,7 @@ export function LoginPage() {
     try {
       const { user: next } = await api.login(email, password);
       setUser(next);
-      navigate("/app");
+      if (!returnTo) navigate("/app");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Login failed");
     } finally {
@@ -33,7 +38,7 @@ export function LoginPage() {
   return (
     <Shell
       cta={
-        <Link className="btn btn-ghost" to="/register">
+        <Link className="btn btn-ghost" to={returnTo ? `/register?returnTo=${encodeURIComponent(returnTo)}` : "/register"}>
           Create account
         </Link>
       }
@@ -62,6 +67,10 @@ export function LoginPage() {
 export function RegisterPage() {
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
+  const returnTo = oauthReturnTo(window.location.search, window.location.origin);
+  useEffect(() => {
+    if (user && returnTo) window.location.assign(returnTo);
+  }, [user, returnTo]);
   const selectedPlan = new URLSearchParams(window.location.search).get("plan");
   const plan = isPlanId(selectedPlan) ? selectedPlan : "starter";
   const [name, setName] = useState("");
@@ -70,7 +79,7 @@ export function RegisterPage() {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (user) return <Navigate to="/app" replace />;
+  if (user) return returnTo ? <p className="p-6">Continuing to authorization…</p> : <Navigate to="/app" replace />;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -79,7 +88,7 @@ export function RegisterPage() {
     try {
       const { user: next } = await api.register({ email, password, name: name || undefined, plan });
       setUser(next);
-      navigate("/app");
+      if (!returnTo) navigate("/app");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -90,7 +99,7 @@ export function RegisterPage() {
   return (
     <Shell
       cta={
-        <Link className="btn btn-ghost" to="/login">
+        <Link className="btn btn-ghost" to={returnTo ? `/login?returnTo=${encodeURIComponent(returnTo)}` : "/login"}>
           Sign in
         </Link>
       }

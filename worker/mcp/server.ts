@@ -122,7 +122,7 @@ async function handleMessage(message: JsonRpcRequest, dispatch: ApiDispatch) {
   }
 }
 
-export async function handleMcpRequest(request: Request, dispatch: ApiDispatch): Promise<Response> {
+export async function handleMcpRequest(request: Request, dispatch: ApiDispatch, allowedOrigin?: string): Promise<Response> {
   const protocol = request.headers.get("MCP-Protocol-Version");
   const modernTransport = protocol !== null
     ? !LEGACY_PROTOCOL_VERSIONS.includes(protocol)
@@ -131,7 +131,7 @@ export async function handleMcpRequest(request: Request, dispatch: ApiDispatch):
     jsonrpc: "2.0", ...(!modernTransport ? { id: null } : {}), error: { code, message },
   }, { status });
   const origin = request.headers.get("Origin");
-  if (origin !== null && origin !== new URL(request.url).origin) {
+  if (origin !== null && origin !== new URL(request.url).origin && origin !== allowedOrigin) {
     return transportError(-32000, "Forbidden origin", 403);
   }
   if (request.method !== "POST") {

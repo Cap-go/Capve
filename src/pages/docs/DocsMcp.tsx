@@ -150,7 +150,10 @@ export function DocsMcp() {
       </p>
       <CodeBlock>{mcpUrl(base)}</CodeBlock>
 
-      <h2>1. Create a token</h2>
+      <h2>Connect with OAuth</h2>
+      <p>Add the server URL above to your MCP client and select OAuth. Capve supports OAuth authorization code flow with PKCE (S256), automatic discovery and dynamic client registration. Sign in with your existing Capve account and review the app before allowing access.</p>
+      <p>OAuth grants access to your personal account for up to 30 days. Team accounts and platform administration are excluded. Disconnect apps from <Link to="/app/mcp">API &amp; MCP</Link>; signing out everywhere or resetting your password also revokes their access.</p>
+      <h2>API tokens (manual setup)</h2>
       <p>
         In the dashboard open <Link to="/app/mcp">AI / MCP</Link> and create a token. It
         starts with <code>capve_</code> and is shown once. The token acts as you, with your team
@@ -158,7 +161,7 @@ export function DocsMcp() {
         same page.
       </p>
 
-      <h2>2. Connect your client</h2>
+      <h2>Connect with an API token</h2>
       <h3>Claude Code</h3>
       <CodeBlock>{claudeCodeCommand(base)}</CodeBlock>
       <h3>Cursor, Windsurf, VS Code and other HTTP clients</h3>
@@ -170,9 +173,7 @@ export function DocsMcp() {
       <p>
         In the Responses API, add an MCP tool with <code>server_url</code> set to the URL
         above and <code>authorization</code> set to your Capve token. Use{" "}
-        <code>allowed_tools</code> to select the tools your assistant needs. Direct authenticated
-        ChatGPT plugins require OAuth; Capve currently uses personal API tokens and does not
-        implement that connection flow. See the{" "}
+        <code>allowed_tools</code> to select the tools your assistant needs. For interactive MCP clients, choose the OAuth connection flow described above. See the{" "}
         <a href="https://developers.openai.com/api/docs/guides/tools-connectors-mcp" target="_blank" rel="noreferrer">
           OpenAI MCP guide
         </a>.
@@ -183,7 +184,7 @@ export function DocsMcp() {
       </p>
       <CodeBlock>{mcpRemoteConfig(base)}</CodeBlock>
 
-      <h2>3. Ask</h2>
+      <h2>Ask</h2>
       <ul>
         {MCP_EXAMPLE_PROMPTS.map((prompt) => (
           <li key={prompt}>{prompt}</li>
@@ -217,8 +218,8 @@ export function DocsMcp() {
       <h2>Protocol</h2>
       <p>
         Streamable HTTP transport, JSON responses, stateless. Send{" "}
-        <code>Authorization: Bearer capve_…</code> on every request. Requests without a valid token
-        get <code>401</code>. The same token works on the REST API (<code>/api/*</code>), except
+        <code>Authorization: Bearer &lt;access_token&gt;</code> on every request. Requests without a valid token
+        get <code>401</code> with OAuth discovery in the <code>WWW-Authenticate</code> header. The same token works on the REST API (<code>/api/*</code>), except
         for managing tokens.
       </p>
       <CodeBlock>{`curl ${mcpUrl(base)} \\
