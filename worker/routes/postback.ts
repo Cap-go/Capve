@@ -48,27 +48,44 @@ postback.get("/", async (c) => {
   let lenientMode = false;
 
   if (!resolved) {
-    const programsResult = await c.env.DB
-      .prepare("SELECT id, user_id, lenient_postbacks, traffic_source_id FROM programs ORDER BY created_at DESC LIMIT 10")
-      .all<{ id: string; user_id: string; lenient_postbacks: number; traffic_source_id: string | null }>();
-    
-    const lenientProgram = programsResult.results?.find(p => p.lenient_postbacks === 1);
-    
-    if (!lenientProgram) {
+    const affiliateCode = c.req.query("affiliate_code")?.trim();
+    if (!affiliateCode) {
       return c.text("click not found", 404);
     }
 
-    const defaultAffiliate = await c.env.DB
-      .prepare("SELECT id, code, program_id FROM affiliates WHERE program_id = ? ORDER BY created_at ASC LIMIT 1")
-      .bind(lenientProgram.id)
-      .first<{ id: string; code: string; program_id: string }>();
+    const affiliateResult = await c.env.DB
+      .prepare(`SELECT a.id, a.code, a.program_id,
+                       p.id AS p_id, p.user_id, p.lenient_postbacks, p.traffic_source_id
+                FROM affiliates a
+                JOIN programs p ON p.id = a.program_id
+                WHERE a.code = ?
+                LIMIT 1`)
+      .bind(affiliateCode)
+      .first<{
+        id: string;
+        code: string;
+        program_id: string;
+        p_id: string;
+        user_id: string;
+        lenient_postbacks: number;
+        traffic_source_id: string | null;
+      }>();
 
-    if (!defaultAffiliate) {
+    if (!affiliateResult || affiliateResult.lenient_postbacks !== 1) {
       return c.text("click not found", 404);
     }
 
-    program = lenientProgram;
-    affiliate = defaultAffiliate;
+    affiliate = {
+      id: affiliateResult.id,
+      code: affiliateResult.code,
+      program_id: affiliateResult.program_id,
+    };
+    program = {
+      id: affiliateResult.p_id,
+      user_id: affiliateResult.user_id,
+      lenient_postbacks: affiliateResult.lenient_postbacks,
+      traffic_source_id: affiliateResult.traffic_source_id,
+    };
     lenientMode = true;
     warnings.push("unknown_click_id");
   } else {
