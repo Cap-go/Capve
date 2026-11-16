@@ -17,9 +17,9 @@ export type PageMeta = {
   jsonLd?: object[];
 };
 
-export const DEFAULT_TITLE = "Capve — Casino affiliate tracking";
+export const DEFAULT_TITLE = "Capve — Tracking and optimization for casino affiliates";
 export const DEFAULT_DESCRIPTION =
-  "Open-source tracking for casino affiliates: registrations, FTDs, postbacks, offer comparisons and ROI by traffic source, with an MCP server for AI assistants.";
+  "One tracking dashboard for casino affiliates. Compare offers, tracked conversions, reported commissions and traffic costs across the affiliate programs you promote.";
 
 const BRAND_SUFFIX = " | Capve";
 
@@ -88,9 +88,9 @@ export const PAGES: PageMeta[] = [
   page({
     path: "/",
     section: "Home",
-    title: "Capve — Casino affiliate tracker for registrations, FTDs and ROI",
+    title: "Capve — One tracking dashboard for casino affiliates",
     description:
-      "Track casino affiliate campaigns from paid click to registration and FTD. Compare costs, reported revenue and offers by source, zone and geo. From $74.50/month.",
+      "One tracking dashboard for casino affiliates. Compare offers, tracked conversions, reported commissions and traffic costs across the affiliate programs you promote.",
     jsonLd: [ORGANIZATION_LD, SOFTWARE_LD, faqLd(HOME_FAQS)],
   }),
   page({

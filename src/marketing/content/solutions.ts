@@ -105,14 +105,14 @@ export const SOLUTIONS: Solution[] = [
     // Keep the established URL while focusing the page on casino affiliate offer portfolios.
     slug: "affiliate-programs",
     icon: "offers",
-    name: "Casino offer portfolios",
-    summary: "Compare programs, offers and landers on the traffic you send",
-    title: "Compare casino affiliate offers, programs and landing pages",
+    name: "Multiple affiliate programs",
+    summary: "Centralize tracking across the casino affiliate programs you work with",
+    title: "Track multiple casino affiliate programs in one dashboard",
     description:
       "Organize casino offers by affiliate network, test landers and offers with weighted paths, and compare registration, FTD, cost and reported revenue in Capve.",
-    eyebrow: "For affiliates managing multiple offers",
-    h1: "Compare the offers behind your traffic spend.",
-    lead: "Keep each casino offer’s URL, network and payout configuration in one place. Test offers against the same traffic context and compare the events their programs actually report.",
+    eyebrow: "For affiliates working with multiple programs",
+    h1: "Your affiliate programs, together in one dashboard.",
+    lead: "Promote casino offers from different programs without keeping your tracking scattered across them. Organize your offer links and bring the conversions and commissions each program reports through postbacks into Capve. Compare performance and decide where your next visitors should go.",
     pains: [
       { icon: "offers", title: "A reusable offer library", body: "Create offers once, group them by affiliate network, and reuse them across campaign paths." },
       { icon: "landers", title: "Lander and offer tests", body: "Assign weights to several landers and offers within a path. Each click records the selected combination." },

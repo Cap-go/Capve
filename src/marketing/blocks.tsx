@@ -245,7 +245,7 @@ export function DocLinks({ links }: { links: Array<{ label: string; href: string
 }
 
 export function CtaBand({
-  title = "Track your next casino campaign with Capve.",
+  title = "Bring your casino affiliate tracking together.",
   body = "14-day free trial with every feature. No card, no server, no sales call.",
 }: {
   title?: string;
