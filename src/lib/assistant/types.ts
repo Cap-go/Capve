@@ -18,6 +18,7 @@ export interface AssistantResponse {
 export interface AssistantTurn {
   role: 'user' | 'assistant'
   content: string
+  cards?: AssistantCard[]
 }
 
 export interface AssistantContext {

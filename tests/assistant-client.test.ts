@@ -1,3 +1,4 @@
+import { logoutSession } from "../src/lib/logout";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { beginChatGptSignIn, completeChatGptSignIn, getChatGptAccessToken, loadChatGptCredentials, signOutChatGpt, pkceChallenge, CHATGPT_REDIRECT_URI } from "../src/lib/assistant/chatgptAuth";
 import { parseChatGptCallback } from "../src/lib/assistant/chatgptCallback";
@@ -38,6 +39,22 @@ describe("ChatGPT connection", () => {
     expect(loadChatGptCredentials("user1")?.refreshToken).toBe("refresh2");
     expect(data.has("capve-assistant-chatgpt-pending:user1")).toBe(false);
     signOutChatGpt("user1"); expect(loadChatGptCredentials("user1")).toBeNull();
+  });
+
+  it.each(["current", "all"] as const)("forgets credentials and pending sign-in on %s-session logout", async (scope) => {
+    storage.setItem("capve-assistant-chatgpt:user1", JSON.stringify({ accessToken: "access", refreshToken: "refresh" }));
+    await beginChatGptSignIn("user1");
+    const fetcher = vi.fn(async (_url: string) => {
+      expect(loadChatGptCredentials("user1")).toBeNull();
+      // A concurrent refresh finishing during the logout request must not restore the connection.
+      storage.setItem("capve-assistant-chatgpt:user1", JSON.stringify({ accessToken: "late", refreshToken: "late-refresh" }));
+      return Response.json({ ok: true });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    await logoutSession("user1", scope);
+    expect(fetcher.mock.calls[0][0]).toBe(scope === "all" ? "/api/auth/logout-all" : "/api/auth/logout");
+    expect(loadChatGptCredentials("user1")).toBeNull();
+    expect(storage.getItem("capve-assistant-chatgpt-pending:user1")).toBeNull();
   });
 
   it("rejects expired sign-in and a mismatched ID-token nonce", async () => {
@@ -87,6 +104,33 @@ describe("assistant tool loop", () => {
     await runAssistant({ ...options, confirm: { tool: "create_campaign", arguments: { name: "New campaign" } } });
     expect(calls).toEqual([{ name: "create_campaign", arguments: { name: "New campaign" } }]);
   });
+  it.each(["", "Choose an option."])("preserves question cards when the assistant summary is %j", async (summary) => {
+    const inputs: Array<Array<{ role: string; content?: string }>> = [];
+    let responseCount = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith("/mcp")) return Response.json({ result: { tools: [] } });
+      if (url.endsWith("/models")) return Response.json({ models: [] });
+      inputs.push(JSON.parse(init.body as string).input);
+      responseCount++;
+      if (responseCount === 1) return stream([{ type: "function_call", namespace: "capve_ui", name: "ask_user", call_id: "question1", arguments: JSON.stringify({ question: "Compare ROI for the last seven days?", options: ["Yes", "No"], allow_free_text: true }) }]);
+      return stream([{ type: "message", content: [{ type: "output_text", text: summary }] }]);
+    }));
+    const messages = [{ role: "user" as const, content: "Compare performance" }];
+    const options = { accessToken: "question-test", accountId: "account1", context: {}, messages };
+    const question = await runAssistant(options);
+    expect(question.cards[0]).toMatchObject({ type: "question" });
+    // Plain/free-text answers must work even without a question prefix from the UI.
+    await runAssistant({ ...options, messages: [...messages,
+      { role: "assistant", content: question.reply, cards: question.cards },
+      { role: "user", content: "Yes" },
+    ] });
+    expect(inputs.at(-1)).toEqual([
+      messages[0],
+      { role: "assistant", content: [summary, 'Question: Compare ROI for the last seven days?\nOptions: ["Yes","No"]'].filter(Boolean).join("\n\n") },
+      { role: "user", content: "Yes" },
+    ]);
+  });
+
   it("never starts a tool loop after account-switch cancellation", async () => {
     const fetcher = vi.fn(); vi.stubGlobal("fetch", fetcher);
     const controller = new AbortController(); controller.abort();

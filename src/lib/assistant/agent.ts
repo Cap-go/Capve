@@ -343,7 +343,13 @@ export async function runAssistant(options: RunAssistantOptions): Promise<Assist
   const toolsByName = new Map(mcpTools.map(tool => [tool.name, tool]))
   const tools = responsesTools(mcpTools)
   const prompt = instructions(options.context)
-  const input: InputItem[] = options.messages.filter(turn => turn.content.trim()).slice(-40).map(turn => ({ role: turn.role, content: turn.content }))
+  const input: InputItem[] = options.messages.slice(-40).map(turn => {
+    const questions = turn.role === 'assistant'
+      ? (turn.cards ?? []).filter(card => card.type === 'question').map(card =>
+          `Question: ${card.question}\nOptions: ${JSON.stringify(card.options)}`)
+      : []
+    return { role: turn.role, content: [turn.content, ...questions].filter(Boolean).join('\n\n') }
+  }).filter(turn => turn.content.trim())
 
   if (options.confirm) {
     const tool = toolsByName.get(options.confirm.tool)
