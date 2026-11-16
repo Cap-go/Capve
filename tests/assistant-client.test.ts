@@ -1,3 +1,4 @@
+import type { AssistantCard } from "../src/lib/assistant/types";
 import { logoutSession } from "../src/lib/logout";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { beginChatGptSignIn, completeChatGptSignIn, getChatGptAccessToken, loadChatGptCredentials, signOutChatGpt, pkceChallenge, CHATGPT_REDIRECT_URI } from "../src/lib/assistant/chatgptAuth";
@@ -107,6 +108,39 @@ describe("assistant tool loop", () => {
     expect(calls).toEqual([{ name: "create_campaign", arguments: { name: "New campaign" } }]);
     expect(onMutation).toHaveBeenCalledTimes(1);
   });
+  it("keeps multiple write proposals pending until each is separately confirmed", async () => {
+    const writes: unknown[] = [];
+    const inputs: string[] = [];
+    let modelCalls = 0;
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith("/mcp")) {
+        const body = JSON.parse(init.body as string);
+        if (body.method === "tools/list") return Response.json({ result: { tools: [tool] } });
+        writes.push(body.params);
+        return Response.json({ result: { content: [{ text: "Created" }] } });
+      }
+      if (url.endsWith("/models")) return Response.json({ models: [] });
+      inputs.push(JSON.stringify(JSON.parse(init.body as string).input));
+      if (++modelCalls === 1) return stream(["First campaign", "Second campaign"].map((name, i) => ({
+        type: "function_call", namespace: "capve", name: "create_campaign", call_id: `create${i}`, arguments: JSON.stringify({ name }),
+      })));
+      return stream([{ type: "message", content: [{ type: "output_text", text: "Review the pending actions." }] }]);
+    }));
+    const options = { accessToken: "siblings-test", accountId: "account1", messages: [{ role: "user" as const, content: "Create two campaigns" }], context: {} };
+    const proposal = await runAssistant(options);
+    const cards = proposal.cards.filter((card): card is Extract<AssistantCard, { type: "confirm" }> => card.type === "confirm");
+    expect(cards).toHaveLength(2); expect(writes).toHaveLength(0);
+    await runAssistant({ ...options, confirm: cards[0], pendingConfirmations: [cards[1]] });
+    expect(writes).toEqual([{ name: "create_campaign", arguments: { name: "First campaign" } }]);
+    expect(inputs.at(-1)).toContain("still await separate confirmation and have NOT run");
+    expect(inputs.at(-1)).toContain("Second campaign");
+    await runAssistant({ ...options, confirm: cards[1], pendingConfirmations: [] });
+    expect(writes).toEqual([
+      { name: "create_campaign", arguments: { name: "First campaign" } },
+      { name: "create_campaign", arguments: { name: "Second campaign" } },
+    ]);
+  });
+
   it.each([
     { ok: true, readOnly: false }, { ok: false, readOnly: false }, { ok: true, readOnly: true },
   ])("notifies the dashboard only for successful mutations before summarizing: %j", async ({ ok, readOnly }) => {

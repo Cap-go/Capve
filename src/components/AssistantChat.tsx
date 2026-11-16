@@ -71,11 +71,14 @@ function Chat({ userId, accountId, accountName }: { userId: string; accountId: s
   }
 
   async function send(text: string, confirm?: ConfirmCard) {
-    if (running.current || !text.trim()) return;
+    if (running.current || !text.trim() || (confirm && used.has(confirm))) return;
     running.current = true; setBusy(true); setError("");
     setInput("");
-    // Older proposed actions must not remain clickable after the conversation moves on.
-    setUsed(new Set(messages.flatMap(message => message.cards ?? [])));
+    const cards = messages.flatMap(message => message.cards ?? []);
+    // Confirm only the clicked card. A new conversational request supersedes old proposals.
+    const nextUsed = new Set([...used, ...(confirm ? [confirm] : cards)]);
+    setUsed(nextUsed);
+    const pendingConfirmations = cards.filter((card): card is ConfirmCard => card.type === "confirm" && !nextUsed.has(card));
     const next: Message[] = [...messages, { role: "user", content: text }];
     setMessages(next);
     const abort = new AbortController(); controller.current = abort;
@@ -85,7 +88,7 @@ function Chat({ userId, accountId, accountName }: { userId: string; accountId: s
       if (!accessToken) throw new Error("chatgpt_reconnect_required");
       const result = await runAssistant({
         accessToken, accountId, signal: abort.signal, messages: next,
-        context: { path: pathname, accountId, accountName }, confirm,
+        context: { path: pathname, accountId, accountName }, confirm, pendingConfirmations,
         onMutation: () => window.dispatchEvent(new CustomEvent("capve:assistant-mutation", { detail: { accountId } })),
       });
       if (!abort.signal.aborted) setMessages([...next, { role: "assistant", content: result.reply, ...result }]);
