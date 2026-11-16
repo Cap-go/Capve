@@ -51,9 +51,9 @@ const dateArg = (edge: string) =>
 const reportFilters = {
   from: dateArg("Start"),
   to: dateArg("End"),
-  group_id: str("Only campaigns in this group."),
-  traffic_source_id: str("Only campaigns from this traffic source."),
-  status: enumOf(["active", "paused", "archived"], "Only campaigns with this status. Omitted = active + paused (archived hidden)."),
+  group_id: str("Restrict the report to campaigns assigned to this group; use an id from list_groups."),
+  traffic_source_id: str("Restrict the report to campaigns using this source; use an id from list_traffic_sources."),
+  status: enumOf(["active", "paused", "archived"], "Filter by campaign lifecycle state. Omit to include active and paused campaigns and exclude archived ones."),
 };
 
 function schema(properties: Record<string, unknown>, required: string[] = []): JsonSchema {
@@ -105,16 +105,16 @@ const METRICS_NOTE =
   "Conversions count each converted click once (registration + FTD on one click = 1) plus click-less conversions; CR = conversions / clicks, max 100%. Cost is stored per click at click time (CPC/CPM), CPA is charged once per converted click. ROI is null without cost. Per-event metrics in event_metrics: count, revenue_cents, cr, cpa_cents. Money in cents; revenue is in `currency` and revenue_by_currency lists every currency (never summed).";
 
 const pathFields = {
-  name: str("Path name."),
+  name: str("Display label identifying this traffic path in the campaign rotation."),
   flow_type: enumOf(
     ["direct", "lander", "lander_offer", "offer"],
-    "direct = direct_url; lander = lander only; lander_offer = lander then offer via /lp; offer = offer only.",
+    "Visitor journey: direct uses direct_url; lander stops at a landing page; lander_offer sends its /lp click to an offer; offer redirects straight to an offer.",
   ),
-  weight: { ...int("Rotation weight, integer >= 0 (default 100). 0 = no traffic."), minimum: 0 },
-  sort_order: int("Order for top_to_bottom rotation."),
+  weight: { ...int("Relative share when choosing between paths; zero receives no traffic. Defaults to 100 on creation; omission preserves the weight on update."), minimum: 0 },
+  sort_order: int("Priority for top_to_bottom selection; lower values are considered first."),
   direct_url: nullableStr("Destination for flow_type=direct (http/https)."),
-  lander_id: nullableStr("Lander id (lp_…)."),
-  offer_id: nullableStr("Offer id (off_…)."),
+  lander_id: nullableStr("Landing page to use; take its id from list_landers."),
+  offer_id: nullableStr("Offer to send visitors to; take its id from list_offers."),
   enabled: bool("Whether the path receives traffic."),
   landers: {
     type: "array",
@@ -122,7 +122,7 @@ const pathFields = {
     maxItems: 50,
     items: {
       type: "object",
-      properties: { lander_id: str("Lander id."), weight: { ...int("Weight (default 100)."), minimum: 0 } },
+      properties: { lander_id: str("Landing page included in this path; take its id from list_landers."), weight: { ...int("Relative selection share among entries in this list; use a positive weight. Defaults to 100."), minimum: 0 } },
       required: ["lander_id"],
       additionalProperties: false,
     },
@@ -133,7 +133,7 @@ const pathFields = {
     maxItems: 50,
     items: {
       type: "object",
-      properties: { offer_id: str("Offer id."), weight: { ...int("Weight (default 100)."), minimum: 0 } },
+      properties: { offer_id: str("Offer included in this path; take its id from list_offers."), weight: { ...int("Relative selection share among entries in this list; use a positive weight. Defaults to 100."), minimum: 0 } },
       required: ["offer_id"],
       additionalProperties: false,
     },
@@ -141,32 +141,32 @@ const pathFields = {
 };
 
 const ruleFields = {
-  name: str("Rule name."),
+  name: str("Display label identifying this rule in the campaign configuration."),
   conditions: {
     type: "array",
     maxItems: 20,
     description:
-      "AND-ed conditions. field: country, continent (EU, NA…), region, city, device_type, os, browser, isp, asn, language, connection (datacenter|residential), bot (yes|no), referrer_domain, ip (IP or CIDR), weekday (mon..sun), hour (9 or 9-17), sub1..sub10. op: in | not_in.",
+      "Conditions that must all match a click. Supplying this array replaces the previous conditions; an empty array matches every click.",
     items: {
       type: "object",
       properties: {
-        field: enumOf(RULE_FIELDS, "Click field to match; values must use the representation described above."),
-        op: enumOf(["in", "not_in"], "Operator."),
-        values: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 500, description: "Values (any match)." },
+        field: enumOf(RULE_FIELDS, "Click attribute to test; sub-token fields contain values captured from the incoming tracking URL."),
+        op: enumOf(["in", "not_in"], "Whether the click must match any supplied value (in) or none of them (not_in). Omission uses in."),
+        values: { type: "array", items: { type: "string" }, minItems: 1, maxItems: 500, description: "Alternatives for this condition. Use country/continent codes, numeric or AS-prefixed ASNs, datacenter/residential connections, yes/no bot flags, IPs or CIDRs, weekday names (mon..sun), or hours (9 or 9-17); other fields use their recorded text." },
       },
       required: ["field", "values"],
       additionalProperties: false,
     },
   },
   timezone: str("IANA timezone for weekday/hour conditions (default UTC)."),
-  sort_order: int("Evaluation order (lower first)."),
+  sort_order: int("Rule priority, lower first. Omit on creation to append after existing rules; omit on update to keep its order."),
   enabled: bool("Whether the rule is evaluated."),
 };
 
 const postbackOwner = {
-  campaign_id: str("Campaign id (prg_…)."),
-  traffic_source_id: str("Traffic source id."),
-  network_id: str("Affiliate network id."),
+  campaign_id: str("Campaign whose records or configuration to use; take its id from list_campaigns."),
+  traffic_source_id: str("Traffic source whose configuration or postbacks to use; take its id from list_traffic_sources."),
+  network_id: str("Network grouping the offers or postbacks; take its id from list_networks."),
 };
 const postbackEvent = nullableStr(
   "Conversion event this postback fires for (registration, ftd, deposit, ...); null = every conversion.",
@@ -180,7 +180,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     call: () => ({ method: "GET", path: "/api/admin/stripe" }),
   },
   {
-    name: "get_billing_status", title: "Billing and reporting access",
+    name: "get_billing_status", title: "Get billing status",
     description: "Read this account's plan, trial end, monthly click usage and reporting lock. Checkout and portal require the owner in the browser.",
     inputSchema: schema({}), annotations: read,
     call: () => ({ method: "GET", path: "/api/billing" }),
@@ -198,7 +198,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "list_campaigns",
     title: "List campaigns",
-    description: "List all campaigns (id, name, campaign_key, destination, status, group, source).",
+    description: "List this account’s active and paused campaigns in programs, with names, tracking keys, default destinations, status, group/source assignments and tags. Archived campaigns are excluded.",
     inputSchema: schema({}),
     annotations: read,
     call: () => ({ method: "GET", path: "/api/programs" }),
@@ -218,10 +218,10 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       "Create a campaign. Returns the campaign (with campaign_key for /c/{key} links) and convert_secret, which is shown only once.",
     inputSchema: schema(
       {
-        name: str("Campaign name."),
+        name: str("Display name used to identify the campaign in the dashboard and reports."),
         destination_url: str("Optional default destination (http/https). Omit to route only through paths."),
-        traffic_source_id: str("Optional traffic source id (src_…)."),
-        group_id: str("Optional group id (grp_…)."),
+        traffic_source_id: str("Source supplying this campaign’s traffic; take its id from list_traffic_sources. Omit to leave the campaign unassigned."),
+        group_id: str("Group used to organize this campaign; take its id from list_groups. Omit to leave it ungrouped."),
       },
       ["name"],
     ),
@@ -240,10 +240,10 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     inputSchema: schema(
       {
         campaign_id: campaignId,
-        name: str("New name."),
+        name: str("Replacement display name shown in the dashboard and reports."),
         destination_url: nullableStr("New default destination (http/https); null to clear."),
-        traffic_source_id: nullableStr("Traffic source id; null to clear."),
-        group_id: nullableStr("Group id; null to clear."),
+        traffic_source_id: nullableStr("Source supplying traffic; take its id from list_traffic_sources, or use null to remove the assignment."),
+        group_id: nullableStr("Group used to organize campaigns; take its id from list_groups, or use null to remove the assignment."),
         status: enumOf(["active", "paused"], "active = links redirect; paused = links return 404."),
       },
       ["campaign_id"],
@@ -267,14 +267,14 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "bulk_update_campaigns",
     title: "Bulk update campaigns",
-    description: "Set status, group, traffic source or tags on several campaigns at once (e.g. pause).",
+    description: "Apply the supplied status, group, traffic source or replacement tag text to selected campaigns in this account. Omitted fields stay unchanged; pausing or archiving stops their tracking redirects. Returns the number of campaigns updated.",
     inputSchema: schema(
       {
         campaign_ids: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1, description: "Campaign ids from list_campaigns." },
-        status: enumOf(["active", "paused", "archived"], "New status."),
-        group_id: nullableStr("Group id; null to clear."),
-        traffic_source_id: nullableStr("Traffic source id; null to clear."),
-        tags: nullableStr("Comma-separated tags; null to clear."),
+        status: enumOf(["active", "paused", "archived"], "Lifecycle state to apply: pausing or archiving stops tracking redirects; active resumes them."),
+        group_id: nullableStr("Group used to organize campaigns; take its id from list_groups, or use null to remove the assignment."),
+        traffic_source_id: nullableStr("Source supplying traffic; take its id from list_traffic_sources, or use null to remove the assignment."),
+        tags: nullableStr("Replacement tag text for each selected campaign, conventionally comma-separated; null clears it. This replaces the whole stored string."),
       },
       ["campaign_ids"],
     ),
@@ -292,7 +292,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     name: "clone_campaign",
     title: "Clone campaign",
     description: "Copy a campaign with its rotation and paths.",
-    inputSchema: schema({ campaign_id: campaignId, name: str("Name for the copy.") }, [
+    inputSchema: schema({ campaign_id: campaignId, name: str("Display name for the copied campaign; omission uses the original name followed by (copy).") }, [
       "campaign_id",
     ]),
     annotations: write,
@@ -327,8 +327,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     inputSchema: schema(
       {
         campaign_id: campaignId,
-        limit: { ...int("Max rows (1-200, default 50)."), minimum: 1, maximum: 200 },
-        offset: { ...int("Skip rows."), minimum: 0 },
+        limit: { ...int("Number of log entries to return for this page; defaults to 50."), minimum: 1, maximum: 200 },
+        offset: { ...int("Number of earlier log entries to skip when paging through the newest-first results."), minimum: 0 },
         from: dateArg("Start"),
         to: dateArg("End"),
       },
@@ -349,12 +349,12 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "list_conversions",
     title: "Conversion log",
-    description: "Recent conversions for a campaign (event, status, payout, click id).",
+    description: "Read a campaign’s conversion log, newest first, with event, approval status, payout and currency, order/click references, affiliate identity and timestamps. Use the date window and pagination to inspect individual conversions.",
     inputSchema: schema(
       {
         campaign_id: campaignId,
-        limit: { ...int("Max rows (1-200, default 50)."), minimum: 1, maximum: 200 },
-        offset: { ...int("Skip rows."), minimum: 0 },
+        limit: { ...int("Number of log entries to return for this page; defaults to 50."), minimum: 1, maximum: 200 },
+        offset: { ...int("Number of earlier log entries to skip when paging through the newest-first results."), minimum: 0 },
         from: dateArg("Start"),
         to: dateArg("End"),
       },
@@ -386,7 +386,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     name: "create_affiliate",
     title: "Create affiliate",
     description: "Add an affiliate to a campaign. Returns its tracking_url (/r/{code}).",
-    inputSchema: schema({ campaign_id: campaignId, name: str("Affiliate name.") }, [
+    inputSchema: schema({ campaign_id: campaignId, name: str("Display label for the partner or traffic placement represented by this affiliate tracking code.") }, [
       "campaign_id",
       "name",
     ]),
@@ -411,12 +411,12 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     name: "set_rotation",
     title: "Set rotation",
     description:
-      "Set rotation mode: normal (weighted random), smart (sticky per visitor), fix_on (always fixed_path_id), top_to_bottom (first enabled path).",
+      "Change how this campaign selects traffic paths. Supplied fields replace the current mode or fixed-path selection; omitted fields stay unchanged. For fix_on, select a path belonging to this campaign. Returns the updated rotation, default paths and routing rules.",
     inputSchema: schema(
       {
         campaign_id: campaignId,
-        mode: enumOf(["normal", "smart", "fix_on", "top_to_bottom"], "Rotation mode."),
-        fixed_path_id: nullableStr("Path id for fix_on mode."),
+        mode: enumOf(["normal", "smart", "fix_on", "top_to_bottom"], "How paths are selected: normal uses weights, smart keeps a visitor on their assigned path, fix_on uses fixed_path_id, and top_to_bottom takes the first enabled path."),
+        fixed_path_id: nullableStr("Path selected by fix_on, from get_rotation paths or a rule’s paths in this campaign; null clears the selection."),
       },
       ["campaign_id"],
     ),
@@ -452,7 +452,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     title: "Update path",
     description: "Change a path's weight, target, order or enabled flag.",
     inputSchema: schema(
-      { campaign_id: campaignId, path_id: str("Path id (pth_…)."), ...pathFields },
+      { campaign_id: campaignId, path_id: str("Path to change or remove; take its id from get_rotation or list_rules for this campaign."), ...pathFields },
       ["campaign_id", "path_id"],
     ),
     annotations: write,
@@ -465,8 +465,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "delete_path",
     title: "Delete path",
-    description: "Remove a path from a campaign's rotation.",
-    inputSchema: schema({ campaign_id: campaignId, path_id: str("Path id (pth_…).") }, [
+    description: "Permanently remove a traffic path and its weighted lander/offer assignments from this campaign. Future routing can no longer select it; the reusable lander and offer records remain.",
+    inputSchema: schema({ campaign_id: campaignId, path_id: str("Path to change or remove; take its id from get_rotation or list_rules for this campaign.") }, [
       "campaign_id",
       "path_id",
     ]),
@@ -479,7 +479,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "list_rules",
     title: "List routing rules",
-    description: "List a campaign's routing rules in evaluation order, with their paths.",
+    description: "Read a campaign’s routing rules in evaluation order, including matching conditions, timezone, enabled state and each rule’s traffic paths. Lower sort_order is evaluated first.",
     inputSchema: schema({ campaign_id: campaignId }, ["campaign_id"]),
     annotations: read,
     call: (a) => ({ method: "GET", path: `/api/programs/${id(a, "campaign_id")}/rules` }),
@@ -500,9 +500,9 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "update_rule",
     title: "Update routing rule",
-    description: "Change a rule's name, conditions, timezone, order or enabled flag.",
+    description: "Update a campaign’s routing rule. Supplied conditions replace the whole condition list; other omitted fields stay unchanged. Changes affect which future clicks select the rule’s paths. Returns the updated rule.",
     inputSchema: schema(
-      { campaign_id: campaignId, rule_id: str("Rule id (rul_…)."), ...ruleFields },
+      { campaign_id: campaignId, rule_id: str("Routing rule to change or remove; take its id from list_rules for this campaign."), ...ruleFields },
       ["campaign_id", "rule_id"],
     ),
     annotations: write,
@@ -515,8 +515,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "delete_rule",
     title: "Delete routing rule",
-    description: "Delete a routing rule and its paths.",
-    inputSchema: schema({ campaign_id: campaignId, rule_id: str("Rule id (rul_…).") }, [
+    description: "Permanently delete a routing rule and all of its paths and weighted assignments. Fixed-path references to those paths are cleared; future clicks use the remaining rules or default paths.",
+    inputSchema: schema({ campaign_id: campaignId, rule_id: str("Routing rule to change or remove; take its id from list_rules for this campaign.") }, [
       "campaign_id",
       "rule_id",
     ]),
@@ -530,8 +530,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   // Anti-fraud
   {
     name: "get_traffic_filter",
-    title: "Get bot handling",
-    description: "Get how a campaign handles bot / blocklisted / datacenter traffic.",
+    title: "Get campaign bot handling",
+    description: "Read the campaign’s bot handling configuration: bot_action, safe_page_url and whether cloud/hosting ASNs are flagged. These settings determine how bot, blocklisted and optionally datacenter traffic is routed.",
     inputSchema: schema({ campaign_id: campaignId }, ["campaign_id"]),
     annotations: read,
     call: (a) => ({ method: "GET", path: `/api/programs/${id(a, "campaign_id")}/traffic-filter` }),
@@ -544,8 +544,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     inputSchema: schema(
       {
         campaign_id: campaignId,
-        bot_action: enumOf(["route", "safe_page"], "Action for flagged traffic."),
-        safe_page_url: nullableStr("Safe page URL (http/https)."),
+        bot_action: enumOf(["route", "safe_page"], "Whether flagged clicks follow normal routing (route) or redirect to safe_page_url (safe_page)."),
+        safe_page_url: nullableStr("HTTP(S) destination for flagged clicks. Omit to keep it; null or an empty string clears it. A URL must remain set when bot_action is safe_page."),
         block_datacenter: bool("Flag datacenter / cloud ASNs as bots."),
       },
       ["campaign_id"],
@@ -560,7 +560,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "list_blocklist",
     title: "List blocklist",
-    description: "List the account blocklist (IP/CIDR, ASN, user-agent substrings) and built-in datacenter ASNs.",
+    description: "Read account-wide traffic matching entries, including their ids, IP/CIDR or ASN values or user-agent substrings, plus the built-in datacenter ASN list. Matches are flagged as bots; campaign bot handling determines their destination.",
     inputSchema: schema({}),
     annotations: read,
     call: () => ({ method: "GET", path: "/api/antifraud/blocklist" }),
@@ -571,8 +571,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     description: "Block IPs/CIDRs, ASNs or user-agent substrings account-wide. Matching clicks are flagged as bots.",
     inputSchema: schema(
       {
-        kind: enumOf(["ip", "asn", "ua"], "Entry type."),
-        values: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1, maxItems: 200, description: "Values to block (1-200)." },
+        kind: enumOf(["ip", "asn", "ua"], "How values identify traffic: IP address/CIDR, autonomous system number, or a user-agent substring."),
+        values: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1, maxItems: 200, description: "IP addresses/CIDRs, ASN numbers, or user-agent substrings to flag, according to kind." },
       },
       ["kind", "values"],
     ),
@@ -582,8 +582,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "remove_from_blocklist",
     title: "Remove from blocklist",
-    description: "Delete a blocklist entry.",
-    inputSchema: schema({ entry_id: str("Blocklist entry id (blk_…).") }, ["entry_id"]),
+    description: "Permanently remove one account-wide bot-matching entry. Future clicks stop matching that entry, but may still be flagged by another entry or bot-detection rule.",
+    inputSchema: schema({ entry_id: str("Account-wide blocklist entry to remove; take entries[].id from list_blocklist.") }, ["entry_id"]),
     annotations: destroy,
     call: (a) => ({ method: "DELETE", path: `/api/antifraud/blocklist/${id(a, "entry_id")}` }),
   },
@@ -591,17 +591,17 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   // Entities
   ...(
     [
-      ["groups", "groups", "campaign groups"],
-      ["traffic_sources", "traffic-sources", "traffic sources (cost model, postback share)"],
-      ["networks", "networks", "affiliate networks"],
-      ["landers", "landers", "landing pages"],
-      ["offers", "offers", "offers (URL, payout, network)"],
+      ["groups", "groups", "campaign groups", "Read this account’s campaign organization groups, with ids and display names to use when assigning campaigns or filtering reports."],
+      ["traffic_sources", "traffic-sources", "traffic sources (cost model, postback share)", "Read this account’s traffic-source records, including ids, display names, cost models, fallback costs and the share of conversions sent to their postbacks."],
+      ["networks", "networks", "affiliate networks", "Read the affiliate-network records in this account, with ids and display names used to group offers and network postbacks."],
+      ["landers", "landers", "landing pages", "Read the reusable landing pages in this account, including ids, display names and destination URLs to use in campaign paths."],
+      ["offers", "offers", "offers (URL, payout, network)", "Read the reusable offers in this account, including ids, display names, destination URLs, network assignments and base payouts in cents."],
     ] as const
   ).map(
-    ([name, route, label]): ToolDefinition => ({
+    ([name, route, label, description]): ToolDefinition => ({
       name: `list_${name}`,
       title: `List ${label.split(" (")[0]}`,
-      description: `List ${label}.`,
+      description,
       inputSchema: schema({}),
       annotations: read,
       call: () => ({ method: "GET", path: `/api/entities/${route}` }),
@@ -611,7 +611,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     name: "create_group",
     title: "Create group",
     description: "Create a named group for organizing campaigns. Returns group with its id; pass that id as group_id to create_campaign or update_campaign.",
-    inputSchema: schema({ name: str("Group name.") }, ["name"]),
+    inputSchema: schema({ name: str("Display label used to organize and filter campaigns in reports.") }, ["name"]),
     annotations: write,
     call: (a) => ({ method: "POST", path: "/api/entities/groups", body: pick(a, ["name"]) }),
   },
@@ -619,7 +619,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     name: "delete_group",
     title: "Delete group",
     description: "Delete a campaign group. Campaigns in it are kept.",
-    inputSchema: schema({ group_id: str("Group id.") }, ["group_id"]),
+    inputSchema: schema({ group_id: str("Campaign group to remove; take its id from list_groups.") }, ["group_id"]),
     annotations: destroy,
     call: (a) => ({ method: "DELETE", path: `/api/entities/groups/${id(a, "group_id")}` }),
   },
@@ -630,9 +630,9 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     inputSchema: schema(
       {
         name: str("Traffic source name."),
-        cost_type: enumOf(["cpc", "cpm", "cpa"], "Cost model."),
-        default_cost_cents: { ...int("Default cost in cents (per click, per 1000 clicks, or per conversion)."), minimum: 0 },
-        postback_percent: { ...int("Share of conversions reported back to the source (0-100)."), minimum: 0, maximum: 100 },
+        cost_type: enumOf(["cpc", "cpm", "cpa"], "How traffic is charged: CPC per click, CPM per thousand clicks, or CPA once per converted click."),
+        default_cost_cents: { ...int("Fallback charge in cents: per click for CPC, per thousand clicks for CPM, or once per converted click for CPA."), minimum: 0 },
+        postback_percent: { ...int("Percentage of approved conversions to send to this source’s outgoing postbacks."), minimum: 0, maximum: 100 },
       },
       ["name"],
     ),
@@ -646,8 +646,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "create_network",
     title: "Create affiliate network",
-    description: "Create an affiliate network. Add its postbacks with create_postback.",
-    inputSchema: schema({ name: str("Network name.") }, ["name"]),
+    description: "Create a named affiliate-network record in this account for grouping offers and outgoing postbacks. Returns the network record; add its postbacks separately with create_postback.",
+    inputSchema: schema({ name: str("Display label for the affiliate network that groups offers and outgoing postbacks in this account.") }, ["name"]),
     annotations: write,
     call: (a) => ({ method: "POST", path: "/api/entities/networks", body: pick(a, ["name"]) }),
   },
@@ -655,7 +655,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     name: "create_lander",
     title: "Create lander",
     description: "Create a landing page. Link its CTA to {lp_click_url} to track LP clicks.",
-    inputSchema: schema({ name: str("Lander name."), url: str("Lander URL (http/https).") }, [
+    inputSchema: schema({ name: str("Display label for this reusable landing page in paths and reports."), url: str("HTTP(S) landing-page destination that receives visitors assigned to this lander.") }, [
       "name",
       "url",
     ]),
@@ -665,13 +665,13 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "create_offer",
     title: "Create offer",
-    description: "Create an offer. URL may use macros like {clickid}, {sub1}, {country}.",
+    description: "Create a reusable offer destination in this account, with a display name, optional network assignment and base payout. Returns the offer record for use in campaign paths. URL macros such as {clickid}, {sub1} and {country} are expanded when routing visitors.",
     inputSchema: schema(
       {
-        name: str("Offer name."),
-        url: str("Offer URL (http/https)."),
-        network_id: nullableStr("Affiliate network id."),
-        payout_cents: { ...int("Default payout in cents when the postback has none."), minimum: 0 },
+        name: str("Display label identifying this conversion offer in paths and reports."),
+        url: str("HTTP(S) offer destination; tracking macros such as {clickid} are expanded when routing visitors."),
+        network_id: nullableStr("Network grouping the offers or postbacks; take its id from list_networks."),
+        payout_cents: { ...int("Base conversion payout in cents used when the incoming postback omits its amount; event-specific postbacks have separate payout handling."), minimum: 0 },
       },
       ["name", "url"],
     ),
@@ -685,10 +685,10 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
 
   ...(
     [
-      ["traffic_source", "traffic-sources", "traffic source", "Traffic source id (src_…).", "Fails with 409 while campaigns use it. Its postbacks are deleted."],
-      ["network", "networks", "affiliate network", "Network id (net_…).", "Fails with 409 while offers use it. Its postbacks are deleted."],
-      ["lander", "landers", "lander", "Lander id (lp_…).", "Fails with 409 while paths use it or it has tracked clicks."],
-      ["offer", "offers", "offer", "Offer id (off_…).", "Fails with 409 while paths use it or it has tracked clicks."],
+      ["traffic_source", "traffic-sources", "traffic source", "Source to change or remove; take its id from list_traffic_sources.", "Fails with 409 while campaigns use it. Its postbacks are deleted."],
+      ["network", "networks", "affiliate network", "Network to change or remove; take its id from list_networks.", "Fails with 409 while offers use it. Its postbacks are deleted."],
+      ["lander", "landers", "lander", "Landing page to remove; take its id from list_landers.", "Fails with 409 while paths use it or it has tracked clicks."],
+      ["offer", "offers", "offer", "Offer to remove; take its id from list_offers.", "Fails with 409 while paths use it or it has tracked clicks."],
     ] as const
   ).map(
     ([name, route, label, idHelp, note]): ToolDefinition => ({
@@ -706,11 +706,11 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     description: "Change a traffic source's name, cost model or postback share.",
     inputSchema: schema(
       {
-        traffic_source_id: str("Traffic source id (src_…)."),
-        name: str("New name."),
-        cost_type: enumOf(["cpc", "cpm", "cpa"], "Cost model."),
-        default_cost_cents: { ...int("Default cost in cents."), minimum: 0 },
-        postback_percent: { ...int("Share of conversions reported back to the source (0-100)."), minimum: 0, maximum: 100 },
+        traffic_source_id: str("Source to change or remove; take its id from list_traffic_sources."),
+        name: str("Replacement display name shown in the dashboard and reports."),
+        cost_type: enumOf(["cpc", "cpm", "cpa"], "How traffic is charged: CPC per click, CPM per thousand clicks, or CPA once per converted click."),
+        default_cost_cents: { ...int("Fallback charge in cents according to the source cost model: per click (CPC), per thousand clicks (CPM), or once per converted click (CPA)."), minimum: 0 },
+        postback_percent: { ...int("Percentage of approved conversions to send to this source’s outgoing postbacks."), minimum: 0, maximum: 100 },
       },
       ["traffic_source_id"],
     ),
@@ -724,8 +724,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "update_network",
     title: "Update affiliate network",
-    description: "Rename an affiliate network.",
-    inputSchema: schema({ network_id: str("Network id (net_…)."), name: str("New name.") }, [
+    description: "Replace the display name of an existing affiliate-network record in this account; its offers and postbacks remain assigned. Omit name to leave it unchanged. Returns the network record.",
+    inputSchema: schema({ network_id: str("Network to change or remove; take its id from list_networks."), name: str("Replacement display name shown in the dashboard and reports.") }, [
       "network_id",
     ]),
     annotations: write,
@@ -740,7 +740,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     title: "Update lander",
     description: "Change a lander's name or URL.",
     inputSchema: schema(
-      { lander_id: str("Lander id (lp_…)."), name: str("New name."), url: str("New URL (http/https).") },
+      { lander_id: str("Landing page to update; take its id from list_landers."), name: str("Replacement display name shown in the dashboard and reports."), url: str("Replacement HTTP(S) landing-page destination for visitors using this lander.") },
       ["lander_id"],
     ),
     annotations: write,
@@ -756,11 +756,11 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     description: "Change an offer's name, URL, network or default payout.",
     inputSchema: schema(
       {
-        offer_id: str("Offer id (off_…)."),
-        name: str("New name."),
-        url: str("New URL (http/https)."),
+        offer_id: str("Offer to update; take its id from list_offers."),
+        name: str("Replacement display name shown in the dashboard and reports."),
+        url: str("Replacement HTTP(S) offer destination; tracking macros are expanded when routing visitors."),
         network_id: nullableStr("Affiliate network id; null to clear."),
-        payout_cents: { ...int("Default payout in cents."), minimum: 0 },
+        payout_cents: { ...int("Base conversion payout in cents used when the incoming postback omits its amount; event-specific postbacks have separate payout handling."), minimum: 0 },
       },
       ["offer_id"],
     ),
@@ -777,7 +777,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     name: "list_postbacks",
     title: "List postbacks",
     description:
-      "List outgoing postbacks, optionally for one campaign, traffic source or network. Each has an optional event filter.",
+      "Read outgoing conversion-notification configurations, optionally filtered by campaign, traffic source or network. Each record includes its id, owner assignment, destination URL and event filter; null event means all conversion events.",
     inputSchema: schema(postbackOwner),
     annotations: read,
     call: (a) => ({
@@ -810,7 +810,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     title: "Update postback",
     description: "Change a postback's URL or event filter.",
     inputSchema: schema(
-      { postback_id: str("Postback id (pb_…)."), event: postbackEvent, url: str("New URL.") },
+      { postback_id: str("Outgoing postback to inspect, change or remove; take its id from list_postbacks."), event: postbackEvent, url: str("Replacement HTTP(S) destination for outgoing conversion notifications; supports the macros documented by create_postback.") },
       ["postback_id"],
     ),
     annotations: write,
@@ -823,8 +823,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "delete_postback",
     title: "Delete postback",
-    description: "Delete an outgoing postback.",
-    inputSchema: schema({ postback_id: str("Postback id (pb_…).") }, ["postback_id"]),
+    description: "Permanently remove an outgoing postback configuration so it is no longer selected for future conversions. Already sent notifications are not undone.",
+    inputSchema: schema({ postback_id: str("Outgoing postback to inspect, change or remove; take its id from list_postbacks.") }, ["postback_id"]),
     annotations: destroy,
     call: (a) => ({ method: "DELETE", path: `/api/postbacks/${id(a, "postback_id")}` }),
   },
@@ -853,7 +853,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     name: "rotate_postback_key",
     title: "Rotate postback key",
     description:
-      "Generate a new incoming postback key. The old key stops working immediately; update every network postback URL.",
+      "Generate a new incoming postback key and return postback_key with the new key, enforcement flag and URL template. The old key stops working immediately; update every network postback URL.",
     inputSchema: schema({}),
     annotations: { readOnlyHint: false, destructiveHint: true },
     call: () => ({ method: "POST", path: "/api/ops/postback-key/rotate" }),
@@ -864,7 +864,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     description:
       "Recent delivery attempts of one outgoing postback (newest first): URL sent, HTTP status, error, attempt (1 = first try, 2 = retry). Use to debug postbacks that do not reach the network or traffic source.",
     inputSchema: schema(
-      { postback_id: str("Postback id (pb_…)."), limit: { ...int("Max attempts to return (1-100, default 20)."), minimum: 1, maximum: 100 } },
+      { postback_id: str("Outgoing postback to inspect, change or remove; take its id from list_postbacks."), limit: { ...int("Number of recent delivery attempts to return; defaults to 20."), minimum: 1, maximum: 100 } },
       ["postback_id"],
     ),
     annotations: read,
@@ -892,8 +892,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       `Metrics grouped by one dimension (country, os, offer, sub1, date…), across all campaigns or one. ${METRICS_NOTE}`,
     inputSchema: schema(
       {
-        by: enumOf(GROUP_DIMENSIONS, "Dimension to group by."),
-        campaign_id: str("Only this campaign."),
+        by: enumOf(GROUP_DIMENSIONS, "Attribute used to aggregate clicks and conversions into report rows."),
+        campaign_id: str("Restrict results to this campaign; take its id from list_campaigns."),
         ...reportFilters,
       },
       ["by"],
@@ -925,8 +925,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "list_triggers",
     title: "List triggers",
-    description: "List webhooks fired on clicks or conversions.",
-    inputSchema: schema({ campaign_id: str("Only triggers for this campaign.") }),
+    description: "Read this account’s tracking-event webhooks, with ids, names, campaign scope, event, destination URL and enabled state. A null program_id means the trigger applies across campaigns.",
+    inputSchema: schema({ campaign_id: str("Campaign whose applicable triggers to list, using its id from list_campaigns; also includes account-wide triggers. Omit for all account triggers.") }),
     annotations: read,
     call: (a) => ({
       method: "GET",
@@ -937,11 +937,11 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "create_trigger",
     title: "Create trigger",
-    description: "Create a webhook called on every click or conversion.",
+    description: "Register a best-effort HTTP GET webhook for click or conversion events in this account, optionally scoped to one campaign. When enabled, matching events invoke action_url with supported payload macros substituted. Returns the stored trigger configuration.",
     inputSchema: schema(
       {
-        name: str("Trigger name."),
-        event: enumOf(["conversion", "click"], "Event that fires the webhook."),
+        name: str("Display label identifying this event webhook in the account configuration."),
+        event: enumOf(["conversion", "click"], "Tracking event that initiates the webhook: recording a click or receiving a conversion."),
         action_url: str("Webhook URL (http/https)."),
         campaign_id: nullableStr("Limit to one campaign; omit for all."),
         enabled: bool("Enabled (default true)."),
@@ -958,8 +958,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "delete_trigger",
     title: "Delete trigger",
-    description: "Delete a webhook trigger.",
-    inputSchema: schema({ trigger_id: str("Trigger id.") }, ["trigger_id"]),
+    description: "Permanently remove an event webhook so future tracking events no longer invoke it. Previously sent webhook requests are not undone.",
+    inputSchema: schema({ trigger_id: str("Event webhook to remove; take its id from list_triggers.") }, ["trigger_id"]),
     annotations: destroy,
     call: (a) => ({ method: "DELETE", path: `/api/ops/triggers/${id(a, "trigger_id")}` }),
   },
@@ -969,12 +969,12 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     name: "report_drilldown",
     title: "Drilldown report",
     description:
-      "Nested report over 1-4 dimensions (e.g. campaign,sub1,country,offer). Each row has the grouped-report metrics and children for the next level. Money in cents.",
+      "Aggregate campaign performance into a nested tree in the requested dimension order (for example campaign,sub1,country,offer). Returns by, the account timezone and rows with grouping keys/labels, metrics, currency, per-event results and children for the next level. Money is in cents; revenue_by_currency keeps currencies separate.",
     inputSchema: schema(
       {
-        by: str(`Comma-separated dimensions, 1 to 4 of: ${GROUP_DIMENSIONS.join(", ")}.`),
-        campaign_id: str("Only this campaign."),
-        limit: { ...int("Max children per row (default 50, max 200)."), minimum: 1, maximum: 200 },
+        by: str(`Comma-separated grouping hierarchy, outermost first (e.g. campaign,sub1,country); 1 to 4 dimensions from: ${GROUP_DIMENSIONS.join(", ")}.`),
+        campaign_id: str("Restrict results to this campaign; take its id from list_campaigns."),
+        limit: { ...int("Maximum rows returned at each level of the report tree; defaults to 50."), minimum: 1, maximum: 200 },
         ...reportFilters,
       },
       ["by"],
@@ -1001,10 +1001,10 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   },
   {
     name: "update_settings",
-    title: "Update account settings",
+    title: "Set report timezone",
     description:
       "Set the report timezone (IANA name, e.g. Europe/Paris). Date grouping and YYYY-MM-DD report ranges use it.",
-    inputSchema: schema({ timezone: str("IANA timezone, e.g. UTC or Europe/Paris.") }, ["timezone"]),
+    inputSchema: schema({ timezone: str("Timezone used for report date grouping and date-only bounds, expressed as an IANA name such as Europe/Paris.") }, ["timezone"]),
     annotations: write,
     call: (a) => ({ method: "PUT", path: "/api/settings", body: pick(a, ["timezone"]) }),
   },
@@ -1012,7 +1012,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     name: "list_automation_rules",
     title: "List automation rules",
     description: "Zone blacklist rules and ROI/spend alerts, optionally for one campaign.",
-    inputSchema: schema({ campaign_id: str("Only rules of this campaign.") }),
+    inputSchema: schema({ campaign_id: str("Filter automation rules by campaign; take its id from list_campaigns. Omit for all account rules.") }),
     annotations: read,
     call: (a) => ({
       method: "GET",
@@ -1028,19 +1028,19 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     inputSchema: schema(
       {
         campaign_id: campaignId,
-        kind: enumOf(["zone_blacklist", "alert"], "Rule type."),
-        name: str("Rule name (optional)."),
+        kind: enumOf(["zone_blacklist", "alert"], "Whether to record unconverted zones in the blacklist or send a notification when campaign ROI/spend thresholds are met."),
+        name: str("Display label used in the rule list and notification messages."),
         dimension: enumOf(
           GROUP_DIMENSIONS.filter((d) => !NON_ZONE_DIMENSIONS.has(d)),
-          "zone_blacklist: dimension holding the zone (default sub1).",
+          "Click field containing the traffic source’s zone identifier for a blacklist rule; defaults to sub1.",
         ),
-        min_clicks: int("zone_blacklist: minimum clicks."),
+        min_clicks: int("Minimum clicks for one zone in the evaluation window before zero conversions can trigger blacklisting."),
         event: nullableStr(
           "zone_blacklist: event that counts (registration, ftd…); omit = any conversion.",
         ),
         roi_below: { type: "number", description: "alert: fire when ROI % is below this." },
         spend_above_cents: int("alert: fire when cost in cents is above this."),
-        window_hours: { ...int("Look-back window in hours (1-720, default 24)."), minimum: 1, maximum: 720 },
+        window_hours: { ...int("Hours of recent campaign data to evaluate; defaults to 24. Also sets the cooldown between repeated alert notifications."), minimum: 1, maximum: 720 },
         notify_email: str("Email to notify."),
         webhook_url: str("Webhook URL (http/https) receiving a JSON POST."),
         enabled: bool("Enabled (default true)."),
@@ -1070,8 +1070,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "set_automation_rule_enabled",
     title: "Enable/disable automation rule",
-    description: "Enable or disable an automation rule.",
-    inputSchema: schema({ rule_id: str("Rule id."), enabled: bool("Enabled.") }, [
+    description: "Change whether an existing automation rule participates in scheduled evaluations. Disabling keeps the rule and its existing blacklist entries; manual runs remain available. Returns the updated rule.",
+    inputSchema: schema({ rule_id: str("Automation rule to operate on; take its id from list_automation_rules."), enabled: bool("Whether scheduled evaluations may run this rule; disabling it keeps the rule and existing blacklist entries.") }, [
       "rule_id",
       "enabled",
     ]),
@@ -1086,16 +1086,16 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     name: "run_automation_rule",
     title: "Run automation rule now",
     description:
-      "Evaluate a rule immediately; may blacklist zones and send configured email/webhook notifications. Returns newly blacklisted zones, whether the alert fired, and notification delivery status.",
-    inputSchema: schema({ rule_id: str("Rule id.") }, ["rule_id"]),
+      "Evaluate a rule immediately; may blacklist zones and send configured email/webhook notifications. Returns newly blacklisted zones, whether the rule fired, and notification attempt flags; the email flag does not prove delivery.",
+    inputSchema: schema({ rule_id: str("Automation rule to operate on; take its id from list_automation_rules.") }, ["rule_id"]),
     annotations: write,
     call: (a) => ({ method: "POST", path: `/api/automation/rules/${id(a, "rule_id")}/run` }),
   },
   {
     name: "delete_automation_rule",
     title: "Delete automation rule",
-    description: "Delete an automation rule (blacklisted zones stay).",
-    inputSchema: schema({ rule_id: str("Rule id.") }, ["rule_id"]),
+    description: "Permanently remove an automation rule, stopping future evaluations and notifications for it. Existing blacklisted zones remain and must be removed separately if desired.",
+    inputSchema: schema({ rule_id: str("Automation rule to operate on; take its id from list_automation_rules.") }, ["rule_id"]),
     annotations: destroy,
     call: (a) => ({ method: "DELETE", path: `/api/automation/rules/${id(a, "rule_id")}` }),
   },
@@ -1103,12 +1103,12 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     name: "list_zone_blacklist",
     title: "List blacklisted zones",
     description:
-      "Blacklisted zones of a campaign. format=txt returns one zone per line, ready to paste into the traffic source (e.g. Adcash).",
+      "Read recorded blacklist entries for a campaign, optionally by zone dimension. JSON returns structuredContent.blacklist with entry ids and reasons. Text and CSV exports return a string in structuredContent.result; txt contains one zone per line for copying into the traffic source.",
     inputSchema: schema(
       {
         campaign_id: campaignId,
-        dimension: str("Only this dimension (e.g. sub1)."),
-        format: enumOf(["json", "txt", "csv"], "Output format (default json)."),
+        dimension: str("Filter by the click field containing zone identifiers, such as sub1; omit to include entries from all dimensions."),
+        format: enumOf(["json", "txt", "csv"], "Select JSON entries in structuredContent.blacklist or a text/CSV export in structuredContent.result. Omission returns JSON."),
       },
       ["campaign_id"],
     ),
@@ -1126,12 +1126,12 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "add_zones_to_blacklist",
     title: "Blacklist zones",
-    description: "Manually blacklist zones of a campaign.",
+    description: "Record manually selected traffic-source zone values in this campaign’s blacklist for the chosen click dimension. Returns newly added values, excluding duplicates. Export the blacklist to apply it at the traffic source.",
     inputSchema: schema(
       {
         campaign_id: campaignId,
-        dimension: str("Dimension (default sub1)."),
-        values: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1, maxItems: 500, description: "Zone values (1-500)." },
+        dimension: str("Click field containing the zone identifiers being recorded; defaults to sub1."),
+        values: { type: "array", items: { type: "string", minLength: 1 }, minItems: 1, maxItems: 500, description: "Traffic-source zone identifiers as captured in the selected click dimension; existing entries are not added again." },
       },
       ["campaign_id", "values"],
     ),
@@ -1145,8 +1145,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "remove_blacklisted_zone",
     title: "Remove blacklisted zone",
-    description: "Remove one entry from the zone blacklist.",
-    inputSchema: schema({ entry_id: str("Blacklist entry id (zbl_…).") }, ["entry_id"]),
+    description: "Permanently remove one stored campaign blacklist entry. This does not update the traffic source’s own blacklist; an enabled automation rule can add the value again if it still matches.",
+    inputSchema: schema({ entry_id: str("Entry to remove; use blacklist[].id from list_zone_blacklist with JSON output, not the zone value.") }, ["entry_id"]),
     annotations: destroy,
     call: (a) => ({ method: "DELETE", path: `/api/automation/blacklist/${id(a, "entry_id")}` }),
   },
@@ -1171,8 +1171,8 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "delete_tracking_domain",
     title: "Delete tracking domain",
-    description: "Remove a tracking domain; campaigns using it fall back to the app URL.",
-    inputSchema: schema({ domain_id: str("Tracking domain id (dom_…).") }, ["domain_id"]),
+    description: "Remove a registered tracking hostname and its managed Cloudflare custom hostname when automatic setup is configured. Campaigns using it fall back to the app URL. Existing links using the removed hostname may stop working.",
+    inputSchema: schema({ domain_id: str("Registered tracking hostname to remove; take tracking_domains[].id from list_tracking_domains.") }, ["domain_id"]),
     annotations: destroy,
     call: (a) => ({ method: "DELETE", path: `/api/tracking-domains/${id(a, "domain_id")}` }),
   },
@@ -1181,7 +1181,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     title: "Set campaign tracking domain",
     description: "Use a tracking domain for a campaign's links (null = app URL).",
     inputSchema: schema(
-      { campaign_id: campaignId, tracking_domain_id: nullableStr("Tracking domain id, or null.") },
+      { campaign_id: campaignId, tracking_domain_id: nullableStr("Registered hostname to use, from list_tracking_domains; omit or pass null to use the app URL.") },
       ["campaign_id"],
     ),
     annotations: write,
@@ -1196,14 +1196,14 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "list_notes",
     title: "List notes",
-    description: "List notes on a campaign or entity.",
+    description: "Read the notes attached to one campaign or reusable entity in this account, newest updated first. Returns note ids, text, record references and creation/update timestamps.",
     inputSchema: schema(
       {
         entity_type: enumOf(
           ["program", "traffic_source", "network", "offer", "lander", "group"],
-          "Entity type (program = campaign).",
+          "Kind of record the note belongs to; program refers to a campaign. Pair with that record’s entity_id.",
         ),
-        entity_id: str("Entity id."),
+        entity_id: str("Record receiving the note, from the matching list tool: list_campaigns for program, or list_traffic_sources, list_networks, list_landers, list_offers, or list_groups."),
       },
       ["entity_type", "entity_id"],
     ),
@@ -1222,10 +1222,10 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
       {
         entity_type: enumOf(
           ["program", "traffic_source", "network", "offer", "lander", "group"],
-          "Entity type (program = campaign).",
+          "Kind of record the note belongs to; program refers to a campaign. Pair with that record’s entity_id.",
         ),
-        entity_id: str("Entity id."),
-        body: str("Note text."),
+        entity_id: str("Record receiving the note, from the matching list tool: list_campaigns for program, or list_traffic_sources, list_networks, list_landers, list_offers, or list_groups."),
+        body: str("Text recording context or a decision about the selected record."),
       },
       ["entity_type", "entity_id", "body"],
     ),
@@ -1241,7 +1241,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "list_team",
     title: "List team",
-    description: "List the account owner, invited teammates, and the team id (account id).",
+    description: "Read teammate memberships and pending invitations, plus the caller’s role and owner account id. The owner is represented by account_id, not a membership row.",
     inputSchema: schema({}),
     annotations: read,
     call: () => ({ method: "GET", path: "/api/ops/team" }),
@@ -1250,7 +1250,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     name: "list_activity",
     title: "List activity",
     description:
-      "List recent account activity: who changed campaigns, settings, team membership, and support access. Click traffic is not included.",
+      "Read recent account audit entries, with actor email, action text and timestamp for changes such as campaign edits, settings, team membership and support access. Click traffic is not included.",
     inputSchema: schema({}),
     annotations: read,
     call: () => ({ method: "GET", path: "/api/ops/audit" }),
@@ -1260,7 +1260,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     title: "Invite team member",
     description: "Invite someone by email as admin (can edit) or viewer (read only). Owners only.",
     inputSchema: schema(
-      { email: str("Email to invite."), role: enumOf(["admin", "viewer"], "Role.") },
+      { email: str("Email to invite."), role: enumOf(["admin", "viewer"], "Access granted to the invitee: admin can edit account data; viewer can read it.") },
       ["email", "role"],
     ),
     annotations: write,
@@ -1270,7 +1270,7 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
     name: "remove_team_member",
     title: "Remove team member",
     description: "Remove a team member or pending invite. Owners only.",
-    inputSchema: schema({ member_id: str("Team member id.") }, ["member_id"]),
+    inputSchema: schema({ member_id: str("Membership or pending invitation to remove; use members[].id from list_team, not a user id.") }, ["member_id"]),
     annotations: destroy,
     call: (a) => ({ method: "DELETE", path: `/api/ops/team/${id(a, "member_id")}` }),
   },
@@ -1280,32 +1280,32 @@ const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
     name: "get_bidding_settings", title: "Get bidding beta settings",
     description: "Read campaign opt-in, decision limits and Workers AI availability. Beta is off by default.",
-    inputSchema: schema({ campaign_id: str("Campaign id.") }, ["campaign_id"]), annotations: read,
+    inputSchema: schema({ campaign_id: str("Campaign whose bidding recommendations to configure or inspect; take its id from list_campaigns.") }, ["campaign_id"]), annotations: read,
     call: (a) => ({ method: "GET", path: `/api/bidding/${id(a, "campaign_id")}/settings` }),
   },
   {
-    name: "set_bidding_settings", title: "Configure bidding beta",
+    name: "set_bidding_settings", title: "Set bidding recommendation settings",
     description: "Explicitly opt a campaign into or out of AI bidding recommendations. Replaces settings; omitted limits use defaults. Does not change Adcash bids.",
-    inputSchema: schema({ campaign_id: str("Campaign id."), enabled: bool("Explicit campaign opt-in."),
-      dimension: enumOf(Array.from({length: 10}, (_, i) => `sub${i+1}`), "Adcash zone token."),
-      currency: enumOf(["USD", "EUR"], "Confirmed spend currency."),
-      window_hours: int("1–720 hours, before conversion delay."), conversion_lag_hours: int("1–168 hours."),
-      min_clicks: int("10–1000000 clicks."), min_spend_cents: int("1–100000000 cents."),
-      min_conversions: int("1–1000000 converted clicks before increase."), target_roi: int("0–1000 percent."),
-      max_change_pct: int("1–20 percent.") }, ["campaign_id", "enabled"]), annotations: destroy,
+    inputSchema: schema({ campaign_id: str("Campaign whose bidding recommendations to configure or inspect; take its id from list_campaigns."), enabled: bool("Explicit campaign opt-in."),
+      dimension: enumOf(Array.from({length: 10}, (_, i) => `sub${i+1}`), "Click sub-token containing the Adcash zone identifier; match the traffic source’s token mapping."),
+      currency: enumOf(["USD", "EUR"], "Currency of the recorded spend; analysis compares it with revenue in the same currency and does not convert currencies."),
+      window_hours: int("Length in hours of the click window analyzed, ending before the conversion-lag interval."), conversion_lag_hours: int("Hours of recent clicks excluded from analysis so their conversions have time to arrive."),
+      min_clicks: int("Minimum clicks for a zone before a bid change can be recommended."), min_spend_cents: int("Minimum recorded spend in cents for a zone before a bid change can be recommended."),
+      min_conversions: int("Minimum distinct converted clicks for a zone before recommending a bid increase."), target_roi: int("Target profit divided by cost, expressed as a percentage; recommendations hold within ten percentage points of this target."),
+      max_change_pct: int("Maximum magnitude of a recommended bid change, as a percentage of the existing bid.") }, ["campaign_id", "enabled"]), annotations: destroy,
     call: (a) => ({ method: "PUT", path: `/api/bidding/${id(a, "campaign_id")}/settings`,
       body: pick(a, ["enabled", "dimension", "currency", "window_hours", "conversion_lag_hours", "min_clicks", "min_spend_cents", "min_conversions", "target_roi", "max_change_pct"]) }),
   },
   {
     name: "analyze_bidding", title: "Analyze zone bidding (beta)",
     description: "Run Workers AI on aggregate mature zone metrics after opt-in; at most once per 15 minutes. Stores review-only recommendations; never changes external bids.",
-    inputSchema: schema({ campaign_id: str("Campaign id.") }, ["campaign_id"]), annotations: write,
+    inputSchema: schema({ campaign_id: str("Campaign whose bidding recommendations to configure or inspect; take its id from list_campaigns.") }, ["campaign_id"]), annotations: write,
     call: (a) => ({ method: "POST", path: `/api/bidding/${id(a, "campaign_id")}/analyze` }),
   },
   {
     name: "get_bid_recommendations", title: "Get bid recommendations",
     description: "Latest beta recommendations for current settings, including evidence, reasons, model and click window. Returns null after settings change.",
-    inputSchema: schema({ campaign_id: str("Campaign id.") }, ["campaign_id"]), annotations: read,
+    inputSchema: schema({ campaign_id: str("Campaign whose bidding recommendations to configure or inspect; take its id from list_campaigns.") }, ["campaign_id"]), annotations: read,
     call: (a) => ({ method: "GET", path: `/api/bidding/${id(a, "campaign_id")}/recommendations` }),
   },
 ];
