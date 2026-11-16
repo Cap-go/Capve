@@ -25,7 +25,7 @@ import { automation } from "./routes/automation";
 import { drilldown } from "./routes/drilldown";
 import { settings } from "./routes/settings";
 import { trackingDomains } from "./routes/tracking-domains";
-import { hostGate } from "./lib/host-gate";
+import { hostGate, isAppHost } from "./lib/host-gate";
 import { runScheduled } from "./cron";
 
 const app = new Hono<{ Bindings: Env }>();
@@ -33,6 +33,16 @@ const app = new Hono<{ Bindings: Env }>();
 app.use("*", async (c, next) => {
   await next();
   c.header("X-Content-Type-Options", "nosniff");
+});
+
+// MCP requires 403 for invalid Origins, even before host routing or authentication.
+app.use("/mcp", async (c, next) => {
+  const origin = c.req.header("Origin");
+  const url = new URL(c.req.url);
+  if (origin !== undefined && (origin !== url.origin || !isAppHost(url.hostname, c.env))) {
+    return c.json({ jsonrpc: "2.0", error: { code: -32000, message: "Forbidden origin" } }, 403);
+  }
+  return next();
 });
 
 // Custom tracking domains serve only /r, /c, /lp, /click; unknown hosts get 404.

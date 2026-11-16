@@ -12,9 +12,13 @@
     "typecheck": "tsc --noEmit",
     "db:migrate:local": "wrangler d1 migrations apply velo-db --local",
     "db:migrate:remote": "wrangler d1 migrations apply velo-db --remote",
-    "remove-access": "bun run scripts/remove-access.mjs"
+    "remove-access": "bun run scripts/remove-access.mjs",
+    "test:mcp:clients": "node scripts/test-mcp-clients.mjs",
+    "test:mcp:external": "node scripts/test-mcp-clients.mjs --external",
+    "test:mcp:openai": "node scripts/test-mcp-openai.mjs"
   },
   "dependencies": {
+    "@cfworker/json-schema": "^4.1.6",
     "hono": "^4.9.6",
     "jose": "^6.1.0",
     "react": "^19.1.1",
@@ -26,6 +30,8 @@
     "@cloudflare/vite-plugin": "^1.12.2",
     "@cloudflare/vitest-pool-workers": "^0.8.71",
     "@cloudflare/workers-types": "^4.20250826.0",
+    "@modelcontextprotocol/client": "2.4.0",
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "@tailwindcss/vite": "^4.1.12",
     "@types/react": "^19.1.12",
     "@types/react-dom": "^19.1.9",

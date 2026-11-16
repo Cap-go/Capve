@@ -268,7 +268,7 @@ describe("traffic source templates, tokens and cost", () => {
     const call = async (name: string, args: Record<string, unknown>) => {
       const reply = await SELF.fetch("http://localhost/mcp", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Accept: "application/json", Authorization: `Bearer ${token}` },
+        headers: { "Content-Type": "application/json", Accept: "application/json, text/event-stream", Authorization: `Bearer ${token}` },
         body: JSON.stringify({ jsonrpc: "2.0", id: 1, method: "tools/call", params: { name, arguments: args } }),
       });
       return (await reply.json<{ result: { isError?: boolean; structuredContent?: Record<string, unknown> } }>()).result;

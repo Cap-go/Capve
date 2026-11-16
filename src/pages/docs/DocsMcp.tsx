@@ -165,6 +165,17 @@ export function DocsMcp() {
         Add to <code>mcp.json</code> (Cursor: <code>~/.cursor/mcp.json</code>):
       </p>
       <CodeBlock>{mcpJsonConfig(base)}</CodeBlock>
+      <h3>OpenAI API</h3>
+      <p>
+        In the Responses API, add an MCP tool with <code>server_url</code> set to the URL
+        above and <code>authorization</code> set to your Capve token. Use{" "}
+        <code>allowed_tools</code> to select the tools your assistant needs. Direct authenticated
+        ChatGPT plugins require OAuth; Capve currently uses personal API tokens and does not
+        implement that connection flow. See the{" "}
+        <a href="https://developers.openai.com/api/docs/guides/tools-connectors-mcp" target="_blank" rel="noreferrer">
+          OpenAI MCP guide
+        </a>.
+      </p>
       <h3>Clients that only support stdio</h3>
       <p>
         Use <code>mcp-remote</code> as a bridge, for example in the Claude Desktop config file:
@@ -181,7 +192,9 @@ export function DocsMcp() {
       <h2>Tools</h2>
       <p>
         Each tool calls the same API as the dashboard, with the same validation and permissions.
-        Money is in cents. Report dates accept ISO dates or Unix milliseconds.
+        Money is in cents. Report dates accept ISO dates or Unix milliseconds; date-only ranges
+        use the account timezone. Use <code>whoami</code> to confirm the connected account
+        before making changes.
       </p>
       <table className="table">
         <thead>
@@ -209,6 +222,8 @@ export function DocsMcp() {
       </p>
       <CodeBlock>{`curl ${mcpUrl(base)} \\
   -H "Authorization: Bearer capve_YOUR_TOKEN" \\
+  -H "Accept: application/json, text/event-stream" \\
+  -H "MCP-Protocol-Version: 2025-11-25" \\
   -H "Content-Type: application/json" \\
   -d '{"jsonrpc":"2.0","id":1,"method":"tools/list"}'`}</CodeBlock>
     </>
