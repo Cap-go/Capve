@@ -4,6 +4,9 @@ export default defineWorkersConfig({
   test: {
     poolOptions: {
       workers: {
+        // Avoid one concurrent workerd process per file exhausting CI runners.
+        singleWorker: true,
+        isolatedStorage: true,
         wrangler: { configPath: "./wrangler.vitest.toml" },
         miniflare: {
           bindings: {
