@@ -61,6 +61,8 @@ describe("MCP tool contracts against authenticated Worker responses", () => {
 
   it("covers every tool, nonempty reports, exports and CRUD results", async () => {
     await call("whoami");
+    await call("get_onboarding");
+    await call("update_onboarding", { dismissed: true });
     await call("get_billing_status");
     await call("get_stripe_setup_status");
     await call("get_settings");

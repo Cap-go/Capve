@@ -1,3 +1,4 @@
+import { onboardingEmails } from "./onboarding-emails";
 import { billingEmails } from "./billing-emails";
 import { purgeOAuth } from "../lib/oauth";
 import type { Env } from "../types";
@@ -21,6 +22,7 @@ export type ScheduledJob = {
 export const CRON_JOBS: Record<string, ScheduledJob[]> = {
   // Every 15 minutes: automation rules (zone blacklist, ROI/spend alerts).
   "*/15 * * * *": [automationJob],
+  "7,22,37,52 * * * *": [{ name: "onboarding-emails", run: (env) => onboardingEmails(env) }],
   // Separate invocation so billing's D1 query budget is independent of automation.
   "2,17,32,47 * * * *": [{ name: "billing-emails", run: (env) => billingEmails(env) }],
   // Hourly: pull today's and yesterday's spend from traffic source cost APIs (Adcash, ...), and

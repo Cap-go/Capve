@@ -1,4 +1,6 @@
-export const initSql = `
+import onboardingMigration from "../migrations/0033_onboarding.sql?raw";
+
+export const initSql = onboardingMigration + `
 CREATE TABLE platform_connections (
   traffic_source_id TEXT PRIMARY KEY REFERENCES traffic_sources(id) ON DELETE CASCADE,
   provider TEXT NOT NULL CHECK (provider IN ('adcash','propellerads','richads','trafficstars')),

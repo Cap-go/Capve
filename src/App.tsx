@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+import { api } from "./lib/api";
+import { useAuth } from "./lib/auth";
 import { OAuthConsentPage } from "./pages/OAuthConsent";
 import { DOC_CONTENT } from "./lib/docs-content";
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "react-router-dom";
@@ -92,5 +95,24 @@ export function AppRoutes() {
 function LegacyDashboardRedirect() {
   const { search, hash } = useLocation();
   const { section } = useParams();
-  return <Navigate to={legacyDashboardHref(search, section) + hash} replace />;
+  if (search || section) return <Navigate to={legacyDashboardHref(search, section) + hash} replace />;
+  return <DashboardEntry />;
+}
+
+function DashboardEntry() {
+  const { user, loading } = useAuth();
+  const [target, setTarget] = useState<{ accountId: string; path: string } | null>(null);
+  const accountId = user?.account_id ?? user?.id;
+  useEffect(() => {
+    if (!accountId) return;
+    let cancelled = false;
+    api.onboarding().then((status) => {
+      if (!cancelled) setTarget({ accountId, path: status.complete || status.dismissed ? "/app/campaigns" : "/app/getting-started" });
+    }).catch(() => { if (!cancelled) setTarget({ accountId, path: "/app/getting-started" }); });
+    return () => { cancelled = true; };
+  }, [accountId]);
+  if (loading) return <p className="p-6" role="status">Loading…</p>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!target || target.accountId !== accountId) return <p className="p-6" role="status">Loading your account…</p>;
+  return <Navigate to={target.path} replace />;
 }

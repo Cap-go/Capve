@@ -1,3 +1,4 @@
+import { onboarding } from "./routes/onboarding";
 import platforms from "./routes/platforms";
 import { discovery, oauth } from "./routes/oauth";
 import { oauthIssuer, OAUTH_SCOPE, registeredOAuthOrigin } from "./lib/oauth";
@@ -97,6 +98,7 @@ app.use("/api/reports/*", requireReports);
 for (const prefix of ["/api/programs", "/api/campaigns"]) {
   for (const suffix of ["stats", "clicks", "conversions"]) app.use(`${prefix}/:id/${suffix}`, requireReports);
 }
+app.route("/api/onboarding", onboarding);
 app.route("/api/billing", billing);
 app.route("/api/auth", accounts);
 app.route("/api/auth", auth);

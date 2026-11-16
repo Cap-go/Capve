@@ -273,7 +273,15 @@ const biddingRun = describe(object({
   }), "Model output after deterministic evidence and bid-change limits are enforced."),
 }), "Saved review-only bidding analysis.");
 
+const onboarding = object({
+  accountId: text, campaignId: nullableText,
+  steps: object({ verify: boolean, campaign: boolean, click: boolean, conversion: boolean }),
+  nextStep: { anyOf: [{ type: "string", enum: ["verify", "campaign", "click", "conversion"] }, { type: "null" }] },
+  complete: boolean, dismissed: boolean, emailTips: boolean,
+});
 const contracts: Record<string, Schema> = {
+  get_onboarding: onboarding,
+  update_onboarding: onboarding,
   get_bidding_settings: object({
     ...biddingSettings, available: describe(boolean, "Whether this install has a Workers AI binding; not a live model-health check."),
     model: describe(text, "Workers AI model configured for recommendations."), beta: describe(boolean, "Marks this feature as beta."),

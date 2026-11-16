@@ -2,6 +2,8 @@
 
 Configure these flows manually in the Capve Bento site. This PR does not create or activate flows in the connected Capgo Bento account.
 
+Optional setup guidance has its own [getting-started onboarding flows and templates](onboarding.md). These do not replace trial or authentication emails.
+
 ## Sender and API
 
 1. Create/select the Capve site. Authenticate `capve.app` DNS in Bento and add `noreply@capve.app` as an approved author. Set a monitored reply-to address in Bento.

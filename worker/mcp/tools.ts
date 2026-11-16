@@ -175,6 +175,18 @@ const postbackEvent = nullableStr(
 
 const TOOL_DEFINITIONS: ToolDefinition[] = [
   {
+    name: "get_onboarding", title: "Get setup progress",
+    description: "Read the account's getting-started checklist and next step, based on a real campaign click and attributed conversion. Available even when reports are locked.",
+    inputSchema: schema({}), annotations: read,
+    call: () => ({ method: "GET", path: "/api/onboarding" }),
+  },
+  {
+    name: "update_onboarding", title: "Update setup preferences",
+    description: "Owner only. Skip or restore the getting-started guide and opt in or out of onboarding tips. Only enable emailTips when the user explicitly asks for setup emails. Does not mark tracking steps complete.",
+    inputSchema: schema({ dismissed: bool("Skip the guide on sign-in and pause reminders"), emailTips: bool("Receive optional setup emails; explicit user consent required") }), annotations: write,
+    call: (args) => ({ method: "PUT", path: "/api/onboarding", body: args }),
+  },
+  {
     name: "get_stripe_setup_status", title: "Platform Stripe setup status",
     description: "Platform admins only. Read deployed billing configuration and live Stripe account, Price, portal, webhook, and tax checks. Never returns credentials or changes settings.",
     inputSchema: schema({}), annotations: read,

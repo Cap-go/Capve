@@ -1,6 +1,7 @@
 import { campaignHref, isCampaignSection } from "./campaign-route";
 
 export const DASHBOARD_PATHS = {
+  gettingStarted: "/app/getting-started",
   campaigns: "/app/campaigns",
   reports: "/app/reports",
   sources: "/app/traffic-sources",

@@ -1,3 +1,4 @@
+import type { OnboardingStatus, OnboardingPreferences } from "../../shared/onboarding";
 import type { StripeSetupStatus } from "../../shared/stripe-setup";
 import type { BillingStatus, PlanId } from "../../shared/billing";
 export type TeamRole = "owner" | "admin" | "viewer";
@@ -444,6 +445,8 @@ export type ApiToken = {
 };
 
 export const api = {
+  onboarding: () => request<OnboardingStatus>("/api/onboarding"),
+  updateOnboarding: (body: OnboardingPreferences) => request<OnboardingStatus>("/api/onboarding", { method: "PUT", body: JSON.stringify(body) }),
   billing: () => request<BillingStatus>("/api/billing"),
   billingCheckout: (plan: PlanId) => request<{ url: string }>("/api/billing/checkout", { method: "POST", body: JSON.stringify({ plan }) }),
   billingPortal: () => request<{ url: string }>("/api/billing/portal", { method: "POST" }),
@@ -452,7 +455,7 @@ export const api = {
   impersonate: (account_id: string) => request<{ ok: boolean }>("/api/auth/impersonate", { method: "POST", body: JSON.stringify({ account_id }) }),
   stopImpersonation: () => request<{ ok: boolean }>("/api/auth/stop-impersonation", { method: "POST", body: "{}" }),
   me: () => request<{ user: User | null }>("/api/auth/me"),
-  register: (body: { email: string; password: string; name?: string; plan?: PlanId }) =>
+  register: (body: { email: string; password: string; name?: string; plan?: PlanId; emailTips?: boolean }) =>
     request<{ user: User }>("/api/auth/register", { method: "POST", body: JSON.stringify(body) }),
   login: (email: string, password: string) =>
     request<{ user: User }>("/api/auth/login", {
