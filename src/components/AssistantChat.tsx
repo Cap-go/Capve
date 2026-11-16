@@ -39,7 +39,10 @@ function Chat({ userId, accountId, accountName }: { userId: string; accountId: s
     window.addEventListener("capve:open-assistant", open);
     return () => { mounted.current = false; controller.current?.abort(); window.removeEventListener("capve:open-assistant", open); };
   }, []);
-  useEffect(() => end.current?.scrollIntoView({ block: "nearest" }), [messages, busy]);
+  useEffect(() => {
+    // Modern browsers return a Promise here; React must not receive it as an effect cleanup.
+    end.current?.scrollIntoView({ block: "nearest" });
+  }, [messages, busy]);
 
   async function connect() {
     if (running.current) return;

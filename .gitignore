@@ -9,3 +9,7 @@ dist/
 
 # Playwright MCP snapshots
 .playwright-mcp/
+
+# Browser regression artifacts
+test-results/
+playwright-report/
