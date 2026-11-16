@@ -46,7 +46,13 @@ describe("MCP Streamable HTTP protocol", () => {
     expect(response.headers.get("Content-Type")).toContain("application/json");
     expect(await response.json()).toMatchObject({
       jsonrpc: "2.0", id: "init",
-      result: { protocolVersion: version, capabilities: { tools: {} }, serverInfo: { name: "capve" } },
+      result: {
+        protocolVersion: version, capabilities: { tools: {} },
+        serverInfo: {
+          name: "capve",
+          icons: [{ src: "https://capve.app/logo.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
+        },
+      },
     });
   });
 

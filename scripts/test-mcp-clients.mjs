@@ -18,6 +18,7 @@ const wrangler = "node_modules/wrangler/bin/wrangler.js";
 const config = ["--config", "wrangler.vitest.toml", "--persist-to", state];
 const processes = new Set();
 const manufactProfiles = new Set();
+const serverIcons = [{ src: "https://capve.app/logo.svg", mimeType: "image/svg+xml", sizes: ["any"] }];
 const manufactCommand = ["exec", "--yes", "--package", "mcp-use@2.12.4", "--package", "@mcp-use/cli@5.1.0",
   "--package", "@mcp-use/client@2.4.5", "--", "mcp-use", "client"];
 let token = "";
@@ -110,6 +111,7 @@ try {
     requestInit: { headers: { Authorization: `Bearer ${token}` } },
   }));
   assert.equal(client.getServerVersion()?.name, "capve");
+  assert.deepEqual(client.getServerVersion()?.icons, serverIcons);
   assert(client.getServerCapabilities()?.tools);
   await client.ping();
   const { tools } = await client.listTools();
@@ -129,7 +131,7 @@ try {
   const missing = await client.callTool({ name: "get_campaign", arguments: {} });
   assert.equal(missing.isError, true);
   await assert.rejects(client.callTool({ name: "unknown_capve_tool", arguments: {} }), /Unknown tool/);
-  console.log(`SDK: initialized, pinged, validated ${tools.length} tools, called 4 reads, checked 2 errors.`);
+  console.log(`SDK: initialized, verified scalable server icon, pinged, validated ${tools.length} tools, called 4 reads, checked 2 errors.`);
   await client.close();
   client = undefined;
 
@@ -141,13 +143,14 @@ try {
   }));
   assert(client.getDiscoverResult()?.supportedVersions.includes("2026-07-28"));
   assert.equal(client.getServerVersion()?.name, "capve");
+  assert.deepEqual(client.getServerVersion()?.icons, serverIcons);
   assert.equal((await client.listTools()).tools.length, tools.length);
   for (const name of ["whoami", "list_campaigns", "get_settings", "get_billing_status"]) {
     const result = await client.callTool({ name, arguments: {} });
     assert.notEqual(result.isError, true, `Modern ${name} failed`);
     assert(result.structuredContent, `Modern ${name} has no structuredContent`);
   }
-  console.log(`SDK v2: discovered 2026-07-28, validated ${tools.length} tools, called 4 reads.`);
+  console.log(`SDK v2: discovered 2026-07-28, verified scalable server icon, validated ${tools.length} tools, called 4 reads.`);
   await client.close();
   client = undefined;
 

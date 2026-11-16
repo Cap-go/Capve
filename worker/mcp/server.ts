@@ -9,6 +9,7 @@ const SERVER_INFO = {
   name: "capve", title: "Capve", version: "1.1.0",
   description: "Campaign and affiliate tracking, routing, and performance reports on Cloudflare.",
   websiteUrl: "https://capve.app",
+  icons: [{ src: "https://capve.app/logo.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
 };
 const INSTRUCTIONS =
   "Capve is an open-source campaign and affiliate tracker (Binom alternative). " +

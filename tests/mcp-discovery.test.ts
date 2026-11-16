@@ -37,7 +37,12 @@ describe("MCP 2026 discovery and request metadata", () => {
       result: {
         resultType: "complete", supportedVersions: expect.arrayContaining([version]),
         capabilities: { tools: {} }, ttlMs: 0, cacheScope: "private",
-        _meta: { [serverInfoKey]: { name: "capve" } },
+        _meta: {
+          [serverInfoKey]: {
+            name: "capve",
+            icons: [{ src: "https://capve.app/logo.svg", mimeType: "image/svg+xml", sizes: ["any"] }],
+          },
+        },
       },
     });
     expect(api).not.toHaveBeenCalled();
