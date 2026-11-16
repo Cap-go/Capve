@@ -3,6 +3,7 @@ import { oauthIssuer, OAUTH_SCOPE, registeredOAuthOrigin } from "./lib/oauth";
 import { billing } from "./routes/billing";
 import { requireReports } from "./lib/billing";
 import { Hono } from "hono";
+import { accepts } from "hono/accepts";
 import type { Env } from "./types";
 import { accounts } from "./routes/accounts";
 import { admin } from "./routes/admin";
@@ -122,6 +123,31 @@ app.route("/r", redirect);
 app.route("/c", campaign);
 app.route("/lp", lp);
 app.route("/click", postback);
+
+for (const path of ["/mcp.json", "/.well-known/mcp.json"]) {
+  app.get(path, (c) => c.json({
+    mcpServers: { capve: { url: `${oauthIssuer(c.env, c.req.url)}/mcp` } },
+  }, 200, {
+    "Access-Control-Allow-Origin": "*",
+    "Cache-Control": "public, max-age=3600",
+  }));
+}
+
+// Browser visits and plain discovery probes lead to the public setup guide.
+app.get("/mcp", (c, next) => {
+  c.header("Vary", "Accept");
+  c.header("Cache-Control", "no-store");
+  if (c.req.header("Authorization") || c.req.header("MCP-Protocol-Version") || c.req.header("Mcp-Method")) return next();
+  const representation = accepts(c, {
+    header: "Accept", supports: ["text/html"], default: "text/html",
+    match: (values) => {
+      const accepted = values.filter(({ q }) => q > 0).map(({ type }) => type);
+      if (accepted.some((type) => type === "application/json" || type === "text/event-stream")) return "";
+      return accepted.some((type) => ["text/html", "text/*", "*/*"].includes(type)) ? "text/html" : "";
+    },
+  });
+  return representation === "text/html" ? c.redirect("/docs/mcp", 302) : next();
+});
 
 // MCP server: every tool replays an /api request with the caller's bearer token.
 app.all("/mcp", async (c) => {

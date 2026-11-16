@@ -77,7 +77,7 @@ beforeAll(async () => {
 
 describe("OAuth discovery and registration", () => {
   it("advertises public resource metadata and S256 authorization server discovery", async () => {
-    const unauthorized = await SELF.fetch(base + "/mcp");
+    const unauthorized = await SELF.fetch(base + "/mcp", { headers: { Accept: "application/json" } });
     expect(unauthorized.status).toBe(401);
     expect(unauthorized.headers.get("WWW-Authenticate")).toContain(`resource_metadata="${base}/.well-known/oauth-protected-resource/mcp"`);
     for (const path of ["/oauth-protected-resource", "/oauth-protected-resource/mcp"]) {

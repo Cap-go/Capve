@@ -52,6 +52,55 @@ describe("MCP server", () => {
     expect(token).toMatch(/^capve_/);
   });
 
+  it.each(["/mcp.json", "/.well-known/mcp.json"])("publishes a credential-free client manifest at %s", async (path) => {
+    const response = await SELF.fetch(`http://localhost${path}`, { headers: { Origin: "https://client.example" } });
+    expect(response.status).toBe(200);
+    expect(response.headers.get("Content-Type")).toContain("application/json");
+    expect(response.headers.get("Access-Control-Allow-Origin")).toBe("*");
+    expect(response.headers.get("WWW-Authenticate")).toBeNull();
+    expect(await response.json()).toEqual({ mcpServers: { capve: { url: "http://localhost/mcp" } } });
+  });
+
+  it.each([undefined, "*/*", "text/html", "text/html,application/xhtml+xml;q=0.9,*/*;q=0.8"])(
+    "sends public setup visits to the guide (Accept: %s)", async (accept) => {
+      const response = await SELF.fetch("http://localhost/mcp", {
+        redirect: "manual", headers: accept ? { Accept: accept } : {},
+      });
+      expect(response.status).toBe(302);
+      expect(response.headers.get("Location")).toBe("/docs/mcp");
+      expect(response.headers.get("Vary")).toContain("Accept");
+      expect(response.headers.get("Cache-Control")).toBe("no-store");
+    },
+  );
+
+  it.each([
+    { Accept: "application/json" }, { Accept: "text/event-stream" },
+    { Accept: "text/html,application/json" }, { Accept: "text/html;q=0" }, { Accept: "application/xml" },
+    { Accept: "text/html", "MCP-Protocol-Version": "2025-11-25" },
+    { Accept: "text/html", "Mcp-Method": "server/discover" },
+    { Accept: "text/html", Authorization: "Bearer invalid" },
+  ] as Record<string, string>[])("keeps the OAuth challenge for protocol GET requests: %j", async (headers) => {
+    const response = await SELF.fetch("http://localhost/mcp", { headers, redirect: "manual" });
+    expect(response.status).toBe(401);
+    expect(response.headers.get("WWW-Authenticate")).toContain('resource_metadata="http://localhost/.well-known/oauth-protected-resource/mcp"');
+    expect(response.headers.get("Location")).toBeNull();
+  });
+
+  it("keeps POST authentication and authenticated GET method handling", async () => {
+    const post = await SELF.fetch("http://localhost/mcp", { method: "POST", headers: { Accept: "text/html" }, body: "{}" });
+    expect(post.status).toBe(401);
+    const stream = await SELF.fetch("http://localhost/mcp", {
+      headers: { Accept: "text/event-stream", Authorization: `Bearer ${token}` },
+    });
+    expect(stream.status).toBe(405);
+    expect(stream.headers.get("Allow")).toBe("POST");
+  });
+
+  it.each(["/mcp", "/mcp.json", "/.well-known/mcp.json"])("keeps public MCP setup off unrecognized hosts: %s", async (path) => {
+    const response = await SELF.fetch(`https://unknown.example${path}`, { headers: { Accept: "text/html" }, redirect: "manual" });
+    expect(response.status).toBe(404);
+  });
+
   it("rejects requests without a valid token", async () => {
     const missing = await SELF.fetch("http://localhost/mcp", { method: "POST", body: "{}" });
     expect(missing.status).toBe(401);
