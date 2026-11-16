@@ -371,8 +371,8 @@ export async function runAssistant(options: RunAssistantOptions): Promise<Assist
     })
   }
 
-  // A confirmed action already ran: if the summary call fails, still report it instead of an error.
-  let confirmedActionNeedsFallback = !!options.confirm && actions.at(-1)?.ok === true
+  // Keep the successful write result through every read/summary round that follows it.
+  const confirmedActionNeedsFallback = !!options.confirm && actions.at(-1)?.ok === true
   for (let round = 0; round < MAX_ROUNDS; round++) {
     options.signal?.throwIfAborted()
     let turn: ModelTurn
@@ -384,7 +384,6 @@ export async function runAssistant(options: RunAssistantOptions): Promise<Assist
         return { reply: 'Done. The action completed, but I could not write a summary.', cards, actions }
       throw error
     }
-    confirmedActionNeedsFallback = false
     if (!turn.calls.length)
       return { reply: turn.text, cards, actions }
 

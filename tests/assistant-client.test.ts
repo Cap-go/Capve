@@ -163,6 +163,34 @@ describe("assistant tool loop", () => {
     expect(onMutation).toHaveBeenCalledTimes(ok && !readOnly ? 1 : 0);
   });
 
+  it.each([1, 2])("preserves a successful confirmed write when the model fails after %s read-only rounds", async (readRounds) => {
+    const readTool = { name: "whoami", description: "Current account", inputSchema: {}, annotations: { readOnlyHint: true } };
+    const executed: string[] = [];
+    let modelCalls = 0;
+    const onMutation = vi.fn();
+    vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+      if (url.endsWith("/mcp")) {
+        const body = JSON.parse(init.body as string);
+        if (body.method === "tools/list") return Response.json({ result: { tools: [tool, readTool] } });
+        executed.push(body.params.name);
+        return Response.json({ result: { content: [{ text: body.params.name === "create_campaign" ? "Created" : "Current account" }] } });
+      }
+      if (url.endsWith("/models")) return Response.json({ models: [] });
+      if (++modelCalls <= readRounds) return stream([{ type: "function_call", namespace: "capve", name: "whoami", call_id: `read${modelCalls}`, arguments: "{}" }]);
+      return Response.json({ error: { code: "unavailable" } }, { status: 503 });
+    }));
+    const result = await runAssistant({ accessToken: "later-summary-failure", accountId: "account1", messages: [], context: {}, onMutation,
+      confirm: { tool: "create_campaign", arguments: { name: "Created once" } },
+    });
+    expect(result.reply).toBe("Done. The action completed, but I could not write a summary.");
+    expect(result.actions).toEqual([
+      { tool: "create_campaign", title: "create_campaign", ok: true },
+      ...Array.from({ length: readRounds }, () => ({ tool: "whoami", title: "whoami", ok: true })),
+    ]);
+    expect(executed).toEqual(["create_campaign", ...Array(readRounds).fill("whoami")]);
+    expect(onMutation).toHaveBeenCalledTimes(1);
+  });
+
   it.each(["", "Choose an option."])("preserves question cards when the assistant summary is %j", async (summary) => {
     const inputs: Array<Array<{ role: string; content?: string }>> = [];
     let responseCount = 0;
