@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS programs (
   tags TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   tracking_domain_id TEXT,
-  lenient_postbacks INTEGER NOT NULL DEFAULT 0,
+  lenient_postbacks INTEGER NOT NULL DEFAULT 1,
   created_at INTEGER NOT NULL
 );
 

@@ -168,6 +168,7 @@ export async function updateProgram(
     traffic_source_id?: string | null;
     tags?: string | null;
     status?: string;
+    lenient_postbacks?: number;
   },
 ): Promise<Program | null> {
   const existing = await getProgram(db, programId, userId);
@@ -186,12 +187,13 @@ export async function updateProgram(
         : updates.traffic_source_id,
     tags: updates.tags === undefined ? existing.tags : updates.tags,
     status: updates.status ?? existing.status,
+    lenient_postbacks: updates.lenient_postbacks ?? existing.lenient_postbacks,
   };
 
   await db
     .prepare(
       `UPDATE programs SET name = ?, destination_url = ?,
-       group_id = ?, traffic_source_id = ?, tags = ?, status = ?
+       group_id = ?, traffic_source_id = ?, tags = ?, status = ?, lenient_postbacks = ?
        WHERE id = ? AND user_id = ?`,
     )
     .bind(
@@ -201,6 +203,7 @@ export async function updateProgram(
       next.traffic_source_id,
       next.tags,
       next.status,
+      next.lenient_postbacks,
       programId,
       userId,
     )

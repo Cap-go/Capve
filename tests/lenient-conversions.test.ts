@@ -12,7 +12,7 @@ let programId: string;
 let convertSecret: string;
 let affiliateCode: string;
 
-async function createProgram(lenientPostbacks = 0) {
+async function createProgram(lenientPostbacks = 1) {
   const programRes = await SELF.fetch("http://localhost/api/programs", {
     method: "POST",
     headers: authHeaders,
@@ -23,13 +23,13 @@ async function createProgram(lenientPostbacks = 0) {
   });
   expect(programRes.status).toBe(201);
   const data = await json<{
-    program: { id: string };
+    program: { id: string; lenient_postbacks: number };
     convert_secret: string;
   }>(programRes);
 
-  if (lenientPostbacks === 1) {
-    await env.DB.prepare("UPDATE programs SET lenient_postbacks = 1 WHERE id = ?")
-      .bind(data.program.id)
+  if (lenientPostbacks !== data.program.lenient_postbacks) {
+    await env.DB.prepare("UPDATE programs SET lenient_postbacks = ? WHERE id = ?")
+      .bind(lenientPostbacks, data.program.id)
       .run();
   }
 
@@ -70,7 +70,21 @@ describe("lenient conversion postbacks", () => {
     ({ authHeaders } = await registerTestUser());
   });
 
-  it("default mode rejects unknown click id with 404", async () => {
+  it("lenient mode (default) accepts unknown click id with 404", async () => {
+    const { program, convert_secret } = await createProgram(1);
+    await createAffiliate(program.id);
+
+    const postbackRes = await SELF.fetch(
+      "http://localhost/click?cnv_id=clk_unknown&payout=10&cnv_status=ftd&event=ftd",
+      { redirect: "manual" },
+    );
+    expect(postbackRes.status).toBe(200);
+    const data = await json<{ ok: boolean; conversion: any }>(postbackRes);
+    expect(data.ok).toBe(true);
+    expect(data.conversion.warning_flags).toBe("unknown_click_id");
+  });
+
+  it("strict mode (lenient_postbacks=0) rejects unknown click id with 404", async () => {
     const { program, convert_secret } = await createProgram(0);
     await createAffiliate(program.id);
 
@@ -183,7 +197,7 @@ describe("lenient conversion postbacks", () => {
     expect(conversions.results![1].amount_cents).toBe(500);
   });
 
-  it("default mode does not flag warnings even with valid click", async () => {
+  it("strict mode does not flag warnings even with valid click", async () => {
     const { program } = await createProgram(0);
     const affiliateCode = await createAffiliate(program.id);
 

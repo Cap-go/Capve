@@ -89,7 +89,7 @@ postback.get("/", async (c) => {
   const parsedPayout = parsePayout(payoutRaw);
   const payout = parsedPayout !== undefined ? parsedPayout : parsePayout(c.req.query("amount"));
   
-  if (payout === null && !lenientMode) {
+  if (payout === null) {
     return c.text("invalid payout", 400);
   }
   
@@ -124,18 +124,18 @@ postback.get("/", async (c) => {
 
   // No payout on a plain postback → fall back to the clicked offer's payout.
   // Events (registration, ftd, ...) only carry the payout they send.
-  const needsOffer = (payout === undefined && !event) || (payout !== undefined && !keyValid);
+  const needsOffer = (payout === undefined && !event) || (payout !== undefined && payout !== null && !keyValid);
   const tracked = click && needsOffer ? await getTrackedClick(c.env.DB, click.id) : null;
   const offer = tracked?.offer_id
     ? await getOfferForUser(c.env.DB, tracked.offer_id, program.user_id)
     : null;
-  let amount = payout;
-  if (amount === undefined && event) {
+  let amount: number;
+  if (payout !== null && payout !== undefined) {
+    amount = !keyValid && offer?.payout_cents ? Math.min(payout, offer.payout_cents / 100) : payout;
+  } else if (event) {
     amount = 0;
-  } else if (amount === undefined) {
+  } else {
     amount = (offer?.payout_cents ?? 0) / 100;
-  } else if (!keyValid && offer?.payout_cents) {
-    amount = Math.min(amount, offer.payout_cents / 100);
   }
 
   const result = await createConversion(c.env.DB, program, affiliate, {
