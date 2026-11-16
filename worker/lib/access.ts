@@ -1,3 +1,4 @@
+import { OAUTH_PREFIX, oauthTokenUser } from "./oauth";
 import { HTTPException } from "hono/http-exception";
 import type { Context } from "hono";
 import type { Env, User } from "../types";
@@ -53,10 +54,17 @@ export function readBearerToken(header: string | undefined): string | null {
 /** Session cookie (dashboard) or `Authorization: Bearer capve_…` API token (MCP, scripts). */
 export async function resolveOperator(c: {
   env: Env;
-  req: { header: (name: string) => string | undefined };
+  req: { header: (name: string) => string | undefined; url?: string };
 }): Promise<SessionUser | null> {
   const bearer = readBearerToken(c.req.header("authorization"));
   if (bearer) {
+    if (bearer.startsWith(OAUTH_PREFIX)) {
+      const userId = await oauthTokenUser(c.env, bearer, c.req.url);
+      const user = userId ? await getUserById(c.env.DB, userId) : null;
+      if (!user) return null;
+      const session = await resolveSession(c.env.DB, user, user.id);
+      return { ...session, is_platform_admin: false };
+    }
     const userId = await findUserIdByApiToken(c.env.DB, bearer);
     return userId ? sessionForUser(c.env.DB, userId) : null;
   }
@@ -85,7 +93,7 @@ export async function resolveOperator(c: {
 /** The signed-in person, independent of their selected account or support context. */
 export async function resolveIdentity(c: {
   env: Env;
-  req: { header: (name: string) => string | undefined };
+  req: { header: (name: string) => string | undefined; url?: string };
 }): Promise<User | null> {
   const token = readSessionCookie(c.req.header("cookie") ?? null);
   if (!token) return null;
@@ -103,7 +111,7 @@ export async function resolveIdentity(c: {
 
 export async function requireUser(c: {
   env: Env;
-  req: { header: (name: string) => string | undefined };
+  req: { header: (name: string) => string | undefined; url?: string };
 }): Promise<SessionUser | null> {
   const session = await resolveOperator(c);
   const expectedAccount = c.req.header("X-Capve-Account");

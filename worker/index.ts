@@ -1,3 +1,5 @@
+import { discovery, oauth } from "./routes/oauth";
+import { oauthIssuer, OAUTH_SCOPE, registeredOAuthOrigin } from "./lib/oauth";
 import { billing } from "./routes/billing";
 import { requireReports } from "./lib/billing";
 import { Hono } from "hono";
@@ -40,10 +42,23 @@ app.use("*", async (c, next) => {
 app.use("/mcp", async (c, next) => {
   const origin = c.req.header("Origin");
   const url = new URL(c.req.url);
-  if (origin !== undefined && (origin !== url.origin || !isAppHost(url.hostname, c.env))) {
+  if (origin !== undefined && (!isAppHost(url.hostname, c.env) || (origin !== url.origin && !(await registeredOAuthOrigin(c.env.DB, origin))))) {
     return c.json({ jsonrpc: "2.0", error: { code: -32000, message: "Forbidden origin" } }, 403);
   }
-  return next();
+  const cors = () => {
+    if (!origin) return;
+    c.header("Access-Control-Allow-Origin", origin);
+    c.header("Vary", "Origin");
+    c.header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS");
+    c.header("Access-Control-Allow-Headers", "Content-Type, Authorization, MCP-Protocol-Version, MCP-Session-Id, Mcp-Method, Mcp-Name");
+    c.header("Access-Control-Expose-Headers", "WWW-Authenticate, MCP-Session-Id");
+  };
+  if (origin && c.req.method === "OPTIONS") {
+    cors();
+    return c.body(null, 204);
+  }
+  await next();
+  cors();
 });
 
 // Custom tracking domains serve only /r, /c, /lp, /click; unknown hosts get 404.
@@ -69,6 +84,9 @@ app.use("/api/*", async (c, next) => {
     viaApi: Boolean(c.req.header("authorization")),
   });
 });
+
+app.route("/.well-known", discovery);
+app.route("/oauth", oauth);
 
 app.get("/api/health", (c) => c.json({ ok: true, service: "capve" }));
 
@@ -109,8 +127,8 @@ app.route("/click", postback);
 app.all("/mcp", async (c) => {
   const authorization = c.req.header("authorization");
   if (!readBearerToken(authorization) || !(await requireUser(c))) {
-    return c.json({ error: "Missing or invalid API token. Create one in Capve → API & MCP." }, 401, {
-      "WWW-Authenticate": 'Bearer realm="capve"',
+    return c.json({ error: "Sign in with OAuth or use a Capve API token." }, 401, {
+      'WWW-Authenticate': `Bearer realm="capve", resource_metadata="${oauthIssuer(c.env, c.req.url)}/.well-known/oauth-protected-resource/mcp", scope="${OAUTH_SCOPE}"${authorization ? ', error="invalid_token"' : ""}`,
     });
   }
   const origin = new URL(c.req.url).origin;
@@ -130,7 +148,7 @@ app.all("/mcp", async (c) => {
         c.executionCtx,
       ),
     );
-  });
+  }, c.req.header("Origin")); // The /mcp middleware has validated this registered origin.
 });
 
 import { ATTRIBUTION_SNIPPET } from "./lib/urls";

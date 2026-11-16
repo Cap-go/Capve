@@ -21,10 +21,10 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Run tests (including AI bidding beta regression suite)
+      - name: Run tests (including bidding beta and OAuth security regressions)
         run: bun run test
 
-      - name: Check MCP SDK interoperability
+      - name: Check MCP SDK interoperability and OAuth flows
         run: bun run test:mcp:clients
 
       - name: Build

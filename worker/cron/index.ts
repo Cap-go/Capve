@@ -1,4 +1,5 @@
 import { billingEmails } from "./billing-emails";
+import { purgeOAuth } from "../lib/oauth";
 import type { Env } from "../types";
 import { runRetention } from "../lib/retention";
 import { automationJob } from "./alerts";
@@ -29,7 +30,10 @@ export const CRON_JOBS: Record<string, ScheduledJob[]> = {
     { name: "tracking-domain-cleanup", run: (env) => retryHostnameCleanup(env) },
   ],
   // Daily: postback delivery log pruning and optional raw click retention.
-  "17 3 * * *": [{ name: "retention", run: (env) => runRetention(env) }],
+  "17 3 * * *": [
+    { name: "retention", run: (env) => runRetention(env) },
+    { name: "oauth-retention", run: (env) => purgeOAuth(env.DB) },
+  ],
 };
 
 export async function runScheduled(

@@ -1,5 +1,6 @@
-import { SELF } from "cloudflare:test";
-import { describe, expect, it, vi } from "vitest";
+import { initSql } from "./schema";
+import { env, SELF } from "cloudflare:test";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { handleMcpRequest, LEGACY_PROTOCOL_VERSIONS } from "../worker/mcp/server";
 
 const endpoint = "https://capve.app/mcp";
@@ -23,6 +24,9 @@ function dispatcher() {
 }
 
 describe("MCP Streamable HTTP protocol", () => {
+  beforeAll(async () => {
+    for (const statement of initSql.split(";").map((s) => s.trim()).filter(Boolean)) await env.DB.prepare(statement).run();
+  });
   it.each([
     { url: "http://localhost/mcp", origin: "https://evil.example" },
     { url: "https://evil.example/mcp", origin: "https://evil.example" },

@@ -12,7 +12,7 @@ A Capve instance lets a user:
 4. Manage **traffic sources, affiliate networks, offers, landers, groups**
 5. Share tracking links (`/r/:code` per affiliate, `/c/:key` per campaign)
 6. Receive conversions via **S2S postback** (`/click?cnv_id=…`) or the JSON convert API
-7. Do all of the above from an AI assistant through the **MCP server** (`/mcp`, personal API token)
+7. Do all of the above from an AI assistant through the **MCP server** (`/mcp`, OAuth or personal API token)
 8. See **reports**: clicks, unique clicks, bots, LP clicks, conversions, revenue, cost, profit, ROI, EPC, CR — per campaign, per day, and grouped by any click dimension
 
 ## Done means (checklist)
@@ -42,7 +42,7 @@ A Capve instance lets a user:
 | Automation | `/api/automation/*`: zone blacklist rules (≥ N clicks, 0 conversions/event in H hours), ROI/spend alerts via email + webhook; `zone_blacklist` exported as TXT/CSV; cron `*/15` (`worker/cron/`) |
 | AI bidding beta | Optional per-campaign Workers AI/GLM zone bid recommendations, disabled by default; mature cohort and spend/ROI limits, strictly validated model output, manual Adcash application only. API/MCP and CI guardrail coverage. See `docs/ai-bidding-beta.md`. |
 | Tracking domains | `/api/tracking-domains`; campaigns can pick one; those hosts serve only `/r`, `/c`, `/lp`, `/click`; unknown hosts 404. With `TRACKING_DOMAIN_*` set, each hostname becomes a Cloudflare for SaaS custom hostname: the user adds one CNAME and HTTPS is issued automatically (up to 20 per account; removing the domain deletes the hostname). Without them, hostnames are added as Worker custom domains by hand. See `docs/tracking-domains.md` |
-| MCP | `POST /mcp` (Streamable HTTP, stateless JSON-RPC) in `worker/mcp/`; each tool replays an `/api` route with the bearer token; tokens in `api_tokens` (hash only), managed at `/api/tokens` with a session cookie only |
+| MCP | `POST /mcp` (Streamable HTTP, stateless JSON-RPC) in `worker/mcp/`; each tool replays an `/api` route with the bearer token; personal tokens in `api_tokens` (hash only), managed at `/api/tokens` with a session cookie only; OAuth discovery, dynamic registration, PKCE consent, rotating refresh tokens, and session-only connection revocation in `worker/routes/oauth.ts` (see `docs/mcp-oauth.md`) |
 | Redirect safety | Only configured destinations/offers/landers; `?url=` same host only; postback/webhook URLs must be http(s) |
 
 ### Routes

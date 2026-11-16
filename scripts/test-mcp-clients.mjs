@@ -1,3 +1,4 @@
+import { testMcpOAuth } from "./test-mcp-oauth.mjs";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
@@ -149,6 +150,8 @@ try {
   console.log(`SDK v2: discovered 2026-07-28, validated ${tools.length} tools, called 4 reads.`);
   await client.close();
   client = undefined;
+
+  await testMcpOAuth(base, cookie);
 
   if (external) {
     for (const mode of ["legacy", "auto", "modern"]) {
