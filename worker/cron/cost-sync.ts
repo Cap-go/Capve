@@ -6,6 +6,10 @@ import {
   type CostFilter,
   type SourceSettingsRow,
 } from "../db/sources";
+import {
+  getCampaignMapping,
+  upsertDailyStats,
+} from "../db/traffic-source-stats";
 import { openSecret } from "../lib/secret-box";
 import type { SourceToken } from "../lib/source-templates";
 import type { Env } from "../types";
@@ -25,6 +29,8 @@ export type CostSyncResult = {
   updates: number;
   clicks_updated: number;
   total_cents: number;
+  daily_stats_created: number;
+  total_impressions: number;
 };
 
 function slotFor(tokens: SourceToken[], kind: "campaign" | "zone") {
@@ -33,10 +39,12 @@ function slotFor(tokens: SourceToken[], kind: "campaign" | "zone") {
 }
 
 /**
- * Pulls spend for `days` from the source's cost API and writes it onto the clicks of every
- * campaign using that source. Spend rows are matched to clicks through the source's tokens:
- * the token with kind "campaign" (e.g. campaignid → sub2) and kind "zone" (zoneid → sub1).
- * Without those tokens the day's spend is spread over all the source's clicks of that day.
+ * Pulls spend for `days` from the source's cost API, stores daily stats (impressions + spend),
+ * and also writes it onto the clicks of every campaign using that source as a fallback.
+ * Spend rows are matched to campaigns through campaign mappings (external_campaign_id → program_id),
+ * then matched to clicks through the source's tokens: the token with kind "campaign" (e.g. campaignid → sub2)
+ * and kind "zone" (zoneid → sub1). Without those tokens the day's spend is spread over all the
+ * source's clicks of that day.
  */
 export async function syncSourceCost(
   env: Pick<Env, "DB" | "AUTH_SECRET">,
@@ -67,7 +75,68 @@ export async function syncSourceCost(
   const campaignSlot = slotFor(tokens, "campaign");
   const zoneSlot = slotFor(tokens, "zone");
 
-  // Sum spend per (day, filters) at the granularity the tokens allow.
+  const result: CostSyncResult = {
+    traffic_source_id: settings.traffic_source_id,
+    provider: provider.id,
+    days,
+    rows: rows.length,
+    updates: 0,
+    clicks_updated: 0,
+    total_cents: 0,
+    daily_stats_created: 0,
+    total_impressions: 0,
+  };
+
+  // First pass: store daily stats for each (campaign, zone, day) combination
+  const dailyStatsMap = new Map<string, { programId: string; date: string; externalCampaignId?: string; externalZoneId?: string; cents: number; impressions: number }>();
+  
+  for (const row of rows as SpendRow[]) {
+    if (!days.includes(row.date)) continue;
+    
+    // Look up the campaign mapping if there's an external campaign ID
+    let programId: string | null = null;
+    if (row.campaign_id) {
+      programId = await getCampaignMapping(env.DB, settings.traffic_source_id, row.campaign_id);
+    }
+    
+    // If no mapping exists, we'll still aggregate by day for later per-click spreading
+    // but we won't store daily stats without a campaign mapping
+    if (programId) {
+      const key = `${programId}|${row.date}|${row.campaign_id ?? ""}|${row.zone_id ?? ""}`;
+      const existing = dailyStatsMap.get(key) ?? {
+        programId,
+        date: row.date,
+        externalCampaignId: row.campaign_id,
+        externalZoneId: row.zone_id,
+        cents: 0,
+        impressions: 0,
+      };
+      existing.cents += row.spend_cents;
+      if (row.impressions !== undefined) {
+        existing.impressions += row.impressions;
+      }
+      dailyStatsMap.set(key, existing);
+    }
+  }
+
+  // Store daily stats
+  for (const stats of dailyStatsMap.values()) {
+    await upsertDailyStats(env.DB, {
+      userId: settings.user_id,
+      programId: stats.programId,
+      trafficSourceId: settings.traffic_source_id,
+      date: stats.date,
+      externalCampaignId: stats.externalCampaignId,
+      externalZoneId: stats.externalZoneId,
+      impressions: stats.impressions,
+      spendCents: stats.cents,
+      origin: "api",
+    });
+    result.daily_stats_created += 1;
+    result.total_impressions += stats.impressions;
+  }
+
+  // Second pass: also spread spend onto clicks as before (fallback for when no daily stats exist)
   const groups = new Map<string, { date: string; filters: CostFilter[]; cents: number }>();
   for (const row of rows as SpendRow[]) {
     if (!days.includes(row.date)) continue;
@@ -80,15 +149,6 @@ export async function syncSourceCost(
     groups.set(key, group);
   }
 
-  const result: CostSyncResult = {
-    traffic_source_id: settings.traffic_source_id,
-    provider: provider.id,
-    days,
-    rows: rows.length,
-    updates: 0,
-    clicks_updated: 0,
-    total_cents: 0,
-  };
   for (const group of groups.values()) {
     const from = Date.parse(`${group.date}T00:00:00Z`);
     const update = await applyCostUpdate(env.DB, {

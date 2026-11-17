@@ -7,6 +7,7 @@ export type SpendRow = {
   /** The source's zone / placement id, when broken down by zone. */
   zone_id?: string;
   spend_cents: number;
+  impressions?: number;
 };
 
 export type FetchFn = (input: string, init?: RequestInit) => Promise<Response>;
@@ -57,7 +58,9 @@ export const adcashProvider: CostProvider = {
       headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
     });
     if (!res.ok) {
-      throw new Error(`Adcash API ${res.status}: ${(await res.text()).slice(0, 200)}`);
+      const text = await res.text();
+      // Don't include response body in error to avoid leaking sensitive data
+      throw new Error(`Adcash API ${res.status}`);
     }
     const body = (await res.json()) as unknown;
     const list = Array.isArray(body)
@@ -74,11 +77,13 @@ export const adcashProvider: CostProvider = {
       const date = firstString(row, ["date", "day"])?.slice(0, 10);
       const spend = firstNumber(row, ["spend", "cost", "expenses", "amount"]);
       if (!date || spend === undefined || spend < 0) continue;
+      const impressions = firstNumber(row, ["impressions", "impression", "imps", "imp"]);
       rows.push({
         date,
         campaign_id: firstString(row, ["campaign_id", "campaignId", "campaign"]),
         zone_id: firstString(row, ["zone_id", "zoneId", "zone"]),
         spend_cents: Math.round(spend * 100),
+        impressions: impressions !== undefined && impressions >= 0 ? Math.round(impressions) : undefined,
       });
     }
     return rows;

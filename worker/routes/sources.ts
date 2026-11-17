@@ -293,4 +293,76 @@ campaignCosts.post("/:id/costs", async (c) => {
   return c.json({ cost_update: update }, 201);
 });
 
-export { sources, campaignCosts };
+/** `/api/sources/:id/campaign-mappings`: external campaign ID to Capve campaign mapping. */
+const campaignMappings = new Hono<AppEnv>();
+
+campaignMappings.get("/:id/campaign-mappings", async (c) => {
+  const session = await requireUser(c);
+  if (!session) return c.json({ error: "Unauthorized" }, 401);
+  const sourceId = c.req.param("id");
+  if (!(await entityBelongsTo(c.env.DB, "traffic_source", sourceId, session.account_id))) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  const { listCampaignMappings } = await import("../db/traffic-source-stats");
+  const mappings = await listCampaignMappings(c.env.DB, sourceId);
+  return c.json({ mappings });
+});
+
+campaignMappings.post("/:id/campaign-mappings", async (c) => {
+  const session = await requireWrite(c);
+  if (session instanceof Response) return session;
+  const sourceId = c.req.param("id");
+  if (!(await entityBelongsTo(c.env.DB, "traffic_source", sourceId, session.account_id))) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  const body = await c.req
+    .json<{ program_id?: string; external_campaign_id?: string }>()
+    .catch(() => null);
+  if (!body?.program_id || !body?.external_campaign_id) {
+    return c.json({ error: "program_id and external_campaign_id required" }, 400);
+  }
+  const program = await getProgram(c.env.DB, body.program_id, session.account_id);
+  if (!program) {
+    return c.json({ error: "Campaign not found" }, 404);
+  }
+  if (program.traffic_source_id !== sourceId) {
+    return c.json({ error: "Campaign does not use this traffic source" }, 400);
+  }
+  const { upsertCampaignMapping } = await import("../db/traffic-source-stats");
+  const mapping = await upsertCampaignMapping(c.env.DB, {
+    userId: session.account_id,
+    trafficSourceId: sourceId,
+    programId: body.program_id,
+    externalCampaignId: body.external_campaign_id,
+  });
+  return c.json({ mapping }, 201);
+});
+
+campaignMappings.delete("/:id/campaign-mappings/:mappingId", async (c) => {
+  const session = await requireWrite(c);
+  if (session instanceof Response) return session;
+  const sourceId = c.req.param("id");
+  const mappingId = c.req.param("mappingId");
+  if (!(await entityBelongsTo(c.env.DB, "traffic_source", sourceId, session.account_id))) {
+    return c.json({ error: "Not found" }, 404);
+  }
+  
+  // Verify the mapping belongs to this user and source before deleting
+  const mapping = await c.env.DB
+    .prepare(
+      `SELECT id FROM traffic_source_campaign_mapping 
+       WHERE id = ? AND traffic_source_id = ? AND user_id = ?`,
+    )
+    .bind(mappingId, sourceId, session.account_id)
+    .first<{ id: string }>();
+  
+  if (!mapping) {
+    return c.json({ error: "Mapping not found" }, 404);
+  }
+  
+  const { deleteCampaignMapping } = await import("../db/traffic-source-stats");
+  await deleteCampaignMapping(c.env.DB, mappingId);
+  return c.json({ success: true });
+});
+
+export { sources, campaignCosts, campaignMappings };
