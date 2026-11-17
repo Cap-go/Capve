@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { useAuth } from "../lib/auth";
+import { AssistantMarkdown } from "./AssistantMarkdown";
 import { Icon } from "./Icon";
 import { runAssistant, AssistantUpstreamError } from "../lib/assistant/agent";
 import { beginChatGptSignIn, completeChatGptSignIn, getChatGptAccessToken, loadChatGptCredentials, signOutChatGpt, CHATGPT_REDIRECT_URI, CHATGPT_MANAGE_USAGE_URL } from "../lib/assistant/chatgptAuth";
@@ -155,7 +156,9 @@ function Chat({ userId, accountId, accountName }: { userId: string; accountId: s
           <div role="log" aria-label="Conversation" aria-live="polite" className="space-y-4">
             {messages.map((message, index) => <div key={index} className={`assistant-message ${message.role}`}>
               <p className="mb-1 text-xs font-semibold">{message.role === "user" ? "You" : "Capve"}</p>
-              <p className="whitespace-pre-wrap text-sm">{message.content}</p>
+              {message.role === "assistant"
+                ? <AssistantMarkdown text={message.content} onInternalLink={() => dialog.current?.close()} />
+                : <p className="whitespace-pre-wrap text-sm">{message.content}</p>}
               {message.actions?.map((action, i) => <p className="mt-2 text-xs" key={i}>{action.ok ? "✓" : "!"} {action.title} — {action.ok ? "completed" : "failed"}</p>)}
               {message.cards?.map((card, i) => <div className="assistant-card" key={i}>
                 {card.type === "link" ? <Link to={card.path} onClick={() => dialog.current?.close()} className="underline">{card.title}</Link> : card.type === "question" ? <><p>{card.question}</p><div className="mt-2 flex flex-wrap gap-2">{card.options.map(option => <button className="btn btn-secondary text-xs" key={option} disabled={busy || used.has(card)} onClick={() => void send(`Question: ${card.question}\nAnswer: ${option}`)}>{option}</button>)}</div></> : <>

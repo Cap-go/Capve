@@ -10,7 +10,7 @@ The **Ask Capve** button on dashboard pages opens a chat assistant. It can read 
 4. OpenAI redirects to `http://127.0.0.1:1455/auth/callback?...`. The tab may say the page cannot connect: no local server is needed. Copy the complete address from the address bar, return to Capve and paste it into **Callback address**. Do not share it.
 5. Choose **Finish connecting**, then ask a question. The callback expires after ten minutes; start over if it fails.
 
-Examples: “Compare my campaigns by ROI”, “Help me create a tracking campaign”, or “Which zones are spending without conversions?” Review proposed changes before confirming. External platform actions still require a configured connection and enabled writes; this does not enable autonomous bidding.
+Examples: “Compare my campaigns by ROI”, “Help me create a tracking campaign”, or “Which zones are spending without conversions?” Replies render as GitHub-flavored Markdown, so lists, tables, code, and links show up in the panel. Review proposed changes before confirming. External platform actions still require a configured connection and enabled writes; this does not enable autonomous bidding.
 
 **Manage usage** opens ChatGPT settings. **Disconnect** forgets the browser credentials and conversation. Signing out of Capve also forgets ChatGPT credentials. Tokens live in session storage scoped to the Capve user: the connection lasts for this tab, not across browsers. Switching account clears the conversation, cancels in-flight work and discards confirmation cards. The assistant is unavailable during support impersonation. A request already accepted by the server can finish even if the browser cancels; check the affected resource before retrying.
 
