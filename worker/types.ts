@@ -13,6 +13,7 @@ export type Env = {
   /** Optional Workers AI binding. Never called without campaign opt-in. */
   AI?: { run: (model: string, input: Record<string, unknown>) => Promise<unknown> };
   BILLING_ENABLED?: string;
+  ONBOARDING_EMAILS_ENABLED?: string;
   STRIPE_SECRET_KEY?: string;
   STRIPE_WEBHOOK_SECRET?: string;
   STRIPE_PRICE_STARTER?: string;

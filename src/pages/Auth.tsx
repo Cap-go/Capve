@@ -74,21 +74,22 @@ export function RegisterPage() {
   const selectedPlan = new URLSearchParams(window.location.search).get("plan");
   const plan = isPlanId(selectedPlan) ? selectedPlan : "starter";
   const [name, setName] = useState("");
+  const [emailTips, setEmailTips] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  if (user) return returnTo ? <p className="p-6">Continuing to authorization…</p> : <Navigate to="/app" replace />;
+  if (user) return returnTo ? <p className="p-6">Continuing to authorization…</p> : <Navigate to="/app/getting-started" replace />;
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
     setBusy(true);
     setError("");
     try {
-      const { user: next } = await api.register({ email, password, name: name || undefined, plan });
+      const { user: next } = await api.register({ email, password, name: name || undefined, plan, emailTips });
       setUser(next);
-      if (!returnTo) navigate("/app");
+      if (!returnTo) navigate("/app/getting-started");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
@@ -111,6 +112,10 @@ export function RegisterPage() {
           <Field label="Name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} />
           <Field label="Email" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           <Field label="Password" type="password" autoComplete="new-password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <label className="flex items-start gap-2 text-sm">
+            <input type="checkbox" checked={emailTips} onChange={(e) => setEmailTips(e.target.checked)} />
+            Email me setup tips to help track my first conversion. Unsubscribe anytime.
+          </label>
           <ErrorBox message={error} />
           <p className="text-sm text-[var(--velo-muted)]">
             By creating an account, you agree to the{" "}
@@ -243,7 +248,7 @@ export function VerifyEmailPage() {
   }, [token]);
 
   return (
-    <Shell cta={<Link className="btn btn-ghost" to="/app">Dashboard</Link>}>
+    <Shell cta={<Link className="btn btn-ghost" to="/app/getting-started">Dashboard</Link>}>
       <div className="mx-auto max-w-md px-6 py-16">
         <h1 className="text-3xl font-semibold">Verify email</h1>
         {state === "working" ? (
@@ -251,8 +256,8 @@ export function VerifyEmailPage() {
         ) : state === "done" ? (
           <p className="mt-4">
             Your email is verified.{" "}
-            <Link className="underline" to="/app">
-              Open your dashboard
+            <Link className="underline" to="/app/getting-started">
+              Continue setup
             </Link>
             .
           </p>

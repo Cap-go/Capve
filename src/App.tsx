@@ -1,3 +1,6 @@
+import { useEffect, useState } from "react";
+import { api } from "./lib/api";
+import { useAuth } from "./lib/auth";
 import { AssistantChat } from "./components/AssistantChat";
 import { OAuthConsentPage } from "./pages/OAuthConsent";
 import { DOC_CONTENT } from "./lib/docs-content";
@@ -5,7 +8,7 @@ import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from "
 import { DocsLayout } from "./components/DocsLayout";
 import { AuthProvider } from "./lib/auth";
 import { DashboardPage } from "./pages/Dashboard";
-import { DASHBOARD_PATHS, legacyDashboardHref, type DashboardView } from "./lib/dashboard-route";
+import { DASHBOARD_PATHS, dashboardEntryHref, legacyDashboardRedirect, type DashboardView } from "./lib/dashboard-route";
 import {
   ForgotPasswordPage,
   LoginPage,
@@ -94,5 +97,26 @@ export function AppRoutes() {
 function LegacyDashboardRedirect() {
   const { search, hash } = useLocation();
   const { section } = useParams();
-  return <Navigate to={legacyDashboardHref(search, section) + hash} replace />;
+  const legacy = legacyDashboardRedirect(search, section);
+  if (legacy !== null) return <Navigate to={legacy + hash} replace />;
+  return <DashboardEntry />;
+}
+
+function DashboardEntry() {
+  const { search, hash } = useLocation();
+  const { user, loading } = useAuth();
+  const [target, setTarget] = useState<{ accountId: string; showOnboarding: boolean } | null>(null);
+  const accountId = user?.account_id ?? user?.id;
+  useEffect(() => {
+    if (!accountId) return;
+    let cancelled = false;
+    api.onboarding().then((status) => {
+      if (!cancelled) setTarget({ accountId, showOnboarding: !status.complete && !status.dismissed });
+    }).catch(() => { if (!cancelled) setTarget({ accountId, showOnboarding: true }); });
+    return () => { cancelled = true; };
+  }, [accountId]);
+  if (loading) return <p className="p-6" role="status">Loading…</p>;
+  if (!user) return <Navigate to="/login" replace />;
+  if (!target || target.accountId !== accountId) return <p className="p-6" role="status">Loading your account…</p>;
+  return <Navigate to={dashboardEntryHref(target.showOnboarding, search, hash)} replace />;
 }

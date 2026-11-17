@@ -120,7 +120,7 @@ export function PrivacyPage() {
           Security and audit logs, such as sign-in events, team changes, and actions taken with an
           API token.
         </li>
-        <li>Messages you send us, and the transactional email we send you.</li>
+        <li>Messages you send us, service email, and optional setup tips you choose to receive.</li>
       </ul>
 
       <h2>3. Tracking data we process for you</h2>
@@ -194,6 +194,7 @@ export function PrivacyPage() {
         <li>To create and run your account, team, campaigns, and reports.</li>
         <li>To take payment, apply the trial, and enforce the plan's click allowance.</li>
         <li>To send service email: verification, password reset, invites, and billing notices.</li>
+        <li>To send optional setup tips when you opt in, using your setup progress to choose relevant reminders.</li>
         <li>To secure the service, investigate abuse, and keep audit logs.</li>
         <li>To answer support requests.</li>
         <li>To meet tax, accounting, and other legal duties.</li>
@@ -201,7 +202,8 @@ export function PrivacyPage() {
       <p>
         The legal bases are performance of our contract with you, our legitimate interest in keeping
         the service secure and reliable, and legal obligation where a law requires us to keep a
-        record. We do not send marketing mail as part of the service.
+        record. Optional setup tips are based on your consent. You can turn them off on Getting started
+        or unsubscribe using the link in each setup email.
       </p>
 
       <h2>6. How long we keep it</h2>
@@ -232,8 +234,8 @@ export function PrivacyPage() {
         <li>Cloudflare, Inc., for hosting, the database, the edge network, and email delivery.</li>
         <li>Stripe, Inc., for subscriptions and payment methods. Stripe does not receive click logs.</li>
         <li>
-          Bento (Bentonow), when enabled, for transactional email to you. Bento does not receive click
-          logs.
+          Bento (Bentonow), when enabled, for service email and optional setup tips. Bento receives
+          your email, account identifier, and setup progress for those tips, but no click logs.
         </li>
         <li>
           DataFast, for website analytics on capve.app: pages viewed, referrer, browser, device and

@@ -1,3 +1,4 @@
+import { GettingStartedPanel } from "../components/GettingStartedPanel";
 import type { BillingStatus } from "../../shared/billing";
 import { BillingPanel, ReportingLock } from "../components/BillingPanel";
 import { FormEvent, useEffect, useRef, useState } from "react";
@@ -64,6 +65,7 @@ import {
 import { DASHBOARD_PATHS, type DashboardView } from "../lib/dashboard-route";
 
 const DASHBOARD_NAV: AppNavItem<DashboardView>[] = [
+  { key: "gettingStarted", label: "Getting started", icon: "docs", group: "Tracking" },
   { key: "campaigns", label: "Campaigns", icon: "campaigns", group: "Tracking" },
   { key: "reports", label: "Reports", icon: "reports", group: "Tracking" },
   { key: "sources", label: "Traffic sources", icon: "sources", group: "Inventory" },
@@ -77,6 +79,7 @@ const DASHBOARD_NAV: AppNavItem<DashboardView>[] = [
 ];
 
 const PAGE_COPY: Record<DashboardView, { title: string; description: string }> = {
+  gettingStarted: { title: "Getting started", description: "Follow your first click all the way to a conversion." },
   billing: { title: "Billing", description: "Plan, trial, traffic allowance, and subscription." },
   campaigns: { title: "Campaigns", description: "Tracking links, paths, postbacks, and live stats per campaign." },
   reports: { title: "Reports", description: "Compare campaigns, drill into dimensions, and export data." },
@@ -406,7 +409,9 @@ function DashboardContent({ page }: { page: DashboardView }) {
       <ErrorBox message={error} />
 
       {page !== "campaigns" ? (
-        page === "billing" ? (
+        page === "gettingStarted" ? (
+          <GettingStartedPanel key={user.account_id ?? user.id} user={user} />
+        ) : page === "billing" ? (
           <BillingPanel billing={billing} owner={user.role === "owner" && !user.impersonating} />
         ) : page === "admin" ? (
           <AdminPanel />

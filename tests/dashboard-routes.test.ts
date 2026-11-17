@@ -1,8 +1,18 @@
 import { describe, expect, it } from "vitest";
-import { DASHBOARD_PATHS, legacyDashboardHref } from "../src/lib/dashboard-route";
+import { DASHBOARD_PATHS, dashboardEntryHref, legacyDashboardRedirect, legacyDashboardHref } from "../src/lib/dashboard-route";
 import { campaignHref } from "../src/lib/campaign-route";
 
 describe("dashboard URLs", () => {
+  it("resumes onboarding for attribution parameters while preserving explicit legacy links", () => {
+    const search = "?utm_source=newsletter&campaign=welcome";
+    expect(legacyDashboardRedirect(search)).toBeNull();
+    expect(dashboardEntryHref(true, search, "#setup")).toBe("/app/getting-started?utm_source=newsletter&campaign=welcome#setup");
+    expect(dashboardEntryHref(false, search, "#setup")).toBe("/app/campaigns?utm_source=newsletter&campaign=welcome#setup");
+    expect(legacyDashboardRedirect("?entity=billing&checkout=success")).toBe("/app/billing?checkout=success");
+    expect(legacyDashboardRedirect("?id=prg_123&utm_source=email", "tracking")).toBe("/app/campaigns/prg_123/tracking?utm_source=email");
+    expect(legacyDashboardRedirect("?id=prg_123")).toBe("/app/campaigns/prg_123/performance");
+    expect(legacyDashboardRedirect("", "tracking")).toBe("/app/campaigns");
+  });
   it("gives every page and campaign section a distinct path", () => {
     expect(new Set(Object.values(DASHBOARD_PATHS)).size).toBe(Object.keys(DASHBOARD_PATHS).length);
     expect(DASHBOARD_PATHS.billing).toBe("/app/billing");

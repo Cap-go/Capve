@@ -52,6 +52,16 @@ describe("MCP server", () => {
     expect(token).toMatch(/^capve_/);
   });
 
+  it("exposes live onboarding and persisted owner preferences through MCP", async () => {
+    const initial = await tool("get_onboarding");
+    expect(initial.isError).not.toBe(true);
+    expect(initial.structuredContent).toMatchObject({ nextStep: "campaign", complete: false, emailTips: false });
+    const saved = await tool("update_onboarding", { dismissed: true });
+    expect(saved.isError).not.toBe(true);
+    expect(saved.structuredContent).toMatchObject({ dismissed: true, complete: false });
+    expect((await tool("update_onboarding", { complete: true })).isError).toBe(true);
+  });
+
   it.each(["/mcp.json", "/.well-known/mcp.json"])("publishes a credential-free client manifest at %s", async (path) => {
     const response = await SELF.fetch(`http://localhost${path}`, { headers: { Origin: "https://client.example" } });
     expect(response.status).toBe(200);
@@ -131,8 +141,8 @@ describe("MCP server", () => {
 
     const list = await rpc("tools/list");
     const names = list.result?.tools?.map((t) => t.name) ?? [];
-    // Landing page and README advertise "103 tools".
-    expect(names).toHaveLength(103);
+    // Landing page and README advertise "105 tools".
+    expect(names).toHaveLength(105);
     expect(names).toContain("list_activity");
     expect(names).toContain("get_billing_status");
     expect(names).toContain("get_stripe_setup_status");

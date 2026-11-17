@@ -1,6 +1,7 @@
 import { campaignHref, isCampaignSection } from "./campaign-route";
 
 export const DASHBOARD_PATHS = {
+  gettingStarted: "/app/getting-started",
   campaigns: "/app/campaigns",
   reports: "/app/reports",
   sources: "/app/traffic-sources",
@@ -28,4 +29,14 @@ export function legacyDashboardHref(search: string, section?: string): string {
     : DASHBOARD_PATHS[page];
   const query = params.toString();
   return `${path}${query ? `?${query}` : ""}`;
+}
+
+/** Unrelated parameters (for example email attribution) still resume account setup. */
+export function legacyDashboardRedirect(search: string, section?: string): string | null {
+  const params = new URLSearchParams(search);
+  return section || params.has("entity") || params.has("id") ? legacyDashboardHref(search, section) : null;
+}
+
+export function dashboardEntryHref(showOnboarding: boolean, search: string, hash: string): string {
+  return (showOnboarding ? DASHBOARD_PATHS.gettingStarted : DASHBOARD_PATHS.campaigns) + search + hash;
 }

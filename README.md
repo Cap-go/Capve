@@ -53,7 +53,7 @@ Cursor / VS Code / Windsurf (`mcp.json`):
 { "mcpServers": { "capve": { "url": "https://capve.app/mcp", "headers": { "Authorization": "Bearer capve_YOUR_TOKEN" } } } }
 ```
 
-103 tools cover campaigns, affiliates, paths and rotation, routing rules, anti-fraud blocklists, postbacks, traffic sources (templates, tokens, cost sync, opt-in platform management), networks, offers, landers, groups, cost updates, reports (incl. drilldown), triggers, zone blacklist rules and alerts, settings, tracking domains, notes, team, and activity. Each tool replays the matching `/api` route with the token, so validation and team roles are identical to the dashboard. Full docs: `/docs/mcp`. Code: `worker/mcp/`.
+105 tools cover campaigns, affiliates, paths and rotation, routing rules, anti-fraud blocklists, postbacks, traffic sources (templates, tokens, cost sync, opt-in platform management), networks, offers, landers, groups, cost updates, reports (incl. drilldown), triggers, zone blacklist rules and alerts, settings, tracking domains, notes, team, getting-started progress, and activity. Each tool replays the matching `/api` route with the token, so validation and team roles are identical to the dashboard. Full docs: `/docs/mcp`. Code: `worker/mcp/`.
 
 Tokens act as the user who created them, can be revoked from the dashboard, and cannot create more tokens. Only a SHA-256 hash is stored.
 
@@ -151,3 +151,7 @@ Capve is licensed under the [GNU Affero General Public License v3.0](LICENSE) (A
 Hosted plans, trials, Stripe setup and reporting limits are documented in [billing setup](docs/billing-setup.md). Billing is disabled unless `BILLING_ENABLED=true`. Self-hosted installations keep unrestricted reports.
 
 Copy-ready Bento flow instructions and emails are in [Bento emails](docs/bento-emails.md). Production activation requires the Stripe account configuration, Worker secrets, reviewed Medialab account ID and Martin's deployment.
+
+### Getting started
+
+New accounts land on `/app/getting-started` for a live campaign → click → conversion checklist. Optional Bento setup tips use separate consent and the `ONBOARDING_EMAILS_ENABLED` flag. See [onboarding setup and email templates](docs/onboarding.md).

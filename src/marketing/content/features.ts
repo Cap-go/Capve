@@ -1,7 +1,7 @@
 import type { Feature } from "./types";
 
 /** Number of MCP tools in worker/mcp/tools.ts (tests/marketing.test.ts keeps it in sync). */
-export const MCP_TOOL_COUNT = 103;
+export const MCP_TOOL_COUNT = 105;
 
 export const FEATURES: Feature[] = [
   {

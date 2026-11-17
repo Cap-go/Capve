@@ -13,6 +13,8 @@ Bento secrets and `EMAIL_FROM = "support@capve.app"`. Sender DKIM and bounce
 records were added to the capve.app zone; existing Cloudflare mail records were
 preserved. End-to-end test-message delivery still needs verification.
 
+Optional setup guidance has its own [getting-started onboarding flows and templates](onboarding.md). These do not replace trial or authentication emails.
+
 ## Sender and API
 
 1. Create/select the Capve site. Authenticate `capve.app` DNS in Bento and add `support@capve.app` as an approved author. Set a monitored reply-to address in Bento.

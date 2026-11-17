@@ -82,6 +82,7 @@ auth.post("/register", async (c) => {
     password?: string;
     name?: string;
     plan?: unknown;
+    emailTips?: unknown;
   } | null;
   const email = body?.email?.trim().toLowerCase() ?? "";
   const password = body?.password ?? "";
@@ -108,6 +109,8 @@ auth.post("/register", async (c) => {
     throw error;
   }
 
+  await c.env.DB.prepare("INSERT INTO account_onboarding (account_id, email_tips, consent_at, created_at) VALUES (?, ?, ?, ?)")
+    .bind(userId, Number(body?.emailTips === true), body?.emailTips === true ? now : null, now).run();
   await billingRow(c.env, userId);
   if (isPlanId(body?.plan)) await c.env.DB.prepare("UPDATE account_billing SET plan = ? WHERE account_id = ?")
     .bind(body.plan, userId).run();

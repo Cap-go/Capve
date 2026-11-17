@@ -43,7 +43,7 @@ const CAPVE = {
   source: "Public on GitHub under AGPL-3.0.",
   seats: "No per-seat price. Owner, admin and viewer roles.",
   retention: "Not limited by plan.",
-  ai: "MCP server with 103 tools on every plan.",
+  ai: "MCP server with 105 tools on every plan.",
   trial: "14 days, every feature, no card.",
   events: "Named events (`event=registration`, `event=ftd`), each its own conversion and report column.",
 };
@@ -136,7 +136,7 @@ export const COMPETITORS: Competitor[] = [
       {
         icon: "mcp",
         title: "Named events and AI access",
-        body: "Registrations and FTDs as named events with their own columns, and an MCP server with 103 tools.",
+        body: "Registrations and FTDs as named events with their own columns, and an MCP server with 105 tools.",
       },
     ],
     stayReasons: [
@@ -848,7 +848,7 @@ export const COMPETITORS: Competitor[] = [
     faqs: [
       {
         q: "Is Capve's MCP the same as ClickFlare's AI Copilot?",
-        a: "No. Copilot is an assistant inside ClickFlare. Capve's MCP server lets the assistant you already use, such as Claude or Cursor, call 103 Capve tools with your permissions.",
+        a: "No. Copilot is an assistant inside ClickFlare. Capve's MCP server lets the assistant you already use, such as Claude or Cursor, call 105 Capve tools with your permissions.",
       },
       {
         q: "How do I map ClickFlare's `ct` conversion types?",

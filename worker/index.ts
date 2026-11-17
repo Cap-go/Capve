@@ -1,3 +1,4 @@
+import { onboarding } from "./routes/onboarding";
 import { assistant } from "./routes/assistant";
 import platforms from "./routes/platforms";
 import { discovery, oauth } from "./routes/oauth";
@@ -98,6 +99,7 @@ app.use("/api/reports/*", requireReports);
 for (const prefix of ["/api/programs", "/api/campaigns"]) {
   for (const suffix of ["stats", "clicks", "conversions"]) app.use(`${prefix}/:id/${suffix}`, requireReports);
 }
+app.route("/api/onboarding", onboarding);
 // Reuse the MCP catalog with the browser's selected account, without minting a personal token.
 assistant.post("/mcp", (c) => handleMcpRequest(c.req.raw, ({ method, path, query, body }) => {
   const url = new URL(path, c.req.url);
