@@ -96,6 +96,7 @@ export type Program = {
   traffic_source_id: string | null;
   tags: string | null;
   status: string;
+  lenient_postbacks: number;
   created_at: number;
 };
 
@@ -198,6 +199,7 @@ export type ConversionLogRow = {
   status2: string | null;
   event: string | null;
   currency: string;
+  warning_flags: string | null;
   created_at: number;
   affiliate_name: string;
   affiliate_code: string;
@@ -515,6 +517,7 @@ export const api = {
       traffic_source_id?: string | null;
       group_id?: string | null;
       status?: "active" | "paused";
+      lenient_postbacks?: number;
     },
   ) =>
     request<{ program: Program }>(`/api/programs/${programId}`, {

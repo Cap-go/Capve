@@ -95,6 +95,7 @@ programs.post("/", async (c) => {
     traffic_source_id: trafficSourceId,
     tags: null,
     status: "active",
+    lenient_postbacks: 1,
     created_at: Date.now(),
   };
   const program = await withUniqueCampaignKey(name, async (campaign_key) => {
@@ -116,6 +117,7 @@ programs.patch("/:id", async (c) => {
     traffic_source_id?: string | null;
     group_id?: string | null;
     status?: string;
+    lenient_postbacks?: number;
   }>();
   const updates: {
     name?: string;
@@ -123,6 +125,7 @@ programs.patch("/:id", async (c) => {
     traffic_source_id?: string | null;
     group_id?: string | null;
     status?: string;
+    lenient_postbacks?: number;
   } = {};
 
   if (body.name !== undefined) {
@@ -164,6 +167,13 @@ programs.patch("/:id", async (c) => {
       return c.json({ error: "status must be active or paused" }, 400);
     }
     updates.status = body.status;
+  }
+
+  if (body.lenient_postbacks !== undefined) {
+    if (body.lenient_postbacks !== 0 && body.lenient_postbacks !== 1) {
+      return c.json({ error: "lenient_postbacks must be 0 or 1" }, 400);
+    }
+    updates.lenient_postbacks = body.lenient_postbacks;
   }
 
   const program = await updateProgram(c.env.DB, c.req.param("id"), session.account_id, updates);

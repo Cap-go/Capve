@@ -601,6 +601,7 @@ function OverviewPanel({
     destination: selectedProgram.destination_url ?? "",
     sourceId: selectedProgram.traffic_source_id ?? "",
     groupId: selectedProgram.group_id ?? "",
+    lenientPostbacks: selectedProgram.lenient_postbacks === 1,
   });
   const paused = selectedProgram.status === "paused";
 
@@ -614,6 +615,7 @@ function OverviewPanel({
           destination_url: draft.destination.trim() || null,
           traffic_source_id: draft.sourceId || null,
           group_id: draft.groupId || null,
+          lenient_postbacks: draft.lenientPostbacks ? 1 : 0,
         }),
       );
       onProgramSaved(program);
@@ -953,6 +955,20 @@ function OverviewPanel({
               onChange={(v) => setDraft({ ...draft, groupId: v })}
               options={[{ value: "", label: "None" }, ...groups.map((g) => ({ value: g.id, label: g.name }))]}
             />
+            <div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={draft.lenientPostbacks}
+                  onChange={(e) => setDraft({ ...draft, lenientPostbacks: e.target.checked })}
+                />
+                <span>Accept postbacks with unknown click IDs or unfilled placeholders</span>
+              </label>
+              <p className="mt-1 text-sm text-[var(--velo-muted)]">
+                When enabled, accepts conversions even if the click ID is not found or postback parameters contain unfilled macros like{" "}
+                <span className="mono">{"{payout}"}</span> or <span className="mono">{"[clickid]"}</span>, and flags them for monitoring.
+              </p>
+            </div>
             <div className="flex items-center gap-3">
               <button className="btn btn-secondary" disabled={save.saving} type="submit">
                 {save.saving ? "Saving…" : "Save settings"}
@@ -1165,13 +1181,14 @@ function ConversionsTable({ programId, onError }: { programId: string; onError: 
               <th>Event</th>
               <th>Status</th>
               <th>Revenue</th>
+              <th>Flags</th>
               <th>Time</th>
             </tr>
           </thead>
           <tbody>
             {log.rows.length === 0 && !log.loading && (
               <tr>
-                <td colSpan={7} className="text-[var(--velo-muted)]">
+                <td colSpan={8} className="text-[var(--velo-muted)]">
                   No conversions{log.from || log.to ? " in this period" : " yet"}.
                 </td>
               </tr>
@@ -1187,6 +1204,15 @@ function ConversionsTable({ programId, onError }: { programId: string; onError: 
                   {row.status2 ? ` / ${row.status2}` : ""}
                 </td>
                 <td>{formatMoney(row.amount_cents)}</td>
+                <td className="text-xs">
+                  {row.warning_flags ? (
+                    <span className="rounded bg-yellow-100 px-1.5 py-0.5 text-yellow-800" title={row.warning_flags.split(",").join(", ")}>
+                      {row.warning_flags.split(",").map((flag) => flag.replace("_", " ")).join(", ")}
+                    </span>
+                  ) : (
+                    "—"
+                  )}
+                </td>
                 <td className="whitespace-nowrap">{new Date(row.created_at).toLocaleString()}</td>
               </tr>
             ))}

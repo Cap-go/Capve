@@ -17,7 +17,7 @@ import {
 } from "../lib/metrics";
 
 const PROGRAM_COLUMNS =
-  "id, user_id, name, slug, api_key, destination_url, campaign_key, group_id, traffic_source_id, tags, status, created_at";
+  "id, user_id, name, slug, api_key, destination_url, campaign_key, group_id, traffic_source_id, tags, status, lenient_postbacks, created_at";
 
 const USER_COLUMNS =
   "id, email, name, email_verified, is_platform_admin, session_version, created_at";
@@ -168,6 +168,7 @@ export async function updateProgram(
     traffic_source_id?: string | null;
     tags?: string | null;
     status?: string;
+    lenient_postbacks?: number;
   },
 ): Promise<Program | null> {
   const existing = await getProgram(db, programId, userId);
@@ -186,12 +187,13 @@ export async function updateProgram(
         : updates.traffic_source_id,
     tags: updates.tags === undefined ? existing.tags : updates.tags,
     status: updates.status ?? existing.status,
+    lenient_postbacks: updates.lenient_postbacks ?? existing.lenient_postbacks,
   };
 
   await db
     .prepare(
       `UPDATE programs SET name = ?, destination_url = ?,
-       group_id = ?, traffic_source_id = ?, tags = ?, status = ?
+       group_id = ?, traffic_source_id = ?, tags = ?, status = ?, lenient_postbacks = ?
        WHERE id = ? AND user_id = ?`,
     )
     .bind(
@@ -201,6 +203,7 @@ export async function updateProgram(
       next.traffic_source_id,
       next.tags,
       next.status,
+      next.lenient_postbacks,
       programId,
       userId,
     )
@@ -440,6 +443,7 @@ export type ConversionInput = {
   status2?: string | null;
   event?: string | null;
   currency?: string;
+  warning_flags?: string | null;
   created_at: number;
 };
 
@@ -454,6 +458,7 @@ export type StoredConversion = {
   status2: string | null;
   event: string | null;
   currency: string;
+  warning_flags: string | null;
 };
 
 /**
@@ -476,14 +481,15 @@ export async function recordConversion(
     status2: conversion.status2 ?? null,
     event: conversion.event ?? null,
     currency: conversion.currency ?? "USD",
+    warning_flags: conversion.warning_flags ?? null,
   };
   try {
     await db
       .prepare(
         `INSERT INTO conversions (
           id, program_id, affiliate_id, click_id, order_id,
-          amount_cents, status, status2, event, currency, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          amount_cents, status, status2, event, currency, warning_flags, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         conversion.id,
@@ -496,6 +502,7 @@ export async function recordConversion(
         inserted.status2,
         inserted.event,
         inserted.currency,
+        inserted.warning_flags,
         conversion.created_at,
       )
       .run();
@@ -506,7 +513,7 @@ export async function recordConversion(
 
   const existing = await db
     .prepare(
-      `SELECT id, click_id, order_id, amount_cents, status, status2, event, currency
+      `SELECT id, click_id, order_id, amount_cents, status, status2, event, currency, warning_flags
        FROM conversions WHERE program_id = ? AND order_id = ?`,
     )
     .bind(conversion.program_id, conversion.order_id)
@@ -609,7 +616,7 @@ export async function listConversionLog(
     .prepare(
       `SELECT
         cv.id, cv.program_id, cv.affiliate_id, cv.click_id, cv.order_id,
-        cv.amount_cents, cv.status, cv.status2, cv.event, cv.currency, cv.created_at,
+        cv.amount_cents, cv.status, cv.status2, cv.event, cv.currency, cv.warning_flags, cv.created_at,
         a.name AS affiliate_name, a.code AS affiliate_code
       FROM conversions cv
       JOIN affiliates a ON a.id = cv.affiliate_id

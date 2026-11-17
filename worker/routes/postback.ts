@@ -18,7 +18,8 @@ function isUnreplacedMacro(raw: string): boolean {
     /^\{[^{}]+\}$/.test(trimmed) ||
     /^\$\{[^{}]+\}$/.test(trimmed) ||
     /^#[^#]+#$/.test(trimmed) ||
-    /^\$.+\$$/.test(trimmed)
+    /^\$.+\$$/.test(trimmed) ||
+    /^\[[^\]]+\]$/.test(trimmed)
   );
 }
 
@@ -38,15 +39,80 @@ postback.get("/", async (c) => {
     return c.text("cnv_id required", 400);
   }
 
-  const parsedPayout = parsePayout(c.req.query("payout"));
-  const payout = parsedPayout !== undefined ? parsedPayout : parsePayout(c.req.query("amount"));
-  if (payout === null) {
-    return c.text("invalid payout", 400);
-  }
-
   const resolved = await resolveAffiliateFromClick(c.env.DB, clickId);
+  
+  const warnings: string[] = [];
+  let click: { id: string; program_id: string; affiliate_id: string } | null = null;
+  let program: { id: string; user_id: string; lenient_postbacks: number; traffic_source_id?: string | null };
+  let affiliate: { id: string; code: string; program_id: string };
+  let lenientMode = false;
+
   if (!resolved) {
-    return c.text("click not found", 404);
+    // Unknown click ID - check for campaign_id or affiliate_code parameter
+    const programId = c.req.query("campaign_id")?.trim() || c.req.query("program_id")?.trim();
+    const affiliateCode = c.req.query("affiliate_code")?.trim();
+    
+    if (!programId && !affiliateCode) {
+      return c.text("click not found", 404);
+    }
+
+    let affiliateResult: {
+      id: string;
+      code: string;
+      program_id: string;
+      p_id: string;
+      user_id: string;
+      lenient_postbacks: number;
+      traffic_source_id: string | null;
+    } | null;
+
+    if (programId) {
+      // Use campaign_id to find first affiliate of that program
+      affiliateResult = await c.env.DB
+        .prepare(`SELECT a.id, a.code, a.program_id,
+                         p.id AS p_id, p.user_id, p.lenient_postbacks, p.traffic_source_id
+                  FROM affiliates a
+                  JOIN programs p ON p.id = a.program_id
+                  WHERE p.id = ?
+                  ORDER BY a.created_at ASC
+                  LIMIT 1`)
+        .bind(programId)
+        .first();
+    } else {
+      // Use affiliate_code to identify both program and affiliate
+      affiliateResult = await c.env.DB
+        .prepare(`SELECT a.id, a.code, a.program_id,
+                         p.id AS p_id, p.user_id, p.lenient_postbacks, p.traffic_source_id
+                  FROM affiliates a
+                  JOIN programs p ON p.id = a.program_id
+                  WHERE a.code = ?
+                  LIMIT 1`)
+        .bind(affiliateCode)
+        .first();
+    }
+
+    if (!affiliateResult || affiliateResult.lenient_postbacks !== 1) {
+      return c.text("click not found", 404);
+    }
+
+    affiliate = {
+      id: affiliateResult.id,
+      code: affiliateResult.code,
+      program_id: affiliateResult.program_id,
+    };
+    program = {
+      id: affiliateResult.p_id,
+      user_id: affiliateResult.user_id,
+      lenient_postbacks: affiliateResult.lenient_postbacks,
+      traffic_source_id: affiliateResult.traffic_source_id,
+    };
+    lenientMode = true;
+    warnings.push("unknown_click_id");
+  } else {
+    click = resolved.click;
+    program = resolved.program;
+    affiliate = resolved.affiliate;
+    lenientMode = program.lenient_postbacks === 1;
   }
 
   const event = normalizeEvent(c.req.query("event") ?? c.req.query("cnv_event"));
@@ -54,7 +120,23 @@ postback.get("/", async (c) => {
     return c.text("invalid event", 400);
   }
 
-  const { click, program, affiliate } = resolved;
+  const payoutRaw = c.req.query("payout");
+  const statusRaw = c.req.query("cnv_status");
+  
+  const parsedPayout = parsePayout(payoutRaw);
+  const payout = parsedPayout !== undefined ? parsedPayout : parsePayout(c.req.query("amount"));
+  
+  if (payout === null) {
+    return c.text("invalid payout", 400);
+  }
+  
+  if (lenientMode) {
+    if ((payoutRaw && isUnreplacedMacro(payoutRaw)) || (statusRaw && isUnreplacedMacro(statusRaw))) {
+      if (!warnings.includes("unfilled_placeholders")) {
+        warnings.push("unfilled_placeholders");
+      }
+    }
+  }
 
   // Click ids are visible to visitors, so the account's postback key gates trust:
   // enforced -> reject without it; otherwise keyless postbacks are capped to the offer payout.
@@ -63,7 +145,6 @@ postback.get("/", async (c) => {
   if (keySettings?.postback_key_required === 1 && !keyValid) {
     return c.text("invalid postback key", 403);
   }
-  const statusRaw = c.req.query("cnv_status")?.trim();
   const explicitStatus =
     statusRaw && !isUnreplacedMacro(statusRaw) ? statusRaw : undefined;
   const status2 = c.req.query("cnv_status2")?.trim() || null;
@@ -75,29 +156,29 @@ postback.get("/", async (c) => {
     c.req.query("order_id")?.trim() ||
     c.req.query("tx_id")?.trim() ||
     c.req.query("external_event_id")?.trim() ||
-    (event ? `${click.id}:${event}` : click.id);
+    (click ? (event ? `${click.id}:${event}` : click.id) : `${clickId}:${event ?? "unknown"}`);
   const disableS2s = c.req.query("disable_postback") === "1";
 
   // No payout on a plain postback → fall back to the clicked offer's payout.
   // Events (registration, ftd, ...) only carry the payout they send.
-  const needsOffer = (payout === undefined && !event) || (payout !== undefined && !keyValid);
-  const tracked = needsOffer ? await getTrackedClick(c.env.DB, click.id) : null;
+  const needsOffer = (payout === undefined && !event) || (payout !== undefined && payout !== null && !keyValid);
+  const tracked = click && needsOffer ? await getTrackedClick(c.env.DB, click.id) : null;
   const offer = tracked?.offer_id
     ? await getOfferForUser(c.env.DB, tracked.offer_id, program.user_id)
     : null;
-  let amount = payout;
-  if (amount === undefined && event) {
+  let amount: number;
+  if (payout !== null && payout !== undefined) {
+    amount = !keyValid && offer?.payout_cents ? Math.min(payout, offer.payout_cents / 100) : payout;
+  } else if (event) {
     amount = 0;
-  } else if (amount === undefined) {
+  } else {
     amount = (offer?.payout_cents ?? 0) / 100;
-  } else if (!keyValid && offer?.payout_cents) {
-    amount = Math.min(amount, offer.payout_cents / 100);
   }
 
   const result = await createConversion(c.env.DB, program, affiliate, {
     program_id: program.id,
     affiliate_id: affiliate.id,
-    click_id: click.id,
+    click_id: click?.id ?? null,
     order_id: orderId,
     amount,
     status: explicitStatus ?? "lead",
@@ -105,6 +186,7 @@ postback.get("/", async (c) => {
     event,
     currency,
     disable_s2s: disableS2s,
+    warning_flags: warnings.length > 0 ? warnings.join(",") : null,
     upsert: { status: explicitStatus !== undefined, amount: payout !== undefined },
   }, backgroundTasks(c));
 

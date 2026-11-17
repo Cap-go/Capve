@@ -27,6 +27,7 @@ export type CreateConversionParams = {
   event?: string | null;
   currency?: string;
   disable_s2s?: boolean;
+  warning_flags?: string | null;
   /**
    * Binom-style status upsert: a repeat for the same click + order id updates
    * the stored conversion. Only fields flagged here overwrite stored values.
@@ -144,6 +145,7 @@ export async function createConversion(
     status2: string | null;
     event: string | null;
     currency: string;
+    warning_flags: string | null;
   };
 }> {
   const amountCents = Math.round(params.amount * 100);
@@ -160,6 +162,7 @@ export async function createConversion(
       status2: params.status2 ?? null,
       event: params.event ?? null,
       currency: params.currency ?? "USD",
+      warning_flags: params.warning_flags ?? null,
       created_at: Date.now(),
     } satisfies ConversionInput,
     params.upsert
@@ -221,6 +224,7 @@ export async function createConversion(
       status2: stored.status2,
       event: stored.event,
       currency: stored.currency,
+      warning_flags: stored.warning_flags,
     },
   };
 }

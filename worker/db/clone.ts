@@ -47,6 +47,7 @@ export async function cloneProgram(
     convert_secret: secret,
     group_id: source.group_id,
     traffic_source_id: source.traffic_source_id,
+    lenient_postbacks: source.lenient_postbacks,
     tags: source.tags,
     status: "paused",
     created_at: Date.now(),
