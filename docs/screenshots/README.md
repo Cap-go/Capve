@@ -15,3 +15,11 @@ Captured from the local app for the follow-up imprint PR. Company address and pu
 
 - `imprint-desktop.png`: full imprint at a 1440px viewport width.
 - `imprint-mobile.png`: full imprint at a 390px viewport width; no horizontal overflow.
+
+## AI client cards on AI / MCP
+
+Captured with headless Playwright (Chromium) against the local preview build, with API responses mocked for an example account (`demo@example.com`). "Before" is `main` at c3f4c2d, "after" is the PR branch.
+
+- `mcp-clients/before-desktop.png`, `mcp-clients/before-mobile.png`: the old page, a plain URL and two token snippets.
+- `mcp-clients/after-desktop.png`, `mcp-clients/after-mobile.png`: full page with one card per AI client (1440px and 390px viewports).
+- `mcp-clients/after-desktop-cards.png`, `mcp-clients/after-mobile-top.png`: close-ups of the client cards.
