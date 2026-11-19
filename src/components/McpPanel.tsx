@@ -9,6 +9,7 @@ import {
   mcpUrl,
 } from "../lib/mcp";
 import { CodeBlock } from "./CodeBlock";
+import { McpClients } from "./McpClients";
 import { ErrorBox, Field, SecretBox, confirmDelete } from "./ui";
 import { Link } from "react-router-dom";
 
@@ -72,13 +73,18 @@ export function McpPanel() {
       <div className="card p-5">
         <h2 className="font-semibold">Use Capve from your AI assistant</h2>
         <p className="mt-1 max-w-2xl text-sm text-[var(--velo-muted)]">
-          Capve is an MCP server. Connect Claude Code, Cursor, VS Code or any MCP client and manage
-          campaigns, paths, offers and reports by chat.{" "}
+          Capve is an MCP server. Pick your assistant below: one-click install where it is supported,
+          otherwise copy the config. Every client signs in with OAuth, so there is no token to paste.{" "}
           <Link className="underline" to="/docs/mcp">
             Docs
           </Link>
         </p>
-        <p className="mono mt-4 break-all text-sm">{mcpUrl(base)}</p>
+        <div className="mt-4 max-w-2xl">
+          <CodeBlock label="MCP server URL">{mcpUrl(base)}</CodeBlock>
+        </div>
+        <div className="mt-5">
+          <McpClients base={base} />
+        </div>
       </div>
 
       <div className="card p-5">

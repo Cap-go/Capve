@@ -8,7 +8,7 @@ Open-source, self-hosted affiliate tracking for indie and SaaS founders. Deploy 
 
 Capve lets you run affiliate programs on infrastructure you control: unique tracking links, click-through cookies, and server-side conversion attribution.
 
-Capve is also an **MCP server**: connect Claude Code, Cursor, VS Code or any MCP client and manage campaigns, paths, offers, reports and team by chat. See [MCP](#mcp).
+Capve is also an **MCP server**: connect Claude, ChatGPT, Cursor, VS Code, Claude Code, Codex, Gemini CLI, Grok or any MCP client (one-click install where supported) and manage campaigns, paths, offers, reports and team by chat. See [MCP](#mcp).
 
 ## Stack
 
@@ -35,6 +35,24 @@ Each program stores a **destination URL**. Tracking links redirect there and app
 ## MCP
 
 **OAuth:** Add `https://capve.app/mcp` to your MCP client, choose OAuth, sign in and approve the app. No API token is needed. Manage connected apps in **API & MCP**. OAuth connections cover your personal account and expire after 30 days; team accounts and platform administration are excluded. See [OAuth setup and security](docs/mcp-oauth.md).
+
+**Connect your AI client:** the dashboard's **AI / MCP** page (`/app/mcp`) has a card for each main AI client with its logo, 2 to 4 numbered steps, copy buttons for the URL and config, and a one-click install link where the client supports one. All of them sign in with OAuth, so the links carry only the server URL.
+
+| Client | One-click install | Setup |
+| --- | --- | --- |
+| Claude (claude.ai, Desktop, mobile) | [Add to Claude](https://claude.ai/customize/connectors?modal=add-custom-connector&connectorName=Capve&connectorUrl=https%3A%2F%2Fcapve.app%2Fmcp) | Custom connector |
+| Claude Code | | `claude mcp add --transport http capve https://capve.app/mcp`, then `/mcp` to sign in |
+| ChatGPT | | Developer mode, Create app, paste the URL, choose OAuth |
+| Cursor | [Add to Cursor](https://cursor.com/install-mcp?name=capve&config=eyJ1cmwiOiJodHRwczovL2NhcHZlLmFwcC9tY3AifQ%3D%3D) | `~/.cursor/mcp.json` |
+| VS Code and GitHub Copilot | [Add to VS Code](https://vscode.dev/redirect?url=vscode%3Amcp%2Finstall%3F%257B%2522name%2522%253A%2522capve%2522%252C%2522type%2522%253A%2522http%2522%252C%2522url%2522%253A%2522https%253A%252F%252Fcapve.app%252Fmcp%2522%257D) | `code --add-mcp` |
+| Windsurf | | `serverUrl` in `mcp_config.json` |
+| Gemini CLI | | `gemini mcp add --transport http capve https://capve.app/mcp` |
+| Codex | | `codex mcp add capve --url https://capve.app/mcp`, then `codex mcp login capve` |
+| Zed | | `context_servers` in `settings.json` |
+| LM Studio | `lmstudio://` link in the dashboard | `mcp.json` |
+| Grok | | grok.com/connectors, New Connector, Custom |
+
+Self-hosted installs get the same cards with their own URL. Link builders live in `src/lib/mcp-clients.ts`.
 
 **Manual token setup:**
 

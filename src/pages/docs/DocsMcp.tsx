@@ -8,6 +8,7 @@ import {
   mcpRemoteConfig,
   mcpUrl,
 } from "../../lib/mcp";
+import { mcpClients } from "../../lib/mcp-clients";
 
 const TOOL_GROUPS: Array<[string, string[]]> = [
   ["Getting started", ["get_onboarding", "update_onboarding"]],
@@ -156,6 +157,31 @@ export function DocsMcp() {
       <h2>Connect with OAuth</h2>
       <p>Add the server URL above to your MCP client and select OAuth. Capve supports OAuth authorization code flow with PKCE (S256), automatic discovery and dynamic client registration. Sign in with your existing Capve account and review the app before allowing access.</p>
       <p>OAuth grants access to your personal account for up to 30 days. Team accounts and platform administration are excluded. Disconnect apps from <Link to="/app/mcp">API &amp; MCP</Link>; signing out everywhere or resetting your password also revokes their access.</p>
+      <h2>Set up your AI client</h2>
+      <p>
+        The <Link to="/app/mcp">AI / MCP</Link> page in the dashboard has a card per client with its
+        logo, copy buttons and one-click install where the client supports it. The same steps:
+      </p>
+      {mcpClients(base).map((client) => (
+        <section key={client.id}>
+          <h3>{client.name}</h3>
+          <ol>
+            {client.steps.map((step) => <li key={step}>{step}</li>)}
+          </ol>
+          {client.links.length > 0 ? (
+            <p>
+              {client.links.map((link, index) => (
+                <span key={link.href}>
+                  {index > 0 ? " or " : null}
+                  <a href={link.href} {...(link.href.startsWith("https://") ? { target: "_blank", rel: "noreferrer" } : {})}>{link.label}</a>
+                </span>
+              ))}
+            </p>
+          ) : null}
+          {client.snippets.map((snippet) => <CodeBlock key={snippet.label} label={snippet.label}>{snippet.value}</CodeBlock>)}
+        </section>
+      ))}
+
       <h2>API tokens (manual setup)</h2>
       <p>
         In the dashboard open <Link to="/app/mcp">AI / MCP</Link> and create a token. It
