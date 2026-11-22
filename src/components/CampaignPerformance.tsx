@@ -261,8 +261,8 @@ function DualAxisChart({
           </g>
         ) : null,
       )}
-      <path d={smoothPath(leftPts, isMoney(leftKey) ? -Infinity : pad.t + plotH)} fill="none" stroke={LEFT_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
-      <path d={smoothPath(rightPts, isMoney(rightKey) ? -Infinity : pad.t + plotH)} fill="none" stroke={RIGHT_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
+      <path d={smoothPath(leftPts, pad.t + plotH)} fill="none" stroke={LEFT_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
+      <path d={smoothPath(rightPts, pad.t + plotH)} fill="none" stroke={RIGHT_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
       <path d={smoothPath(ftdPts, pad.t + plotH)} fill="none" stroke={FTD_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
       {points.map((point, index) => (
         <g key={`pt-${point.date}`}>
