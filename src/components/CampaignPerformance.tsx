@@ -152,7 +152,7 @@ function axisLabel(value: number, money: boolean, currency: string): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function smoothPath(points: Array<[number, number]>, minY = -Infinity): string {
+function smoothPath(points: Array<[number, number]>, maxY = Infinity): string {
   if (points.length === 0) return "";
   if (points.length === 1) return "";
   let d = `M ${points[0][0].toFixed(2)} ${points[0][1].toFixed(2)}`;
@@ -165,9 +165,9 @@ function smoothPath(points: Array<[number, number]>, minY = -Infinity): string {
     let c1y = p1[1] + (p2[1] - p0[1]) / 6;
     let c2x = p2[0] - (p3[0] - p1[0]) / 6;
     let c2y = p2[1] - (p3[1] - p1[1]) / 6;
-    // Clamp control points to prevent curves from dipping below minY (prevents negative counts)
-    c1y = Math.max(c1y, minY);
-    c2y = Math.max(c2y, minY);
+    // Clamp control points to prevent curves from exceeding maxY (the visual bottom, prevents negative values)
+    c1y = Math.min(c1y, maxY);
+    c2y = Math.min(c2y, maxY);
     d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
   }
   return d;
