@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@cfworker/json-schema": "^4.1.6",
+    "better-sqlite3": "^13.2.0",
     "hono": "^4.9.6",
     "jose": "^6.1.0",
     "react": "^19.1.1",
