@@ -265,4 +265,56 @@ describe("phase 4 reporting", () => {
     expect(convDay!.leads).toBe(1);
     expect(convDay!.events?.registration).toBe(1);
   });
+
+  it("includes per-event breakdown in trends for chart visualization", async () => {
+    const headers = authHeaders;
+    const programRes = await SELF.fetch("http://localhost/api/programs", {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name: "FTD Chart Test", destination_url: MERCHANT }),
+    });
+    const { program, convert_secret } = await json<{ program: { id: string }; convert_secret: string }>(programRes);
+    const affiliateRes = await SELF.fetch(`http://localhost/api/programs/${program.id}/affiliates`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ name: "FTD Partner" }),
+    });
+    const { affiliate } = await json<{ affiliate: { code: string } }>(affiliateRes);
+
+    await SELF.fetch(`http://localhost/r/${affiliate.code}`, { redirect: "manual", headers: BROWSER_HEADERS });
+    await SELF.fetch(`http://localhost/r/${affiliate.code}`, { redirect: "manual", headers: BROWSER_HEADERS });
+
+    await SELF.fetch("http://localhost/api/v1/convert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Program-Secret": convert_secret },
+      body: JSON.stringify({
+        order_id: `reg_${Date.now()}`,
+        amount: 0,
+        affiliate_code: affiliate.code,
+        event: "registration",
+      }),
+    });
+
+    await SELF.fetch("http://localhost/api/v1/convert", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Program-Secret": convert_secret },
+      body: JSON.stringify({
+        order_id: `ftd_${Date.now()}`,
+        amount: 100,
+        affiliate_code: affiliate.code,
+        event: "ftd",
+      }),
+    });
+
+    const trendsRes = await SELF.fetch(`http://localhost/api/reports/campaigns/${program.id}/trends`, { headers });
+    expect(trendsRes.status).toBe(200);
+    const { trends } = await json<{ trends: Array<{ date: string; clicks: number; leads: number; events: Record<string, number> }> }>(trendsRes);
+
+    const today = trends.find((t) => t.leads > 0);
+    expect(today).toBeTruthy();
+    expect(today!.clicks).toBe(2);
+    expect(today!.leads).toBe(2);
+    expect(today!.events.registration).toBe(1);
+    expect(today!.events.ftd).toBe(1);
+  });
 });
