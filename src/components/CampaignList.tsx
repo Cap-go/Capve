@@ -31,7 +31,7 @@ type ColumnConfig = {
 const ALL_COLUMNS: ColumnConfig[] = [
   { key: "status", label: "Status", defaultVisible: true },
   { key: "campaign", label: "Campaign", defaultVisible: true },
-  { key: "id", label: "ID", defaultVisible: true },
+  { key: "id", label: "ID", defaultVisible: false },
   { key: "source", label: "Source", defaultVisible: true },
   { key: "created", label: "Created", defaultVisible: true },
   { key: "clicks", label: "Clicks", className: "num", defaultVisible: true },
