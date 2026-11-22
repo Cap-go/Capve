@@ -23,13 +23,11 @@ const PRESETS: Array<{ value: Preset; label: string }> = [
 ];
 
 const SERIES: Array<{ id: string; label: string; left: SeriesKey; right: SeriesKey }> = [
-  { id: "registration-ftd", label: "Registrations – FTD", left: "registration", right: "ftd" },
   { id: "cost-leads", label: "Cost – Conversions", left: "cost", right: "leads" },
   { id: "clicks-leads", label: "Clicks – Conversions", left: "clicks", right: "leads" },
   { id: "revenue-cost", label: "Revenue – Cost", left: "revenue", right: "cost" },
   { id: "clicks-cost", label: "Clicks – Cost", left: "clicks", right: "cost" },
   { id: "cost-registration", label: "Cost – Registrations", left: "cost", right: "registration" },
-  { id: "cost-ftd", label: "Cost – FTD", left: "cost", right: "ftd" },
 ];
 
 const DIM_ORDER = [
@@ -57,6 +55,7 @@ const DIM_ORDER = [
 const DAY_MS = 24 * 60 * 60 * 1000;
 const LEFT_COLOR = "#e8872f";
 const RIGHT_COLOR = "#3d7ec9";
+const FTD_COLOR = "#2ecc71";
 
 function startOfDay(date: Date): number {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate()).getTime();
@@ -198,15 +197,18 @@ function DualAxisChart({
   const plotH = height - pad.t - pad.b;
   const leftValues = points.map((point) => seriesValue(point, leftKey));
   const rightValues = points.map((point) => seriesValue(point, rightKey));
+  const ftdValues = points.map((point) => seriesValue(point, "ftd"));
   const leftMax = Math.max(...leftValues, 0);
   const rightMax = Math.max(...rightValues, 0);
+  const ftdMax = Math.max(...ftdValues, 0);
   const leftScale = leftMax === 0 ? 1 : leftMax * 1.08;
-  const rightScale = rightMax === 0 ? 1 : rightMax * 1.08;
+  const rightScale = Math.max(rightMax, ftdMax) === 0 ? 1 : Math.max(rightMax, ftdMax) * 1.08;
   const xAt = (index: number) =>
     points.length === 1 ? pad.l + plotW / 2 : pad.l + (index / (points.length - 1)) * plotW;
   const yAt = (value: number, scale: number) => pad.t + plotH - (value / scale) * plotH;
   const leftPts = leftValues.map((value, index) => [xAt(index), yAt(value, leftScale)] as [number, number]);
   const rightPts = rightValues.map((value, index) => [xAt(index), yAt(value, rightScale)] as [number, number]);
+  const ftdPts = ftdValues.map((value, index) => [xAt(index), yAt(value, rightScale)] as [number, number]);
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   const labelEvery = Math.max(1, Math.ceil(points.length / 8));
 
@@ -215,7 +217,7 @@ function DualAxisChart({
       className="perf-chart"
       viewBox={`0 0 ${width} ${height}`}
       role="img"
-      aria-label={`${seriesName(leftKey)} and ${seriesName(rightKey)} by day`}
+      aria-label={`${seriesName(leftKey)}, ${seriesName(rightKey)}, and FTD by day`}
     >
       {ticks.map((tick) => {
         const y = pad.t + plotH - tick * plotH;
@@ -249,6 +251,7 @@ function DualAxisChart({
       )}
       <path d={smoothPath(leftPts)} fill="none" stroke={LEFT_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
       <path d={smoothPath(rightPts)} fill="none" stroke={RIGHT_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
+      <path d={smoothPath(ftdPts)} fill="none" stroke={FTD_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
       {points.map((point, index) => (
         <g key={`pt-${point.date}`}>
           <circle
@@ -269,27 +272,39 @@ function DualAxisChart({
             onMouseEnter={() => setHoveredIndex(index)}
             onMouseLeave={() => setHoveredIndex(null)}
           />
+          <circle
+            cx={ftdPts[index][0]}
+            cy={ftdPts[index][1]}
+            r={hoveredIndex === index ? "5" : "3"}
+            fill={FTD_COLOR}
+            style={{ cursor: "pointer" }}
+            onMouseEnter={() => setHoveredIndex(index)}
+            onMouseLeave={() => setHoveredIndex(null)}
+          />
         </g>
       ))}
       {hoveredIndex !== null && (() => {
         const point = points[hoveredIndex];
         const left = seriesValue(point, leftKey);
         const right = seriesValue(point, rightKey);
+        const ftd = seriesValue(point, "ftd");
         const dateStr = formatDay(new Date(`${point.date}T00:00:00`).getTime(), true);
         const leftLabel = `${seriesName(leftKey)}: ${isMoney(leftKey) ? formatMoney(left, currency) : left}`;
         const rightLabel = `${seriesName(rightKey)}: ${isMoney(rightKey) ? formatMoney(right, currency) : right}`;
+        const ftdLabel = `FTD: ${ftd}`;
         
-        const tooltipLines = [dateStr, leftLabel, rightLabel];
+        const tooltipLines = [dateStr, leftLabel, rightLabel, ftdLabel];
         const lineHeight = 18;
         const padding = 10;
         const tooltipWidth = Math.max(
           dateStr.length * 7,
           leftLabel.length * 6.5,
           rightLabel.length * 6.5,
+          ftdLabel.length * 6.5,
         ) + padding * 2;
         const tooltipHeight = tooltipLines.length * lineHeight + padding * 2;
         
-        const dataPointY = Math.min(leftPts[hoveredIndex][1], rightPts[hoveredIndex][1]);
+        const dataPointY = Math.min(leftPts[hoveredIndex][1], rightPts[hoveredIndex][1], ftdPts[hoveredIndex][1]);
         const dataPointX = leftPts[hoveredIndex][0];
         
         let tooltipX = dataPointX + 12;
@@ -304,7 +319,7 @@ function DualAxisChart({
         }
         
         if (tooltipY - tooltipHeight < pad.t) {
-          tooltipY = Math.max(leftPts[hoveredIndex][1], rightPts[hoveredIndex][1]) + 18;
+          tooltipY = Math.max(leftPts[hoveredIndex][1], rightPts[hoveredIndex][1], ftdPts[hoveredIndex][1]) + 18;
         }
         
         if (tooltipY > height - pad.b) {
@@ -348,6 +363,14 @@ function DualAxisChart({
               fill={RIGHT_COLOR}
             >
               {rightLabel}
+            </text>
+            <text
+              x={tooltipX + padding}
+              y={tooltipY - tooltipHeight + padding + 14 + lineHeight * 3}
+              fontSize="11"
+              fill={FTD_COLOR}
+            >
+              {ftdLabel}
             </text>
           </g>
         );
@@ -485,6 +508,8 @@ export function CampaignPerformance({
                 {seriesName(series.left)}
                 <i style={{ background: RIGHT_COLOR }} />
                 {seriesName(series.right)}
+                <i style={{ background: FTD_COLOR }} />
+                FTD
               </span>
             </div>
             <div className="perf-range">
