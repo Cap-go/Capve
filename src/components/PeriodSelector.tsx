@@ -4,8 +4,8 @@ import { DateRangePicker } from "./DateRangePicker";
 export type Preset = "today" | "yesterday" | "7d" | "14d" | "30d" | "this_month" | "last_month" | "custom" | "all_time";
 
 export type PeriodRange = {
-  from?: number;
-  to?: number;
+  from?: number | string;
+  to?: number | string;
 };
 
 const PRESETS: Array<{ value: Preset; label: string }> = [
@@ -35,36 +35,58 @@ function isoLocal(ms: number): string {
 
 export function rangeFor(preset: Preset, custom: { from: string; to: string }, now = new Date()): PeriodRange {
   if (preset === "all_time") return {};
+  
   if (preset === "custom") {
+    // Validate custom dates
+    if (!custom.from || !custom.to) return {};
+    const fromDate = parseIsoDate(custom.from);
+    const toDate = parseIsoDate(custom.to);
+    if (!fromDate || !toDate || fromDate > toDate) return {};
+    
     return {
-      from: custom.from ? new Date(`${custom.from}T00:00:00`).getTime() : undefined,
-      to: custom.to ? new Date(`${custom.to}T23:59:59.999`).getTime() : undefined,
+      from: custom.from,
+      to: custom.to,
     };
   }
 
-  const today = startOfDay(now);
-
+  // For all presets, return YYYY-MM-DD strings so the backend can apply account timezone
+  const todayStr = isoLocal(startOfDay(now));
+  
   if (preset === "today") {
-    return { from: today, to: now.getTime() };
+    return { from: todayStr, to: todayStr };
   }
 
   if (preset === "yesterday") {
-    const yesterdayStart = today - DAY_MS;
-    return { from: yesterdayStart, to: yesterdayStart + DAY_MS - 1 };
+    const yesterday = new Date(now);
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = isoLocal(startOfDay(yesterday));
+    return { from: yesterdayStr, to: yesterdayStr };
   }
 
   if (preset === "this_month") {
-    return { from: new Date(now.getFullYear(), now.getMonth(), 1).getTime(), to: now.getTime() };
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    return { from: isoLocal(monthStart.getTime()), to: todayStr };
   }
 
   if (preset === "last_month") {
     const lastMonthStart = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
-    return { from: lastMonthStart.getTime(), to: lastMonthEnd.getTime() };
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0);
+    return { from: isoLocal(lastMonthStart.getTime()), to: isoLocal(lastMonthEnd.getTime()) };
   }
 
+  // Last N days: N days ago (inclusive) through today
   const days = preset === "7d" ? 7 : preset === "30d" ? 30 : 14;
-  return { from: today - (days - 1) * DAY_MS, to: now.getTime() };
+  const startDate = new Date(now);
+  startDate.setDate(startDate.getDate() - (days - 1));
+  return { from: isoLocal(startOfDay(startDate)), to: todayStr };
+}
+
+function parseIsoDate(str: string): Date | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(str);
+  if (!match) return null;
+  const date = new Date(Number(match[1]), Number(match[2]) - 1, Number(match[3]));
+  if (isNaN(date.getTime())) return null;
+  return date;
 }
 
 function formatDay(ms: number, withYear = false): string {
@@ -78,8 +100,11 @@ function formatDay(ms: number, withYear = false): string {
 export function rangeLabel(range: PeriodRange): string {
   if (range.from == null || range.to == null) return "All time";
   
-  const fromDate = formatDay(range.from, true);
-  const toDate = formatDay(range.to, true);
+  const fromMs = typeof range.from === "string" ? new Date(`${range.from}T00:00:00`).getTime() : range.from;
+  const toMs = typeof range.to === "string" ? new Date(`${range.to}T23:59:59`).getTime() : range.to;
+  
+  const fromDate = formatDay(fromMs, true);
+  const toDate = formatDay(toMs, true);
   
   if (fromDate === toDate) return fromDate;
   return `${fromDate} – ${toDate}`;

@@ -179,7 +179,7 @@ function DashboardContent({ page }: { page: DashboardView }) {
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
   const [reportRows, setReportRows] = useState<CampaignReportRow[] | null>(null);
-  const [reportPeriod, setReportPeriod] = useState<{ from?: number; to?: number }>({});
+  const [reportPeriod, setReportPeriod] = useState<{ from?: number | string; to?: number | string }>({});
 
   useEffect(() => {
     if (!user) return;
