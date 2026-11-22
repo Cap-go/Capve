@@ -152,7 +152,7 @@ function axisLabel(value: number, money: boolean, currency: string): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
 }
 
-function smoothPath(points: Array<[number, number]>): string {
+function smoothPath(points: Array<[number, number]>, minY = -Infinity): string {
   if (points.length === 0) return "";
   if (points.length === 1) return "";
   let d = `M ${points[0][0].toFixed(2)} ${points[0][1].toFixed(2)}`;
@@ -161,10 +161,13 @@ function smoothPath(points: Array<[number, number]>): string {
     const p1 = points[i];
     const p2 = points[i + 1];
     const p3 = points[i + 2] ?? p2;
-    const c1x = p1[0] + (p2[0] - p0[0]) / 6;
-    const c1y = p1[1] + (p2[1] - p0[1]) / 6;
-    const c2x = p2[0] - (p3[0] - p1[0]) / 6;
-    const c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    let c1x = p1[0] + (p2[0] - p0[0]) / 6;
+    let c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    let c2x = p2[0] - (p3[0] - p1[0]) / 6;
+    let c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    // Clamp control points to prevent curves from dipping below minY (prevents negative counts)
+    c1y = Math.max(c1y, minY);
+    c2y = Math.max(c2y, minY);
     d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)}, ${c2x.toFixed(2)} ${c2y.toFixed(2)}, ${p2[0].toFixed(2)} ${p2[1].toFixed(2)}`;
   }
   return d;
@@ -258,9 +261,9 @@ function DualAxisChart({
           </g>
         ) : null,
       )}
-      <path d={smoothPath(leftPts)} fill="none" stroke={LEFT_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
-      <path d={smoothPath(rightPts)} fill="none" stroke={RIGHT_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
-      <path d={smoothPath(ftdPts)} fill="none" stroke={FTD_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
+      <path d={smoothPath(leftPts, isMoney(leftKey) ? -Infinity : pad.t + plotH)} fill="none" stroke={LEFT_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
+      <path d={smoothPath(rightPts, isMoney(rightKey) ? -Infinity : pad.t + plotH)} fill="none" stroke={RIGHT_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
+      <path d={smoothPath(ftdPts, pad.t + plotH)} fill="none" stroke={FTD_COLOR} strokeWidth="2.5" strokeLinejoin="round" />
       {points.map((point, index) => (
         <g key={`pt-${point.date}`}>
           <circle
