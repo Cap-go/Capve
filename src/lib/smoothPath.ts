@@ -1,6 +1,6 @@
 /**
  * Monotone cubic interpolation (Fritsch-Carlson) - never overshoots local min/max.
- * Based on d3.curveMonotoneX algorithm.
+ * Tangents use the Fritsch-Butland weighted harmonic mean, bounded by 3 * min(slope), so segments do not overshoot.
  */
 export function smoothPath(points: Array<[number, number]>): string {
   if (points.length === 0) return "";
