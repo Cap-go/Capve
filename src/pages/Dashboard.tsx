@@ -179,6 +179,7 @@ function DashboardContent({ page }: { page: DashboardView }) {
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
   const [reportRows, setReportRows] = useState<CampaignReportRow[] | null>(null);
+  const [reportPeriod, setReportPeriod] = useState<{ from?: number | string; to?: number | string }>({});
 
   useEffect(() => {
     if (!user) return;
@@ -226,7 +227,7 @@ function DashboardContent({ page }: { page: DashboardView }) {
     if (!user || inCampaign || page !== "campaigns") return;
     let cancelled = false;
     api
-      .campaignReports()
+      .campaignReports({ from: reportPeriod.from, to: reportPeriod.to })
       .then(({ campaigns }) => {
         if (!cancelled) setReportRows(campaigns);
       })
@@ -236,7 +237,7 @@ function DashboardContent({ page }: { page: DashboardView }) {
     return () => {
       cancelled = true;
     };
-  }, [user, inCampaign, page, programs, reportsLocked]);
+  }, [user, inCampaign, page, programs, reportsLocked, reportPeriod]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -477,6 +478,7 @@ function DashboardContent({ page }: { page: DashboardView }) {
           canWrite={canWrite}
           creating={creating}
           onToggleCreate={() => setCreating((open) => !open)}
+          onPeriodChange={setReportPeriod}
           createForm={
             canWrite && programsLoaded && (creating || programs.length === 0) ? (
               <form id="new-campaign" className="campaign-create space-y-3" onSubmit={createProgram}>

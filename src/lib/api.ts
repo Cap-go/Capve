@@ -357,8 +357,8 @@ export type GroupedReportRow = {
 } & CurrencyFields;
 
 export type ReportFilters = {
-  from?: number;
-  to?: number;
+  from?: number | string;
+  to?: number | string;
   group_id?: string;
   traffic_source_id?: string;
   status?: string;
