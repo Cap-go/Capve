@@ -12,7 +12,7 @@ import { eventLabel, sortEvents } from "../lib/events";
 import { useReportRowActions } from "./ReportRowActions";
 
 type Preset = "7d" | "14d" | "30d" | "this_month" | "custom";
-type SeriesKey = "clicks" | "leads" | "cost" | "revenue";
+type SeriesKey = "clicks" | "leads" | "cost" | "revenue" | "registration" | "ftd";
 
 const PRESETS: Array<{ value: Preset; label: string }> = [
   { value: "7d", label: "Last 7 days" },
@@ -23,10 +23,13 @@ const PRESETS: Array<{ value: Preset; label: string }> = [
 ];
 
 const SERIES: Array<{ id: string; label: string; left: SeriesKey; right: SeriesKey }> = [
+  { id: "registration-ftd", label: "Registrations – FTD", left: "registration", right: "ftd" },
   { id: "cost-leads", label: "Cost – Conversions", left: "cost", right: "leads" },
   { id: "clicks-leads", label: "Clicks – Conversions", left: "clicks", right: "leads" },
   { id: "revenue-cost", label: "Revenue – Cost", left: "revenue", right: "cost" },
   { id: "clicks-cost", label: "Clicks – Cost", left: "clicks", right: "cost" },
+  { id: "cost-registration", label: "Cost – Registrations", left: "cost", right: "registration" },
+  { id: "cost-ftd", label: "Cost – FTD", left: "cost", right: "ftd" },
 ];
 
 const DIM_ORDER = [
@@ -123,7 +126,10 @@ function seriesValue(point: TrendPoint, key: SeriesKey): number {
   if (key === "clicks") return point.clicks;
   if (key === "leads") return point.leads;
   if (key === "cost") return point.cost_cents;
-  return point.revenue_cents;
+  if (key === "revenue") return point.revenue_cents;
+  if (key === "registration") return point.events["registration"] ?? 0;
+  if (key === "ftd") return point.events["ftd"] ?? 0;
+  return 0;
 }
 
 function isMoney(key: SeriesKey): boolean {
@@ -134,7 +140,10 @@ function seriesName(key: SeriesKey): string {
   if (key === "clicks") return "Clicks";
   if (key === "leads") return "Conversions";
   if (key === "cost") return "Cost";
-  return "Revenue";
+  if (key === "revenue") return "Revenue";
+  if (key === "registration") return "Registrations";
+  if (key === "ftd") return "FTD";
+  return "";
 }
 
 function axisLabel(value: number, money: boolean, currency: string): string {
