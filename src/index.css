@@ -1900,7 +1900,7 @@ a.campaign-item {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 4px;
+  padding: 6px 8px;
   cursor: pointer;
   font-size: 14px;
 }
@@ -1910,6 +1910,9 @@ a.campaign-item {
 }
 .columns-menu-panel input[type="checkbox"] {
   margin: 0;
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
 }
 
 .perf {
