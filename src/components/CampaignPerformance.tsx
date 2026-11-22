@@ -202,13 +202,22 @@ function DualAxisChart({
   const rightMax = Math.max(...rightValues, 0);
   const ftdMax = Math.max(...ftdValues, 0);
   const leftScale = leftMax === 0 ? 1 : leftMax * 1.08;
-  const rightScale = Math.max(rightMax, ftdMax) === 0 ? 1 : Math.max(rightMax, ftdMax) * 1.08;
+  
+  // FTD gets its own scale when right series is money (cost/revenue); shares scale for counts (leads/registration)
+  const rightIsMoney = isMoney(rightKey);
+  const rightScale = rightIsMoney 
+    ? (rightMax === 0 ? 1 : rightMax * 1.08)
+    : (Math.max(rightMax, ftdMax) === 0 ? 1 : Math.max(rightMax, ftdMax) * 1.08);
+  const ftdScale = rightIsMoney 
+    ? (ftdMax === 0 ? 1 : ftdMax * 1.08)
+    : rightScale;
+  
   const xAt = (index: number) =>
     points.length === 1 ? pad.l + plotW / 2 : pad.l + (index / (points.length - 1)) * plotW;
   const yAt = (value: number, scale: number) => pad.t + plotH - (value / scale) * plotH;
   const leftPts = leftValues.map((value, index) => [xAt(index), yAt(value, leftScale)] as [number, number]);
   const rightPts = rightValues.map((value, index) => [xAt(index), yAt(value, rightScale)] as [number, number]);
-  const ftdPts = ftdValues.map((value, index) => [xAt(index), yAt(value, rightScale)] as [number, number]);
+  const ftdPts = ftdValues.map((value, index) => [xAt(index), yAt(value, ftdScale)] as [number, number]);
   const ticks = [0, 0.25, 0.5, 0.75, 1];
   const labelEvery = Math.max(1, Math.ceil(points.length / 8));
 
@@ -227,8 +236,8 @@ function DualAxisChart({
             <text x={pad.l - 8} y={y + 4} textAnchor="end" fill={LEFT_COLOR} fontSize="11">
               {axisLabel(tick * leftScale, isMoney(leftKey), currency)}
             </text>
-            <text x={width - pad.r + 8} y={y + 4} textAnchor="start" fill={RIGHT_COLOR} fontSize="11">
-              {axisLabel(tick * rightScale, isMoney(rightKey), currency)}
+            <text x={width - pad.r + 8} y={y + 4} textAnchor="start" fill={rightIsMoney ? FTD_COLOR : RIGHT_COLOR} fontSize="11">
+              {axisLabel(tick * (rightIsMoney ? ftdScale : rightScale), rightIsMoney ? false : isMoney(rightKey), currency)}
             </text>
           </g>
         );
