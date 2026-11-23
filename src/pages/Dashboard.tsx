@@ -38,6 +38,7 @@ import {
   otherCurrencies,
   type Affiliate,
   type CampaignReportRow,
+  type CampaignSourceLink,
   type ClickLogRow,
   type ConversionLogRow,
   type Group,
@@ -582,13 +583,18 @@ function OverviewPanel({
   onDelete: () => void;
 }) {
   const [affiliates, setAffiliates] = useState<Affiliate[] | null>(null);
+  const [sourceLink, setSourceLink] = useState<CampaignSourceLink | null>(null);
   useEffect(() => {
     if (section !== "tracking") return;
     let cancelled = false;
     setAffiliates(null);
+    setSourceLink(null);
     api.affiliates(selectedId)
       .then(({ affiliates: items }) => { if (!cancelled) setAffiliates(items); })
       .catch((error) => { if (!cancelled) onError(error instanceof Error ? error.message : "Could not load affiliates"); });
+    api.campaignSourceLink(selectedId)
+      .then((link) => { if (!cancelled) setSourceLink(link); })
+      .catch(() => { if (!cancelled) setSourceLink(null); });
     return () => { cancelled = true; };
   }, [selectedId, section, lastLink, onError]);
   const affiliateRows = affiliates ?? visibleStats?.affiliates ?? [];
@@ -597,6 +603,7 @@ function OverviewPanel({
   const origin = trackingOrigin(tracking);
   const eventNames = sortEvents(Object.keys(visibleStats?.totals.events ?? {}));
   const save = useSaveState();
+  const trafficSourceName = sources.find((s) => s.id === selectedProgram.traffic_source_id)?.name;
   const statusSave = useSaveState();
   const [draft, setDraft] = useState({
     name: selectedProgram.name,
@@ -881,19 +888,18 @@ function OverviewPanel({
               onChanged={onTrackingChanged}
             />
             <p className="text-sm text-[var(--velo-muted)]">
-              Incoming postback URL (configure in affiliate network). Without{" "}
+              Incoming postback URL (configure in affiliate network). <span className="mono">payout</span> and{" "}
+              <span className="mono">cnv_status</span> are optional; without{" "}
               <span className="mono">cnv_status</span> a conversion is recorded as{" "}
-              <span className="mono">lead</span>; send <span className="mono">approved</span>,{" "}
-              <span className="mono">rejected</span>, … to set or update it.
+              <span className="mono">lead</span>.
             </p>
             <CodeBlock>{tracking.postback_url}</CodeBlock>
             {canWrite ? <PostbackKeyControls onChange={onTrackingChanged} /> : null}
             <p className="text-sm text-[var(--velo-muted)]">
-              In the network, replace <span className="mono">{"{click_id}"}</span>,{" "}
-              <span className="mono">{"{payout}"}</span> and <span className="mono">{"{status}"}</span>{" "}
-              with the network&apos;s own macros (e.g. <span className="mono">{"cnv_id={aff_sub}"}</span>
-              ). That replacement is for this incoming URL. The Adcash pixel, on the traffic source,
-              is <span className="mono">cid={"{external_id}"}</span>.{" "}
+              In the network, replace <span className="mono">{"{click_id}"}</span> with the network&apos;s click ID macro
+              (e.g. <span className="mono">{"cnv_id={aff_sub}"}</span>), and{" "}
+              <span className="mono">{"{payout}"}</span> / <span className="mono">{"{status}"}</span> with the
+              network&apos;s macros if available (or omit them).{" "}
               <Link className="underline" to="/docs/networks">
                 Cheat sheet per network
               </Link>
@@ -910,6 +916,19 @@ function OverviewPanel({
                   Campaign click URL (clicks are counted under "Campaign traffic"):
                 </p>
                 <CodeBlock>{tracking.campaign_url}</CodeBlock>
+                {sourceLink?.tracking_url && sourceLink.tracking_url !== tracking.campaign_url && (
+                  <>
+                    <p className="text-sm text-[var(--velo-muted)]">
+                      Ad link for {trafficSourceName || "traffic source"} (paste this into the ad network):
+                    </p>
+                    <CodeBlock>{sourceLink.tracking_url}</CodeBlock>
+                  </>
+                )}
+                {sourceLink && !sourceLink.tracking_url && sourceLink.traffic_source_id && (
+                  <p className="text-sm text-[var(--velo-muted)]">
+                    The traffic source has no macros configured. Use the campaign click URL above.
+                  </p>
+                )}
               </>
             )}
             <p className="text-sm text-[var(--velo-muted)]">Attribution snippet for your merchant site:</p>

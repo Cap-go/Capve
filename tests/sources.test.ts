@@ -99,6 +99,47 @@ describe("traffic source templates, tokens and cost", () => {
     expect(postback?.url).toContain("{external_id}");
   });
 
+  it("builds ad link with traffic source macros for Adcash", async () => {
+    const { program } = await adcashCampaign();
+    const data = await api<{
+      traffic_source_id: string | null;
+      campaign_url: string | null;
+      tracking_url: string | null;
+      tokens: Array<{ param: string; macro?: string }>;
+    }>("GET", `/api/campaigns/${program.id}/source-link`);
+    expect(data.campaign_url).toBe(`http://localhost:5173/c/${program.campaign_key}`);
+    expect(data.tracking_url).toContain("?zoneid=[zone]");
+    expect(data.tracking_url).toContain("campaignid=[campaign]");
+    expect(data.tracking_url).toContain("country=[country]");
+    expect(data.tracking_url).toContain("cost=[redirection_cost]");
+    expect(data.tracking_url).toContain("clickid=[clickid]");
+    expect(data.tokens.length).toBeGreaterThan(0);
+  });
+
+  it("builds ad link with traffic source macros for PropellerAds", async () => {
+    const { traffic_source } = await api<{
+      traffic_source: { id: string };
+    }>("POST", "/api/sources/from-template", { template_id: "propellerads", name: "PropellerAds" }, 201);
+    const { program } = await api<{ program: { id: string; campaign_key: string } }>(
+      "POST",
+      "/api/programs",
+      {
+        name: `PropellerAds ${crypto.randomUUID().slice(0, 6)}`,
+        destination_url: MERCHANT,
+        traffic_source_id: traffic_source.id,
+      },
+      201,
+    );
+    const data = await api<{
+      tracking_url: string | null;
+    }>("GET", `/api/campaigns/${program.id}/source-link`);
+    expect(data.tracking_url).toContain("?zoneid=${zoneid}");
+    expect(data.tracking_url).toContain("campaignid=${campaignid}");
+    expect(data.tracking_url).toContain("geo=${geo}");
+    expect(data.tracking_url).toContain("cost=${cost}");
+    expect(data.tracking_url).toContain("clickid=${SUBID}");
+  });
+
   it("creates a network from a template with incoming postback URLs", async () => {
     const data = await api<{ network: { id: string }; offer_url_suffix: string; incoming_postback_urls: { default: string } }>(
       "POST",
