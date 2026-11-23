@@ -9,6 +9,7 @@ import {
   applySourceTokens,
   normalizePropellerTokens,
   parseTokens,
+  propellerTokenConflict,
   SOURCE_TEMPLATES,
   trackingUrlWithMacros,
   type SourceToken,
@@ -281,6 +282,15 @@ describe("traffic source templates, tokens and cost", () => {
       { param: "country", name: "Country", slot: "sub9", macro: "{country}" },
     ]);
 
+    const mixedCountry: SourceToken[] = [
+      { param: "GEO", name: "Geo code", slot: "sub4", macro: "${Geo}" },
+      { param: "Country", name: "Country", slot: "sub9", macro: "{country}" },
+    ];
+    expect(normalizePropellerTokens(mixedCountry)).toEqual([
+      { param: "Country", name: "Country", slot: "sub9", macro: "{country}" },
+    ]);
+    expect(propellerTokenConflict(mixedCountry)).toBe("Duplicate token param: country");
+
     const inherited: SourceToken[] = [
       { param: "clickid", name: "Click ID", slot: "external_id", macro: "constructor" },
       { param: "zoneid", name: "Zone", slot: "sub1", macro: "toString" },
@@ -421,6 +431,37 @@ describe("traffic source templates, tokens and cost", () => {
       .bind(bothTokens, both.id)
       .run();
 
+    const { traffic_source: customBanner } = await api<{ traffic_source: { id: string } }>(
+      "POST",
+      "/api/sources/from-template",
+      { template_id: "propellerads", name: "PropellerAds custom banner" },
+      201,
+    );
+    const customBannerTokens = JSON.stringify([
+      { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
+      { param: "BannerId", name: "Banner code", slot: "sub8", macro: "${BannerId}" },
+    ]);
+    const customBannerBefore = (await settingsRow(customBanner.id))!;
+    await env.DB.prepare(
+      "UPDATE traffic_source_settings SET tokens = ?, updated_at = ? WHERE traffic_source_id = ?",
+    )
+      .bind(customBannerTokens, customBannerBefore.updated_at, customBanner.id)
+      .run();
+
+    const { traffic_source: spacedCountry } = await api<{ traffic_source: { id: string } }>(
+      "POST",
+      "/api/sources/from-template",
+      { template_id: "propellerads", name: "PropellerAds spaced country" },
+      201,
+    );
+    const spacedCountryTokens = `[
+      { "param": "GEO", "name": "Geo code", "slot": "sub4", "macro": "\${Geo}" },
+      { "param": "Country", "name": "Country", "slot": "sub9", "macro": "{country}" }
+    ]`;
+    await env.DB.prepare("UPDATE traffic_source_settings SET tokens = ? WHERE traffic_source_id = ?")
+      .bind(spacedCountryTokens, spacedCountry.id)
+      .run();
+
     const { source: adcash } = await adcashCampaign();
     const adcashTokens = JSON.stringify([
       { param: "zoneid", name: "Zone", slot: "sub1", macro: "${ZONEID}", kind: "zone" },
@@ -489,6 +530,21 @@ describe("traffic source templates, tokens and cost", () => {
     const adcashAfter = (await settingsRow(adcash.id))!;
     expect(adcashAfter.tokens).toBe(adcashTokens);
     expect(adcashAfter.updated_at).toBe(111);
+
+    const customBannerStored = (await settingsRow(customBanner.id))!;
+    expect(JSON.parse(customBannerStored.tokens).map((token: { param: string }) => token.param)).toEqual([
+      "clickid",
+    ]);
+    expect(customBannerStored.updated_at).toBe(customBannerBefore.updated_at);
+
+    const spacedStored = JSON.parse((await settingsRow(spacedCountry.id))!.tokens) as Array<{
+      param: string;
+      name: string;
+      slot: string;
+    }>;
+    expect(spacedStored).toEqual([
+      { param: "Country", name: "Country", slot: "sub9", macro: "{country}" },
+    ]);
 
     const cleanedLast = (await settingsRow(bannerLast.id))!;
     expect(JSON.parse(cleanedLast.tokens).map((token: { param: string }) => token.param)).toEqual([

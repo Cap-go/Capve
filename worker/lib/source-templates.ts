@@ -362,13 +362,14 @@ export function normalizePropellerTokens(tokens: SourceToken[]): SourceToken[] {
   const chosen = new Map<string, RewrittenPropellerToken>();
   const order: string[] = [];
   for (const item of rewritten) {
-    const prev = chosen.get(item.token.param);
+    const key = item.token.param.toLowerCase();
+    const prev = chosen.get(key);
     if (!prev) {
-      chosen.set(item.token.param, item);
-      order.push(item.token.param);
+      chosen.set(key, item);
+      order.push(key);
       continue;
     }
-    if (prev.renamedFromGeo && !item.renamedFromGeo) chosen.set(item.token.param, item);
+    if (prev.renamedFromGeo && !item.renamedFromGeo) chosen.set(key, item);
   }
   return order.map((param) => chosen.get(param)!.token);
 }
@@ -379,8 +380,9 @@ export function propellerTokenConflict(tokens: SourceToken[]): string | null {
   for (const token of tokens) {
     const next = rewritePropellerToken(token);
     if (!next) continue;
-    if (params.has(next.token.param)) return `Duplicate token param: ${next.token.param}`;
-    params.add(next.token.param);
+    const key = next.token.param.toLowerCase();
+    if (params.has(key)) return `Duplicate token param: ${key}`;
+    params.add(key);
   }
   return null;
 }

@@ -27,6 +27,7 @@ function postbackLabel(event: string | null) {
 /** "Create from template" for traffic sources (Adcash, PropellerAds, ...). */
 export function SourceTemplatePicker({ onCreated }: { onCreated: () => void }) {
   const [templates, setTemplates] = useState<SourceTemplate[]>([]);
+  const [costProviders, setCostProviders] = useState<Array<{ id: string; name: string }>>([]);
   const [templateId, setTemplateId] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -36,11 +37,17 @@ export function SourceTemplatePicker({ onCreated }: { onCreated: () => void }) {
   useEffect(() => {
     sourcesApi
       .templates()
-      .then((data) => setTemplates(data.traffic_sources))
+      .then((data) => {
+        setTemplates(data.traffic_sources);
+        setCostProviders(data.cost_providers);
+      })
       .catch((err) => setError(message(err)));
   }, []);
 
   const template = templates.find((t) => t.id === templateId);
+  const costApiName = template?.cost_api
+    ? costProviders.find((provider) => provider.id === template.cost_api)?.name ?? template.cost_api
+    : null;
   const previewPostbacks = template
     ? template.postbacks?.length
       ? template.postbacks
@@ -93,7 +100,9 @@ export function SourceTemplatePicker({ onCreated }: { onCreated: () => void }) {
         {template && (
           <div className="space-y-2 text-sm">
             <p className="text-[var(--velo-muted)]">
-              {template.cost_type.toUpperCase()} · tokens:{" "}
+              {template.cost_type.toUpperCase()}
+              {costApiName ? ` · Cost API: ${costApiName}` : ""}
+              {" · tokens: "}
               <span className="mono">
                 {template.tokens.map((t) => `${t.param}→${t.slot} (${t.name})`).join(", ")}
               </span>
@@ -105,9 +114,8 @@ export function SourceTemplatePicker({ onCreated }: { onCreated: () => void }) {
             ))}
             {template.notes && <p className="text-[var(--velo-muted)]">{template.notes}</p>}
             <p className="text-[var(--velo-muted)]">
-              Add <span className="mono">&amp;key=…</span> from the campaign&apos;s Tracking &amp; postback card.{" "}
-              <a className="underline" href="/docs/networks" target="_blank" rel="noreferrer">
-                How to test the round trip
+              <a className="underline" href="/docs/postback" target="_blank" rel="noreferrer">
+                Outgoing postback docs
               </a>
             </p>
             {!template.verified && (
