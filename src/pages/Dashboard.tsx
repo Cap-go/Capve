@@ -597,6 +597,13 @@ function OverviewPanel({
       .catch(() => { if (!cancelled) setSourceLink(null); });
     return () => { cancelled = true; };
   }, [selectedId, section, lastLink, onError]);
+  const handleTrackingChanged = () => {
+    onTrackingChanged();
+    sourcesApi
+      .sourceLink(selectedId)
+      .then((link) => setSourceLink(link))
+      .catch(() => setSourceLink(null));
+  };
   const affiliateRows = affiliates ?? visibleStats?.affiliates ?? [];
   const affiliateMetrics = new Map(visibleStats?.affiliates.map((affiliate) => [affiliate.id, affiliate]));
   const base = appBaseUrl();
@@ -885,7 +892,7 @@ function OverviewPanel({
               campaignId={selectedId}
               currentId={tracking.tracking_domain?.id ?? null}
               canWrite={canWrite}
-              onChanged={onTrackingChanged}
+              onChanged={handleTrackingChanged}
             />
             <h3 className="text-sm font-semibold">Postback URL for affiliate network</h3>
             <p className="text-sm text-[var(--velo-muted)]">
@@ -894,7 +901,7 @@ function OverviewPanel({
               <span className="mono">cnv_status</span> a conversion is recorded as <span className="mono">lead</span>.
             </p>
             <CodeBlock>{tracking.postback_url}</CodeBlock>
-            {canWrite ? <PostbackKeyControls onChange={onTrackingChanged} /> : null}
+            {canWrite ? <PostbackKeyControls onChange={handleTrackingChanged} /> : null}
             <p className="text-sm text-[var(--velo-muted)]">
               In the network, replace <span className="mono">{"{click_id}"}</span> with the network&apos;s click ID macro
               (e.g. <span className="mono">{"cnv_id={aff_sub}"}</span>), and{" "}
