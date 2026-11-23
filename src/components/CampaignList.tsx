@@ -83,22 +83,26 @@ export function CampaignList({
   sources,
   loading,
   reportsLoading,
+  reportsError,
   canWrite,
   creating,
   onToggleCreate,
   createForm,
   onPeriodChange,
+  onRetryReports,
 }: {
   programs: Program[];
   reports: CampaignReportRow[] | null;
   sources: TrafficSource[];
   loading: boolean;
   reportsLoading: boolean;
+  reportsError: string | null;
   canWrite: boolean;
   creating: boolean;
   onToggleCreate: () => void;
   createForm: ReactNode;
   onPeriodChange: (range: PeriodRange) => void;
+  onRetryReports: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
@@ -260,6 +264,14 @@ export function CampaignList({
         </div>
       </div>
       {createForm}
+      {reportsError && (
+        <div className="error-banner">
+          <p>Failed to load stats: {reportsError}</p>
+          <button className="btn btn-secondary" type="button" onClick={onRetryReports}>
+            Retry
+          </button>
+        </div>
+      )}
       <div className="table-wrap">
         <table className="table campaign-index-table">
           <thead>

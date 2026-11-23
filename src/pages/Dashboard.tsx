@@ -181,6 +181,7 @@ function DashboardContent({ page }: { page: DashboardView }) {
   const [reportRows, setReportRows] = useState<CampaignReportRow[] | null>(null);
   const [reportPeriod, setReportPeriod] = useState<{ from?: number | string; to?: number | string }>({});
   const [reportsLoading, setReportsLoading] = useState(false);
+  const [reportsError, setReportsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -220,16 +221,12 @@ function DashboardContent({ page }: { page: DashboardView }) {
     }
   }, [inCampaign, sectionParam, campaignId, navigate]);
 
-  useEffect(() => {
-    if (reportsLocked) {
-      setReportRows(null);
-      setReportsLoading(false);
-      return;
-    }
-    if (!user || inCampaign || page !== "campaigns") return;
+  const fetchReports = () => {
+    if (reportsLocked || !user || inCampaign || page !== "campaigns") return;
     let cancelled = false;
     setReportRows(null);
     setReportsLoading(true);
+    setReportsError(null);
     api
       .campaignReports({ from: reportPeriod.from, to: reportPeriod.to })
       .then(({ campaigns }) => {
@@ -243,11 +240,22 @@ function DashboardContent({ page }: { page: DashboardView }) {
         if (!cancelled) {
           setReportRows([]);
           setReportsLoading(false);
+          setReportsError(err instanceof Error ? err.message : "Failed to load stats");
         }
       });
     return () => {
       cancelled = true;
     };
+  };
+
+  useEffect(() => {
+    if (reportsLocked) {
+      setReportRows(null);
+      setReportsLoading(false);
+      setReportsError(null);
+      return;
+    }
+    return fetchReports();
   }, [user, inCampaign, page, reportsLocked, reportPeriod]);
 
   useEffect(() => {
@@ -487,10 +495,12 @@ function DashboardContent({ page }: { page: DashboardView }) {
           sources={sources}
           loading={!programsLoaded}
           reportsLoading={reportsLoading}
+          reportsError={reportsError}
           canWrite={canWrite}
           creating={creating}
           onToggleCreate={() => setCreating((open) => !open)}
           onPeriodChange={setReportPeriod}
+          onRetryReports={fetchReports}
           createForm={
             canWrite && programsLoaded && (creating || programs.length === 0) ? (
               <form id="new-campaign" className="campaign-create space-y-3" onSubmit={createProgram}>
