@@ -346,6 +346,69 @@ function combinedDimensionSql(dims: DimensionSql[]): DimensionSql {
   };
 }
 
+/** Click aggregate for `getGroupedReport`. Exported so tests explain this SQL, not a copy. */
+export function groupedClickQuery(
+  userId: string,
+  by: GroupDimension,
+  options: GroupedReportOptions,
+): { sql: string; binds: Array<string | number> } {
+  const dims = [by, ...(options.then_by ?? [])].map((d) =>
+    dimensionSql(d, options.tz_offset_minutes),
+  );
+  const dim = dims.length === 1 ? dims[0] : combinedDimensionSql(dims);
+  const where = programWhere(userId, options, "p", Boolean(options.campaign_id));
+  const campaignSql = options.campaign_id ? " AND p.id = ?" : "";
+  const campaignBinds = options.campaign_id ? [options.campaign_id] : [];
+  const clickTime = clickTimeClause(options, "c");
+  const label = dim.label ?? "NULL";
+  // Approved click ids for clicks inside the same click-time window, built from
+  // conversions (small) joined to the click primary key. A per-click EXISTS, and a
+  // subquery over every historical conversion, both blow D1's CPU limit on a month
+  // of clicks. A click still counts whenever any non-rejected conversion points at
+  // it, whatever day the postback arrived.
+  const convertedWhere = programWhere(userId, options, "pc", Boolean(options.campaign_id));
+  const convertedCampaignSql = options.campaign_id ? " AND pc.id = ?" : "";
+  const convertedCampaignBinds = options.campaign_id ? [options.campaign_id] : [];
+  const convertedClickTime = clickTimeClause(options, "cf");
+
+  const sql = `SELECT ${dim.click} AS k, MAX(${label}) AS label,
+          COUNT(*) AS clicks,
+          COALESCE(SUM(c.is_unique), 0) AS unique_clicks,
+          COALESCE(SUM(c.is_bot), 0) AS bot_clicks,
+          SUM(CASE WHEN c.lp_clicked_at IS NOT NULL AND c.is_bot = 0 THEN 1 ELSE 0 END) AS lp_clicks,
+          SUM(CASE WHEN conv_click.click_id IS NOT NULL THEN 1 ELSE 0 END) AS converted_clicks,
+          COALESCE(SUM(CASE WHEN c.is_bot = 0 THEN c.cost_cents END), 0)
+            + COALESCE(SUM(CASE WHEN c.is_bot = 0 AND c.cpa_cost_cents IS NOT NULL AND conv_click.click_id IS NOT NULL
+                THEN c.cpa_cost_cents ELSE 0 END), 0) AS cost
+         FROM clicks c
+         JOIN programs p ON p.id = c.program_id
+         LEFT JOIN (
+           SELECT cv.click_id AS click_id
+           FROM programs pc
+           JOIN conversions cv ON cv.program_id = pc.id
+           JOIN clicks cf ON cf.id = cv.click_id
+           WHERE cv.click_id IS NOT NULL
+             AND ${approvedStatusSql("cv")}
+             AND ${convertedWhere.sql}${convertedCampaignSql}${convertedClickTime.sql}
+           GROUP BY cv.click_id
+         ) conv_click ON conv_click.click_id = c.id
+         ${dim.clickJoin ?? ""}
+         WHERE ${where.sql}${campaignSql}${clickTime.sql}
+         GROUP BY k`;
+
+  return {
+    sql,
+    binds: [
+      ...convertedWhere.binds,
+      ...convertedCampaignBinds,
+      ...convertedClickTime.binds,
+      ...where.binds,
+      ...campaignBinds,
+      ...clickTime.binds,
+    ],
+  };
+}
+
 /**
  * Report grouped by one dimension using two GROUP BY queries (clicks, conversions).
  * Conversions = distinct converted clicks + click-less conversions, so a click with
@@ -368,53 +431,15 @@ export async function getGroupedReport(
   const where = programWhere(userId, options, "p", Boolean(options.campaign_id));
   const campaignSql = options.campaign_id ? " AND p.id = ?" : "";
   const campaignBinds = options.campaign_id ? [options.campaign_id] : [];
-  const clickTime = clickTimeClause(options, "c");
   // Conversions are filtered by their own timestamp (when the postback was received).
   const convTime = conversionTimeClause(options, "cv");
   const label = dim.label ?? "NULL";
-  // One lookup of approved click ids for these campaigns, joined once. A per-click
-  // EXISTS scanned conversions for every click and exceeded D1's CPU limit once a
-  // period covered hundreds of thousands of clicks (a month) while a shorter range
-  // still finished. Semantics match the old EXISTS: a click counts as converted when
-  // any non-rejected conversion points at it, independent of when the postback arrived.
-  const convertedWhere = programWhere(userId, options, "pc", Boolean(options.campaign_id));
-  const convertedCampaignSql = options.campaign_id ? " AND pc.id = ?" : "";
-  const convertedCampaignBinds = options.campaign_id ? [options.campaign_id] : [];
+  const clickScan = groupedClickQuery(userId, by, options);
 
   const [clickRows, convRows] = await Promise.all([
     db
-      .prepare(
-        `SELECT ${dim.click} AS k, MAX(${label}) AS label,
-          COUNT(*) AS clicks,
-          COALESCE(SUM(c.is_unique), 0) AS unique_clicks,
-          COALESCE(SUM(c.is_bot), 0) AS bot_clicks,
-          SUM(CASE WHEN c.lp_clicked_at IS NOT NULL AND c.is_bot = 0 THEN 1 ELSE 0 END) AS lp_clicks,
-          SUM(CASE WHEN conv_click.click_id IS NOT NULL THEN 1 ELSE 0 END) AS converted_clicks,
-          COALESCE(SUM(CASE WHEN c.is_bot = 0 THEN c.cost_cents END), 0)
-            + COALESCE(SUM(CASE WHEN c.is_bot = 0 AND c.cpa_cost_cents IS NOT NULL AND conv_click.click_id IS NOT NULL
-                THEN c.cpa_cost_cents ELSE 0 END), 0) AS cost
-         FROM clicks c
-         JOIN programs p ON p.id = c.program_id
-         LEFT JOIN (
-           SELECT cv.click_id AS click_id
-           FROM conversions cv
-           JOIN programs pc ON pc.id = cv.program_id
-           WHERE cv.click_id IS NOT NULL
-             AND ${approvedStatusSql("cv")}
-             AND ${convertedWhere.sql}${convertedCampaignSql}
-           GROUP BY cv.click_id
-         ) conv_click ON conv_click.click_id = c.id
-         ${dim.clickJoin ?? ""}
-         WHERE ${where.sql}${campaignSql}${clickTime.sql}
-         GROUP BY k`,
-      )
-      .bind(
-        ...convertedWhere.binds,
-        ...convertedCampaignBinds,
-        ...where.binds,
-        ...campaignBinds,
-        ...clickTime.binds,
-      )
+      .prepare(clickScan.sql)
+      .bind(...clickScan.binds)
       .all<{
         k: string | null;
         label: string | null;

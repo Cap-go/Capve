@@ -1,5 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
+import { groupedClickQuery } from "../worker/db/reports";
 import { registerTestUser } from "./helpers";
 import { initSql } from "./schema";
 
@@ -210,31 +211,9 @@ describe("campaign stats loading", () => {
 
     const fromMs = Date.UTC(2026, 10, 1, 0, 0, 0);
     const toMs = Date.UTC(2026, 10, 23, 23, 59, 59, 999);
-    const plan = await env.DB.prepare(
-      `EXPLAIN QUERY PLAN
-       SELECT p.id AS k, COUNT(*) AS clicks,
-         COALESCE(SUM(c.is_unique), 0) AS unique_clicks,
-         COALESCE(SUM(c.is_bot), 0) AS bot_clicks,
-         SUM(CASE WHEN c.lp_clicked_at IS NOT NULL AND c.is_bot = 0 THEN 1 ELSE 0 END) AS lp_clicks,
-         SUM(CASE WHEN conv_click.click_id IS NOT NULL THEN 1 ELSE 0 END) AS converted_clicks,
-         COALESCE(SUM(CASE WHEN c.is_bot = 0 THEN c.cost_cents END), 0)
-           + COALESCE(SUM(CASE WHEN c.is_bot = 0 AND c.cpa_cost_cents IS NOT NULL AND conv_click.click_id IS NOT NULL
-               THEN c.cpa_cost_cents ELSE 0 END), 0) AS cost
-       FROM clicks c
-       JOIN programs p ON p.id = c.program_id
-       LEFT JOIN (
-         SELECT cv.click_id AS click_id
-         FROM conversions cv
-         JOIN programs pc ON pc.id = cv.program_id
-         WHERE cv.click_id IS NOT NULL AND pc.user_id = ?
-         GROUP BY cv.click_id
-       ) conv_click ON conv_click.click_id = c.id
-       WHERE p.user_id = ? AND p.status != 'archived'
-         AND c.created_at >= ? AND c.created_at <= ?
-       GROUP BY k`,
-    )
-      .bind(owner!.user_id, owner!.user_id, fromMs, toMs)
-      .raw();
+    const scan = groupedClickQuery(owner!.user_id, "campaign", { from: fromMs, to: toMs });
+    expect(scan.sql).toContain("JOIN clicks cf ON cf.id = cv.click_id");
+    const plan = await env.DB.prepare(`EXPLAIN QUERY PLAN ${scan.sql}`).bind(...scan.binds).raw();
     const planText = JSON.stringify(plan);
     expect(planText).toContain("idx_clicks_program_created_stats");
     expect(planText).not.toContain("SCAN c");
