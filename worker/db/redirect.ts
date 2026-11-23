@@ -13,6 +13,8 @@ export type AffiliateLinkTarget = {
   traffic_source_id: string | null;
   /** traffic_source_settings.tokens JSON of the campaign's source (null = none). */
   source_tokens: string | null;
+  /** traffic_source_settings.template, so only PropellerAds tokens are rewritten. */
+  source_template: string | null;
   /** Campaign's custom tracking domain hostname (null = APP_URL). */
   tracking_hostname: string | null;
 };
@@ -23,7 +25,8 @@ export async function getAffiliateLinkTarget(db: D1Database, code: string) {
     .prepare(
       `SELECT a.id AS affiliate_id, a.code AS affiliate_code,
         p.id, p.user_id, p.destination_url, p.campaign_key, p.status,
-        p.traffic_source_id, tss.tokens AS source_tokens, td.hostname AS tracking_hostname
+        p.traffic_source_id, tss.tokens AS source_tokens, tss.template AS source_template,
+        td.hostname AS tracking_hostname
        FROM affiliates a
        JOIN programs p ON p.id = a.program_id
        LEFT JOIN traffic_source_settings tss ON tss.traffic_source_id = p.traffic_source_id
@@ -39,7 +42,8 @@ export async function getCampaignLinkTarget(db: D1Database, campaignKey: string)
   return db
     .prepare(
       `SELECT p.id, p.user_id, p.destination_url, p.campaign_key, p.status,
-        p.traffic_source_id, tss.tokens AS source_tokens, td.hostname AS tracking_hostname,
+        p.traffic_source_id, tss.tokens AS source_tokens, tss.template AS source_template,
+        td.hostname AS tracking_hostname,
         a.id AS affiliate_id, a.code AS affiliate_code
        FROM programs p
        LEFT JOIN traffic_source_settings tss ON tss.traffic_source_id = p.traffic_source_id
@@ -56,6 +60,7 @@ export async function getCampaignLinkTarget(db: D1Database, campaignKey: string)
       status: string;
       traffic_source_id: string | null;
       source_tokens: string | null;
+      source_template: string | null;
       tracking_hostname: string | null;
       affiliate_id: string | null;
       affiliate_code: string | null;

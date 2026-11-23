@@ -7,6 +7,7 @@ import { parseCostCents } from "../worker/lib/click-context";
 import { applySourceTokens, parseTokens, SOURCE_TEMPLATES } from "../worker/lib/source-templates";
 import { registerTestUser } from "./helpers";
 import { initSql } from "./schema";
+import propellerMigration from "../migrations/0035_fix_propellerads_macros.sql?raw";
 
 const MERCHANT = "https://merchant.example.com/casino";
 const UA =
@@ -72,7 +73,7 @@ describe("traffic source templates, tokens and cost", () => {
   it("lists built-in source and network templates", async () => {
     const data = await api<{
       traffic_sources: Array<{ id: string }>;
-      networks: Array<{ id: string; incoming_postback_urls: { ftd: string } }>;
+      networks: Array<{ id: string; incoming_postback_urls: { default: string; ftd: string } }>;
     }>("GET", "/api/sources/templates");
     const ids = data.traffic_sources.map((t) => t.id);
     for (const id of ["adcash", "propellerads", "richads", "zeropark", "trafficstars", "facebook", "google-ads", "tiktok"]) {
@@ -81,6 +82,11 @@ describe("traffic source templates, tokens and cost", () => {
     const everflow = data.networks.find((n) => n.id === "everflow")!;
     expect(everflow.incoming_postback_urls.ftd).toBe(
       "http://localhost:5173/click?cnv_id={sub1}&payout={payout_amount}&event=ftd",
+    );
+    const yesplay = data.networks.find((n) => n.id === "yesplay")!;
+    expect(yesplay.incoming_postback_urls.default).toBe("http://localhost:5173/click?cnv_id=${subid1}");
+    expect(yesplay.incoming_postback_urls.ftd).toBe(
+      "http://localhost:5173/click?cnv_id=${subid1}&event=ftd",
     );
   });
 
@@ -133,11 +139,103 @@ describe("traffic source templates, tokens and cost", () => {
     const data = await api<{
       tracking_url: string | null;
     }>("GET", `/api/campaigns/${program.id}/source-link`);
-    expect(data.tracking_url).toContain("?zoneid=${zoneid}");
-    expect(data.tracking_url).toContain("campaignid=${campaignid}");
-    expect(data.tracking_url).toContain("geo=${geo}");
-    expect(data.tracking_url).toContain("cost=${cost}");
-    expect(data.tracking_url).toContain("clickid=${SUBID}");
+    expect(data.tracking_url?.split("?")[1]).toBe(
+      "zoneid=${zoneid}&campaignid=${campaignid}&country=${geo}&cost=${cost}&clickid=${SUBID}",
+    );
+  });
+
+  it("corrects stored uppercase PropellerAds tokens to the creative link", async () => {
+    const { traffic_source } = await api<{ traffic_source: { id: string } }>(
+      "POST",
+      "/api/sources/from-template",
+      { template_id: "propellerads", name: "PropellerAds legacy" },
+      201,
+    );
+    const legacy = JSON.stringify([
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${ZONEID}", kind: "zone" },
+      { param: "campaignid", name: "Campaign", slot: "sub2", macro: "${CAMPAIGNID}", kind: "campaign" },
+      { param: "bannerid", name: "Creative", slot: "sub3", macro: "${BANNERID}" },
+      { param: "geo", name: "Country", slot: "sub4", macro: "${GEO}" },
+      { param: "cost", name: "Cost", slot: "cost", macro: "${COST}" },
+      { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
+    ]);
+    await env.DB.prepare("UPDATE traffic_source_settings SET tokens = ? WHERE traffic_source_id = ?")
+      .bind(legacy, traffic_source.id)
+      .run();
+    const { traffic_source: bannerLast } = await api<{ traffic_source: { id: string } }>(
+      "POST",
+      "/api/sources/from-template",
+      { template_id: "propellerads", name: "PropellerAds banner last" },
+      201,
+    );
+    const bannerLastTokens = JSON.stringify([
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${zoneid}", kind: "zone" },
+      { param: "campaignid", name: "Campaign", slot: "sub2", macro: "${campaignid}", kind: "campaign" },
+      { param: "bannerid", name: "Creative", slot: "sub3", macro: "${bannerid}" },
+    ]);
+    await env.DB.prepare("UPDATE traffic_source_settings SET tokens = ? WHERE traffic_source_id = ?")
+      .bind(bannerLastTokens, bannerLast.id)
+      .run();
+    const { program } = await api<{ program: { id: string } }>(
+      "POST",
+      "/api/programs",
+      {
+        name: `Legacy Propeller ${crypto.randomUUID().slice(0, 6)}`,
+        destination_url: MERCHANT,
+        traffic_source_id: traffic_source.id,
+      },
+      201,
+    );
+    const data = await api<{ tracking_url: string | null }>("GET", `/api/campaigns/${program.id}/source-link`);
+    expect(data.tracking_url?.split("?")[1]).toBe(
+      "zoneid=${zoneid}&campaignid=${campaignid}&country=${geo}&cost=${cost}&clickid=${SUBID}",
+    );
+
+    const adcashBefore = await env.DB.prepare(
+      "SELECT tokens FROM traffic_source_settings WHERE template = 'adcash' LIMIT 1",
+    ).first<{ tokens: string }>();
+    for (const statement of propellerMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
+      await env.DB.prepare(statement).run();
+    }
+    const stored = await env.DB.prepare(
+      "SELECT tokens FROM traffic_source_settings WHERE traffic_source_id = ?",
+    )
+      .bind(traffic_source.id)
+      .first<{ tokens: string }>();
+    const tokens = JSON.parse(stored!.tokens) as Array<{ param: string; macro?: string }>;
+    expect(tokens.map((token) => `${token.param}=${token.macro}`)).toEqual([
+      "zoneid=${zoneid}",
+      "campaignid=${campaignid}",
+      "country=${geo}",
+      "cost=${cost}",
+      "clickid=${SUBID}",
+    ]);
+    const adcashAfter = await env.DB.prepare(
+      "SELECT tokens FROM traffic_source_settings WHERE template = 'adcash' LIMIT 1",
+    ).first<{ tokens: string }>();
+    expect(adcashAfter?.tokens).toBe(adcashBefore?.tokens);
+    const cleanedLast = await env.DB.prepare(
+      "SELECT tokens FROM traffic_source_settings WHERE traffic_source_id = ?",
+    )
+      .bind(bannerLast.id)
+      .first<{ tokens: string }>();
+    const lastTokens = JSON.parse(cleanedLast!.tokens) as Array<{ param: string }>;
+    expect(lastTokens.map((token) => token.param)).toEqual(["zoneid", "campaignid"]);
+  });
+
+  it("does not rewrite a non-PropellerAds source that uses the same macros", async () => {
+    const { source, program } = await adcashCampaign();
+    const custom = JSON.stringify([
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${ZONEID}", kind: "zone" },
+      { param: "bannerid", name: "Creative", slot: "sub3", macro: "${BANNERID}" },
+      { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
+    ]);
+    await env.DB.prepare("UPDATE traffic_source_settings SET tokens = ? WHERE traffic_source_id = ?")
+      .bind(custom, source.id)
+      .run();
+    const data = await api<{ tracking_url: string | null }>("GET", `/api/campaigns/${program.id}/source-link`);
+    expect(data.tracking_url).toContain("zoneid=${ZONEID}");
+    expect(data.tracking_url).toContain("bannerid=${BANNERID}");
   });
 
   it("creates a network from a template with incoming postback URLs", async () => {

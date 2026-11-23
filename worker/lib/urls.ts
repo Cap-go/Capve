@@ -69,9 +69,25 @@ export function buildCampaignUrl(appUrl: string, campaignKey: string): string {
   return `${appUrl.replace(/\/$/, "")}/c/${campaignKey}`;
 }
 
-export function buildPostbackUrl(appUrl: string, postbackKey?: string): string {
-  const url = `${appUrl.replace(/\/$/, "")}/click?cnv_id={click_id}&payout={payout}&cnv_status={status}`;
-  return postbackKey ? `${url}&key=${encodeURIComponent(postbackKey)}` : url;
+export function buildPostbackUrl(
+  appUrl: string,
+  options?: {
+    postbackKey?: string;
+    clickMacro?: string;
+    includePayout?: boolean;
+    includeStatus?: boolean;
+    payoutMacro?: string;
+    statusMacro?: string;
+    event?: string;
+  },
+): string {
+  const base = appUrl.replace(/\/$/, "");
+  const parts = [`cnv_id=${options?.clickMacro ?? "{click_id}"}`];
+  if (options?.includePayout) parts.push(`payout=${options.payoutMacro ?? "{payout}"}`);
+  if (options?.includeStatus) parts.push(`cnv_status=${options.statusMacro ?? "{status}"}`);
+  if (options?.postbackKey) parts.push(`key=${encodeURIComponent(options.postbackKey)}`);
+  if (options?.event) parts.push(`event=${encodeURIComponent(options.event)}`);
+  return `${base}/click?${parts.join("&")}`;
 }
 
 /** Browser-safe: persists velo_ref and click_id from the landing URL into localStorage. */

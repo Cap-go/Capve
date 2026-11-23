@@ -213,6 +213,8 @@ export type ProgramTracking = {
   redirect_params: string[];
   /** Custom tracking domain used for this campaign's links, if any. */
   tracking_domain?: { id: string; hostname: string } | null;
+  /** Inferred network from destination domain (yesplay, tonybet, etc). */
+  inferred_network?: string | null;
 };
 
 export type RotationMode = "normal" | "smart" | "fix_on" | "top_to_bottom";

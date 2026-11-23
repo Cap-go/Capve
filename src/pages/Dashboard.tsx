@@ -17,6 +17,7 @@ import { TrafficFilterPanel } from "../components/TrafficFilterPanel";
 import { McpPanel } from "../components/McpPanel";
 import { OpsPanel, NotesPanel } from "../components/OpsPanel";
 import { CodeBlock } from "../components/CodeBlock";
+import { PostbackLinkBuilder } from "../components/PostbackLinkBuilder";
 import {
   CopyButton,
   ErrorBox,
@@ -101,6 +102,16 @@ type CampaignSecret = { programId: string; secret: string };
 type AffiliateLink = { programId: string; url: string };
 
 /** Origin of the tracking host (the Worker's APP_URL) taken from the postback URL. */
+function decodePostbackKey(postbackUrl: string): string | undefined {
+  const key = postbackUrl.match(/[?&]key=([^&]+)/)?.[1];
+  if (!key) return undefined;
+  try {
+    return decodeURIComponent(key);
+  } catch {
+    return key;
+  }
+}
+
 function trackingOrigin(tracking: ProgramTracking | null): string {
   if (tracking) {
     try {
@@ -897,26 +908,19 @@ function OverviewPanel({
             <h3 className="text-sm font-semibold">Postback URL for affiliate network</h3>
             <p className="text-sm text-[var(--velo-muted)]">
               Configure this URL in your affiliate network (e.g. YesPlay, Affilka) to receive conversions.{" "}
-              <span className="mono">payout</span> and <span className="mono">cnv_status</span> are optional; without{" "}
-              <span className="mono">cnv_status</span> a conversion is recorded as <span className="mono">lead</span>.
-            </p>
-            <CodeBlock>{tracking.postback_url}</CodeBlock>
-            {canWrite ? <PostbackKeyControls onChange={handleTrackingChanged} /> : null}
-            <p className="text-sm text-[var(--velo-muted)]">
-              In the network, replace <span className="mono">{"{click_id}"}</span> with the network&apos;s click ID macro
-              (e.g. <span className="mono">{"cnv_id={aff_sub}"}</span>), and{" "}
-              <span className="mono">{"{payout}"}</span> / <span className="mono">{"{status}"}</span> with the
-              network&apos;s macros if available (or omit them).{" "}
+              <span className="mono">payout</span> and <span className="mono">cnv_status</span> are optional.{" "}
               <Link className="underline" to="/docs/networks">
                 Cheat sheet per network
               </Link>
             </p>
-            <p className="text-sm text-[var(--velo-muted)]">
-              Several events per campaign? Add one postback per event in the network. Each event is
-              counted on its own in stats:
-            </p>
-            <CodeBlock label="Registration postback">{`${tracking.postback_url}&event=registration`}</CodeBlock>
-            <CodeBlock label="FTD postback">{`${tracking.postback_url}&event=ftd`}</CodeBlock>
+            <PostbackLinkBuilder
+              key={selectedId}
+              baseUrl={origin}
+              postbackKey={decodePostbackKey(tracking.postback_url)}
+              inferredNetwork={tracking.inferred_network}
+              campaignId={selectedId}
+            />
+            {canWrite ? <PostbackKeyControls onChange={handleTrackingChanged} /> : null}
             {tracking.campaign_url && (
               <>
                 <h3 className="mt-4 text-sm font-semibold">Ad creative link for traffic source</h3>

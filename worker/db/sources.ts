@@ -1,5 +1,5 @@
 import { SUB_KEYS } from "../lib/click-context";
-import type { SourceToken } from "../lib/source-templates";
+import { normalizePropellerTokens, type SourceToken } from "../lib/source-templates";
 import { id } from "../lib/utils";
 
 export type SourceSettingsRow = {
@@ -25,10 +25,12 @@ export type SourceSettings = {
   last_sync_error: string | null;
 };
 
-export function parseTokenJson(raw: string | null | undefined): SourceToken[] {
+export function parseTokenJson(raw: string | null | undefined, template?: string | null): SourceToken[] {
   try {
     const value = JSON.parse(raw ?? "[]");
-    return Array.isArray(value) ? (value as SourceToken[]) : [];
+    if (!Array.isArray(value)) return [];
+    const tokens = value as SourceToken[];
+    return template === "propellerads" ? normalizePropellerTokens(tokens) : tokens;
   } catch {
     return [];
   }
@@ -38,7 +40,7 @@ export function publicSettings(row: SourceSettingsRow | null, sourceId: string):
   return {
     traffic_source_id: sourceId,
     template: row?.template ?? null,
-    tokens: parseTokenJson(row?.tokens),
+    tokens: parseTokenJson(row?.tokens, row?.template),
     api_provider: row?.api_provider ?? null,
     has_api_key: Boolean(row?.api_key_sealed),
     last_sync_at: row?.last_sync_at ?? null,
@@ -56,10 +58,10 @@ export async function getSourceSettingsRow(db: D1Database, sourceId: string) {
 /** Tokens of a traffic source, for the click redirect. Empty when none are configured. */
 export async function getSourceTokens(db: D1Database, sourceId: string): Promise<SourceToken[]> {
   const row = await db
-    .prepare("SELECT tokens FROM traffic_source_settings WHERE traffic_source_id = ?")
+    .prepare("SELECT tokens, template FROM traffic_source_settings WHERE traffic_source_id = ?")
     .bind(sourceId)
-    .first<{ tokens: string }>();
-  return parseTokenJson(row?.tokens);
+    .first<{ tokens: string; template: string | null }>();
+  return parseTokenJson(row?.tokens, row?.template);
 }
 
 export async function upsertSourceSettings(

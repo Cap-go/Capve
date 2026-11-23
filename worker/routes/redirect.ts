@@ -54,6 +54,7 @@ async function handleClickRedirect(
     traffic_source_id?: string | null;
     /** Source token JSON, loaded with the campaign in the hot-path lookup. */
     source_tokens?: string | null;
+    source_template?: string | null;
     /** Custom tracking domain of the campaign; LP click URLs use it. */
     tracking_hostname?: string | null;
   },
@@ -81,7 +82,11 @@ async function handleClickRedirect(
   // Named source tokens (e.g. Adcash zoneid → sub1) are mapped before anything reads the subs.
   const rawContext = await buildClickContext(c.req.raw);
   const clickContext = program.source_tokens
-    ? applySourceTokens(new URL(c.req.url), parseTokenJson(program.source_tokens), rawContext)
+    ? applySourceTokens(
+        new URL(c.req.url),
+        parseTokenJson(program.source_tokens, program.source_template),
+        rawContext,
+      )
     : rawContext;
   const ctx: RoutingContext = {
     click_id: clickId,

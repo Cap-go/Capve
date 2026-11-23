@@ -112,7 +112,7 @@ ops.post("/invites/:id/decline", async (c) => {
 
 // Incoming postback key (`/click?...&key=`). Owners and admins only: the key records conversions.
 function postbackKeyResponse(appUrl: string, settings: PostbackKeySettings) {
-  return { postback_key: { ...settings, postback_url: buildPostbackUrl(appUrl, settings.key) } };
+  return { postback_key: { ...settings, postback_url: buildPostbackUrl(appUrl, { postbackKey: settings.key }) } };
 }
 
 ops.get("/postback-key", async (c) => {

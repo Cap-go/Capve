@@ -60,8 +60,7 @@ export const SOURCE_TEMPLATES: SourceTemplate[] = [
     tokens: [
       { param: "zoneid", name: "Zone", slot: "sub1", macro: "${zoneid}", kind: "zone" },
       { param: "campaignid", name: "Campaign", slot: "sub2", macro: "${campaignid}", kind: "campaign" },
-      { param: "bannerid", name: "Creative", slot: "sub3", macro: "${bannerid}" },
-      { param: "geo", name: "Country", slot: "sub4", macro: "${geo}" },
+      { param: "country", name: "Country", slot: "sub4", macro: "${geo}" },
       { param: "cost", name: "Cost", slot: "cost", macro: "${cost}" },
       { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
     ],
@@ -177,6 +176,8 @@ export type NetworkTemplate = {
   click_macro: string;
   payout_macro: string;
   status_macro?: string;
+  /** false = ready-to-paste postbacks omit payout. YesPlay rejects `{payout}`. */
+  include_payout?: boolean;
   verified: boolean;
   notes?: string;
 };
@@ -243,6 +244,24 @@ export const NETWORK_TEMPLATES: NetworkTemplate[] = [
     notes: "Set one postback per event (registration, first deposit) in Affilka.",
   },
   {
+    id: "yesplay",
+    name: "YesPlay",
+    offer_param: "subid1",
+    click_macro: "${subid1}",
+    payout_macro: "${commission}",
+    include_payout: false,
+    verified: true,
+    notes: "YesPlay rejects {payout} with 400. Use only cnv_id and event by default.",
+  },
+  {
+    id: "tonybet",
+    name: "Tonybet",
+    offer_param: "clickid",
+    click_macro: "{clickid}",
+    payout_macro: "{payout}",
+    verified: false,
+  },
+  {
     id: "myaffiliates",
     name: "MyAffiliates (casino)",
     offer_param: "payload",
@@ -251,6 +270,31 @@ export const NETWORK_TEMPLATES: NetworkTemplate[] = [
     verified: false,
   },
 ];
+
+const PROPELLER_MACRO_FIX: Record<string, string> = {
+  "${ZONEID}": "${zoneid}",
+  "${CAMPAIGNID}": "${campaignid}",
+  "${BANNERID}": "${bannerid}",
+  "${GEO}": "${geo}",
+  "${COST}": "${cost}",
+};
+
+/**
+ * PropellerAds creatives must use
+ * `zoneid=${zoneid}&campaignid=${campaignid}&country=${geo}&cost=${cost}&clickid=${SUBID}`.
+ * Sources created before that correction stored uppercase macros, a `bannerid` token and
+ * `geo` as the country parameter. This rewrites only those link-template fields.
+ */
+export function normalizePropellerTokens(tokens: SourceToken[]): SourceToken[] {
+  const next: SourceToken[] = [];
+  for (const token of tokens) {
+    const macro = token.macro ? (PROPELLER_MACRO_FIX[token.macro] ?? token.macro) : token.macro;
+    if (token.param === "bannerid" && (macro === "${bannerid}" || token.macro === "${BANNERID}")) continue;
+    const param = token.param === "geo" && macro === "${geo}" ? "country" : token.param;
+    next.push(param === token.param && macro === token.macro ? token : { ...token, param, macro });
+  }
+  return next;
+}
 
 export function findSourceTemplate(id: string): SourceTemplate | undefined {
   return SOURCE_TEMPLATES.find((t) => t.id === id);
@@ -262,8 +306,10 @@ export function findNetworkTemplate(id: string): NetworkTemplate | undefined {
 
 /** Incoming postback URLs (default + one per event) using the network's macros. */
 export function networkPostbackUrls(appUrl: string, template: NetworkTemplate) {
-  const base = `${appUrl.replace(/\/$/, "")}/click?cnv_id=${template.click_macro}&payout=${template.payout_macro}`;
-  const url = template.status_macro ? `${base}&cnv_status=${template.status_macro}` : base;
+  const parts = [`cnv_id=${template.click_macro}`];
+  if (template.include_payout !== false) parts.push(`payout=${template.payout_macro}`);
+  if (template.status_macro) parts.push(`cnv_status=${template.status_macro}`);
+  const url = `${appUrl.replace(/\/$/, "")}/click?${parts.join("&")}`;
   return {
     default: url,
     registration: `${url}&event=registration`,
