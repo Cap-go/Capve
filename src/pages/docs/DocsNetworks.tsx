@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { CodeBlock } from "../../components/CodeBlock";
 import { appBaseUrl } from "../../lib/constants";
+import { NETWORK_TEMPLATES } from "../../../worker/lib/source-templates";
 
 /** Capve click ID value as it travels (blue in every illustration). */
 function Id({ children = "clk_8f2a91" }: { children?: string }) {
@@ -23,16 +24,6 @@ function Macro({ children }: { children: string }) {
 }
 
 /** Same rows as the built-in network templates (worker/lib/source-templates.ts). */
-const NETWORKS = [
-  { name: "Generic", field: "clickid", macro: "{clickid}", payout: "{payout}" },
-  { name: "TUNE / HasOffers", field: "aff_sub", macro: "{aff_sub}", payout: "{payout}" },
-  { name: "Everflow", field: "sub1", macro: "{sub1}", payout: "{payout_amount}" },
-  { name: "CAKE", field: "s2", macro: "#s2#", payout: "#price#" },
-  { name: "Affise", field: "sub1", macro: "{sub1}", payout: "{sum}" },
-  { name: "Cellxpert", field: "subid", macro: "{subid}", payout: "{commission}" },
-  { name: "Affilka / SOFTSWISS", field: "var", macro: "{var}", payout: "{commission}" },
-  { name: "MyAffiliates", field: "payload", macro: "{payload}", payout: "{amount}" },
-];
 
 export function DocsNetworks() {
   const base = appBaseUrl();
@@ -282,17 +273,17 @@ export function DocsNetworks() {
           </tr>
         </thead>
         <tbody>
-          {NETWORKS.map((n) => (
-            <tr key={n.name}>
+          {NETWORK_TEMPLATES.map((n) => (
+            <tr key={n.id}>
               <td>{n.name}</td>
               <td>
                 <code>
-                  {n.field}={"{click_id}"}
+                  {n.offer_param}={"{click_id}"}
                 </code>
               </td>
               <td>
                 <code>
-                  /click?cnv_id={n.macro}&amp;payout={n.payout}
+                  /click?cnv_id={n.click_macro}&amp;payout={n.payout_macro}
                 </code>
               </td>
             </tr>

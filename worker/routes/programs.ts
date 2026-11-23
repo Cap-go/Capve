@@ -23,6 +23,8 @@ import {
 import { canWrite, requireUser, requireWrite } from "../lib/access";
 import { ensurePostbackKey } from "../db/postback-key";
 import { campaignTrackingBaseUrl, getCampaignTrackingDomain } from "../db/tracking-domains";
+import { inferNetworkId } from "../lib/network-infer";
+import { findNetworkTemplate } from "../lib/source-templates";
 
 const programs = new Hono<{ Bindings: Env }>();
 
@@ -259,14 +261,49 @@ programs.get("/:id/tracking", async (c) => {
   // Campaign links use the campaign's custom tracking domain when one is set.
   const domain = await getCampaignTrackingDomain(c.env.DB, program.id);
   const base = domain ? `https://${domain.hostname}` : c.env.APP_URL;
+  const hints = await c.env.DB.prepare(
+    `SELECT o.url AS offer_url, NULL AS direct_url, n.name AS network_name
+     FROM rotations r
+     JOIN paths pth ON pth.rotation_id = r.id
+     JOIN path_offers po ON po.path_id = pth.id
+     JOIN offers o ON o.id = po.offer_id
+     LEFT JOIN affiliate_networks n ON n.id = o.network_id
+     WHERE r.program_id = ?
+     UNION ALL
+     SELECT o.url, NULL, n.name
+     FROM rotations r
+     JOIN paths pth ON pth.rotation_id = r.id
+     JOIN offers o ON o.id = pth.offer_id
+     LEFT JOIN affiliate_networks n ON n.id = o.network_id
+     WHERE r.program_id = ?
+     UNION ALL
+     SELECT NULL, pth.direct_url, NULL
+     FROM rotations r
+     JOIN paths pth ON pth.rotation_id = r.id
+     WHERE r.program_id = ? AND pth.direct_url IS NOT NULL`,
+  )
+    .bind(program.id, program.id, program.id)
+    .all<{ offer_url: string | null; direct_url: string | null; network_name: string | null }>();
+  const rows = hints.results ?? [];
+  const inferredNetwork = inferNetworkId({
+    destination: program.destination_url,
+    urls: rows.flatMap((row) => [row.offer_url, row.direct_url]),
+    names: [program.name, program.campaign_key, ...rows.map((row) => row.network_name)],
+  });
+  const network = inferredNetwork ? findNetworkTemplate(inferredNetwork) : undefined;
+
   return c.json({
     tracking: {
-      postback_url: buildPostbackUrl(base, showKey ? postbackKey.key : undefined),
+      postback_url: buildPostbackUrl(base, {
+        postbackKey: showKey ? postbackKey.key : undefined,
+        clickMacro: network?.click_macro,
+      }),
       postback_key_required: postbackKey.required,
       campaign_url: program.campaign_key ? buildCampaignUrl(base, program.campaign_key) : null,
       tracking_domain: domain ? { id: domain.id, hostname: domain.hostname } : null,
       offer_url_macro: "{click_id}",
       redirect_params: ["velo_ref", "click_id"],
+      inferred_network: inferredNetwork,
     },
   });
 });

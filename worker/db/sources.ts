@@ -1,5 +1,5 @@
 import { SUB_KEYS } from "../lib/click-context";
-import type { SourceToken } from "../lib/source-templates";
+import { normalizePropellerTokens, type SourceToken } from "../lib/source-templates";
 import { id } from "../lib/utils";
 
 export type SourceSettingsRow = {
@@ -28,7 +28,7 @@ export type SourceSettings = {
 export function parseTokenJson(raw: string | null | undefined): SourceToken[] {
   try {
     const value = JSON.parse(raw ?? "[]");
-    return Array.isArray(value) ? (value as SourceToken[]) : [];
+    return Array.isArray(value) ? normalizePropellerTokens(value as SourceToken[]) : [];
   } catch {
     return [];
   }
