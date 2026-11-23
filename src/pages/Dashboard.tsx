@@ -180,6 +180,7 @@ function DashboardContent({ page }: { page: DashboardView }) {
   const [creating, setCreating] = useState(false);
   const [reportRows, setReportRows] = useState<CampaignReportRow[] | null>(null);
   const [reportPeriod, setReportPeriod] = useState<{ from?: number | string; to?: number | string }>({});
+  const [reportsLoading, setReportsLoading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -222,22 +223,32 @@ function DashboardContent({ page }: { page: DashboardView }) {
   useEffect(() => {
     if (reportsLocked) {
       setReportRows(null);
+      setReportsLoading(false);
       return;
     }
     if (!user || inCampaign || page !== "campaigns") return;
     let cancelled = false;
+    setReportRows(null);
+    setReportsLoading(true);
     api
       .campaignReports({ from: reportPeriod.from, to: reportPeriod.to })
       .then(({ campaigns }) => {
-        if (!cancelled) setReportRows(campaigns);
+        if (!cancelled) {
+          setReportRows(campaigns);
+          setReportsLoading(false);
+        }
       })
-      .catch(() => {
-        if (!cancelled) setReportRows([]);
+      .catch((err) => {
+        console.error("Campaign reports failed:", err);
+        if (!cancelled) {
+          setReportRows([]);
+          setReportsLoading(false);
+        }
       });
     return () => {
       cancelled = true;
     };
-  }, [user, inCampaign, page, programs, reportsLocked, reportPeriod]);
+  }, [user, inCampaign, page, reportsLocked, reportPeriod]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -475,6 +486,7 @@ function DashboardContent({ page }: { page: DashboardView }) {
           reports={reportsLocked ? null : reportRows}
           sources={sources}
           loading={!programsLoaded}
+          reportsLoading={reportsLoading}
           canWrite={canWrite}
           creating={creating}
           onToggleCreate={() => setCreating((open) => !open)}

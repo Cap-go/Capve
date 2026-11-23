@@ -82,6 +82,7 @@ export function CampaignList({
   reports,
   sources,
   loading,
+  reportsLoading,
   canWrite,
   creating,
   onToggleCreate,
@@ -92,6 +93,7 @@ export function CampaignList({
   reports: CampaignReportRow[] | null;
   sources: TrafficSource[];
   loading: boolean;
+  reportsLoading: boolean;
   canWrite: boolean;
   creating: boolean;
   onToggleCreate: () => void;
@@ -309,21 +311,29 @@ export function CampaignList({
                   {visibleColumns.has("id") && <td className="mono">{program.id}</td>}
                   {visibleColumns.has("source") && <td>{source || "—"}</td>}
                   {visibleColumns.has("created") && <td className="mono">{formatCreated(program.created_at)}</td>}
-                  {visibleColumns.has("clicks") && <td className="num">{metrics ? metrics.clicks : "…"}</td>}
-                  {visibleColumns.has("registrations") && <td className="num">{metrics ? registrations : "…"}</td>}
-                  {visibleColumns.has("ftd") && <td className="num">{metrics ? ftd : "…"}</td>}
-                  {visibleColumns.has("conversions") && <td className="num">{metrics ? metrics.leads : "…"}</td>}
+                  {visibleColumns.has("clicks") && (
+                    <td className="num">{reportsLoading ? "…" : metrics ? metrics.clicks : "—"}</td>
+                  )}
+                  {visibleColumns.has("registrations") && (
+                    <td className="num">{reportsLoading ? "…" : metrics ? registrations : "—"}</td>
+                  )}
+                  {visibleColumns.has("ftd") && (
+                    <td className="num">{reportsLoading ? "…" : metrics ? ftd : "—"}</td>
+                  )}
+                  {visibleColumns.has("conversions") && (
+                    <td className="num">{reportsLoading ? "…" : metrics ? metrics.leads : "—"}</td>
+                  )}
                   {visibleColumns.has("revenue") && (
-                    <td className="num">{metrics ? formatMoney(metrics.revenue_cents, currency) : "…"}</td>
+                    <td className="num">{reportsLoading ? "…" : metrics ? formatMoney(metrics.revenue_cents, currency) : "—"}</td>
                   )}
                   {visibleColumns.has("cost") && (
-                    <td className="num">{metrics ? formatMoney(metrics.cost_cents, currency) : "…"}</td>
+                    <td className="num">{reportsLoading ? "…" : metrics ? formatMoney(metrics.cost_cents, currency) : "—"}</td>
                   )}
                   {visibleColumns.has("profit") && (
-                    <td className="num">{metrics ? formatMoney(metrics.profit_cents, currency) : "…"}</td>
+                    <td className="num">{reportsLoading ? "…" : metrics ? formatMoney(metrics.profit_cents, currency) : "—"}</td>
                   )}
                   {visibleColumns.has("roi") && (
-                    <td className="num">{metrics ? (metrics.roi == null ? "n/a" : formatPercent(metrics.roi)) : "…"}</td>
+                    <td className="num">{reportsLoading ? "…" : metrics ? (metrics.roi == null ? "n/a" : formatPercent(metrics.roi)) : "—"}</td>
                   )}
                 </tr>
               );
