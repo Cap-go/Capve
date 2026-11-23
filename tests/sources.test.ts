@@ -462,6 +462,20 @@ describe("traffic source templates, tokens and cost", () => {
       .bind(spacedCountryTokens, spacedCountry.id)
       .run();
 
+    const { traffic_source: noMacro } = await api<{ traffic_source: { id: string } }>(
+      "POST",
+      "/api/sources/from-template",
+      { template_id: "propellerads", name: "PropellerAds no macro" },
+      201,
+    );
+    const noMacroTokens = JSON.stringify([
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${zoneid}", kind: "zone" },
+      { param: "os", name: "OS", slot: "sub5" },
+    ]);
+    await env.DB.prepare("UPDATE traffic_source_settings SET tokens = ? WHERE traffic_source_id = ?")
+      .bind(noMacroTokens, noMacro.id)
+      .run();
+
     const { source: adcash } = await adcashCampaign();
     const adcashTokens = JSON.stringify([
       { param: "zoneid", name: "Zone", slot: "sub1", macro: "${ZONEID}", kind: "zone" },
@@ -545,6 +559,15 @@ describe("traffic source templates, tokens and cost", () => {
     expect(spacedStored).toEqual([
       { param: "Country", name: "Country", slot: "sub9", macro: "{country}" },
     ]);
+
+    const noMacroStored = JSON.parse((await settingsRow(noMacro.id))!.tokens) as Array<{
+      param: string;
+      name: string;
+      macro?: string;
+    }>;
+    expect(noMacroStored.map((token) => token.param)).toEqual(["zoneid", "os"]);
+    expect(noMacroStored[0]?.macro).toBe("{zone_id}");
+    expect(noMacroStored[1]?.macro).toBeUndefined();
 
     const cleanedLast = (await settingsRow(bannerLast.id))!;
     expect(JSON.parse(cleanedLast.tokens).map((token: { param: string }) => token.param)).toEqual([

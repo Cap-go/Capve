@@ -32,7 +32,7 @@ SET tokens = (
     END
   ), '[]')
   FROM json_each(traffic_source_settings.tokens) AS j
-  WHERE NOT (
+  WHERE NOT COALESCE(
     (
       lower(json_extract(j.value, '$.param')) = 'bannerid'
       AND lower(json_extract(j.value, '$.macro')) = '${bannerid}'
@@ -45,7 +45,8 @@ SET tokens = (
         FROM json_each(traffic_source_settings.tokens) AS other
         WHERE lower(json_extract(other.value, '$.param')) = 'country'
       )
-    )
+    ),
+    0
   )
 )
 WHERE template = 'propellerads'
