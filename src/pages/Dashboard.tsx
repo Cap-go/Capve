@@ -48,6 +48,7 @@ import {
   type ProgramTracking,
   type TrafficSource,
 } from "../lib/api";
+import { sourcesApi, type SourceLink } from "../lib/sources-api";
 import { useAuth } from "../lib/auth";
 import { appBaseUrl } from "../lib/constants";
 import { eventLabel, eventName, sortEvents } from "../lib/events";
@@ -582,21 +583,34 @@ function OverviewPanel({
   onDelete: () => void;
 }) {
   const [affiliates, setAffiliates] = useState<Affiliate[] | null>(null);
+  const [sourceLink, setSourceLink] = useState<SourceLink | null>(null);
   useEffect(() => {
     if (section !== "tracking") return;
     let cancelled = false;
     setAffiliates(null);
+    setSourceLink(null);
     api.affiliates(selectedId)
       .then(({ affiliates: items }) => { if (!cancelled) setAffiliates(items); })
       .catch((error) => { if (!cancelled) onError(error instanceof Error ? error.message : "Could not load affiliates"); });
+    sourcesApi.sourceLink(selectedId)
+      .then((link) => { if (!cancelled) setSourceLink(link); })
+      .catch(() => { if (!cancelled) setSourceLink(null); });
     return () => { cancelled = true; };
   }, [selectedId, section, lastLink, onError]);
+  const handleTrackingChanged = () => {
+    onTrackingChanged();
+    sourcesApi
+      .sourceLink(selectedId)
+      .then((link) => setSourceLink(link))
+      .catch(() => setSourceLink(null));
+  };
   const affiliateRows = affiliates ?? visibleStats?.affiliates ?? [];
   const affiliateMetrics = new Map(visibleStats?.affiliates.map((affiliate) => [affiliate.id, affiliate]));
   const base = appBaseUrl();
   const origin = trackingOrigin(tracking);
   const eventNames = sortEvents(Object.keys(visibleStats?.totals.events ?? {}));
   const save = useSaveState();
+  const trafficSourceName = sources.find((s) => s.id === selectedProgram.traffic_source_id)?.name;
   const statusSave = useSaveState();
   const [draft, setDraft] = useState({
     name: selectedProgram.name,
@@ -878,22 +892,21 @@ function OverviewPanel({
               campaignId={selectedId}
               currentId={tracking.tracking_domain?.id ?? null}
               canWrite={canWrite}
-              onChanged={onTrackingChanged}
+              onChanged={handleTrackingChanged}
             />
+            <h3 className="text-sm font-semibold">Postback URL for affiliate network</h3>
             <p className="text-sm text-[var(--velo-muted)]">
-              Incoming postback URL (configure in affiliate network). Without{" "}
-              <span className="mono">cnv_status</span> a conversion is recorded as{" "}
-              <span className="mono">lead</span>; send <span className="mono">approved</span>,{" "}
-              <span className="mono">rejected</span>, … to set or update it.
+              Configure this URL in your affiliate network (e.g. YesPlay, Affilka) to receive conversions.{" "}
+              <span className="mono">payout</span> and <span className="mono">cnv_status</span> are optional; without{" "}
+              <span className="mono">cnv_status</span> a conversion is recorded as <span className="mono">lead</span>.
             </p>
             <CodeBlock>{tracking.postback_url}</CodeBlock>
-            {canWrite ? <PostbackKeyControls onChange={onTrackingChanged} /> : null}
+            {canWrite ? <PostbackKeyControls onChange={handleTrackingChanged} /> : null}
             <p className="text-sm text-[var(--velo-muted)]">
-              In the network, replace <span className="mono">{"{click_id}"}</span>,{" "}
-              <span className="mono">{"{payout}"}</span> and <span className="mono">{"{status}"}</span>{" "}
-              with the network&apos;s own macros (e.g. <span className="mono">{"cnv_id={aff_sub}"}</span>
-              ). That replacement is for this incoming URL. The Adcash pixel, on the traffic source,
-              is <span className="mono">cid={"{external_id}"}</span>.{" "}
+              In the network, replace <span className="mono">{"{click_id}"}</span> with the network&apos;s click ID macro
+              (e.g. <span className="mono">{"cnv_id={aff_sub}"}</span>), and{" "}
+              <span className="mono">{"{payout}"}</span> / <span className="mono">{"{status}"}</span> with the
+              network&apos;s macros if available (or omit them).{" "}
               <Link className="underline" to="/docs/networks">
                 Cheat sheet per network
               </Link>
@@ -906,10 +919,24 @@ function OverviewPanel({
             <CodeBlock label="FTD postback">{`${tracking.postback_url}&event=ftd`}</CodeBlock>
             {tracking.campaign_url && (
               <>
+                <h3 className="mt-4 text-sm font-semibold">Ad creative link for traffic source</h3>
                 <p className="text-sm text-[var(--velo-muted)]">
                   Campaign click URL (clicks are counted under "Campaign traffic"):
                 </p>
                 <CodeBlock>{tracking.campaign_url}</CodeBlock>
+                {sourceLink?.tracking_url && sourceLink.tracking_url !== tracking.campaign_url && (
+                  <>
+                    <p className="text-sm text-[var(--velo-muted)]">
+                      <strong>Paste this into {trafficSourceName || "your traffic source"}</strong> (e.g. Adcash, PropellerAds creative):
+                    </p>
+                    <CodeBlock>{sourceLink.tracking_url}</CodeBlock>
+                  </>
+                )}
+                {sourceLink && sourceLink.traffic_source_id && !sourceLink.tokens.some((token) => token.macro) && (
+                  <p className="text-sm text-[var(--velo-muted)]">
+                    The traffic source has no macros configured. Use the campaign click URL above in your creative.
+                  </p>
+                )}
               </>
             )}
             <p className="text-sm text-[var(--velo-muted)]">Attribution snippet for your merchant site:</p>

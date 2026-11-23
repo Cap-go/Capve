@@ -6,6 +6,7 @@ import {
 } from "../db/entities";
 import { createPostback } from "../db/postbacks";
 import { getProgram } from "../db/queries";
+import { getCampaignTrackingDomain } from "../db/tracking-domains";
 import {
   COST_FILTER_DIMS,
   applyCostUpdate,
@@ -191,8 +192,11 @@ campaignCosts.get("/:id/source-link", async (c) => {
   const tokens = program.traffic_source_id
     ? await getSourceTokens(c.env.DB, program.traffic_source_id)
     : [];
+  // Campaign links use the campaign's custom tracking domain when one is set.
+  const domain = await getCampaignTrackingDomain(c.env.DB, program.id);
+  const base = domain ? `https://${domain.hostname}` : c.env.APP_URL;
   const campaignUrl = program.campaign_key
-    ? buildCampaignUrl(c.env.APP_URL, program.campaign_key)
+    ? buildCampaignUrl(base, program.campaign_key)
     : null;
   return c.json({
     traffic_source_id: program.traffic_source_id,

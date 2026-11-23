@@ -58,11 +58,11 @@ export const SOURCE_TEMPLATES: SourceTemplate[] = [
     name: "PropellerAds",
     cost_type: "cpm",
     tokens: [
-      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${ZONEID}", kind: "zone" },
-      { param: "campaignid", name: "Campaign", slot: "sub2", macro: "${CAMPAIGNID}", kind: "campaign" },
-      { param: "bannerid", name: "Creative", slot: "sub3", macro: "${BANNERID}" },
-      { param: "geo", name: "Country", slot: "sub4", macro: "${GEO}" },
-      { param: "cost", name: "Cost", slot: "cost", macro: "${COST}" },
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${zoneid}", kind: "zone" },
+      { param: "campaignid", name: "Campaign", slot: "sub2", macro: "${campaignid}", kind: "campaign" },
+      { param: "bannerid", name: "Creative", slot: "sub3", macro: "${bannerid}" },
+      { param: "geo", name: "Country", slot: "sub4", macro: "${geo}" },
+      { param: "cost", name: "Cost", slot: "cost", macro: "${cost}" },
       { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
     ],
     postback_url:
