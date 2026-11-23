@@ -15,24 +15,30 @@ function matchRules(value: string | null | undefined): string | null {
   return null;
 }
 
+function collect(values: Array<string | null | undefined> | undefined): Set<string> {
+  const ids = new Set<string>();
+  for (const value of values ?? []) {
+    const id = matchRules(value);
+    if (id) ids.add(id);
+  }
+  return ids;
+}
+
 /**
  * Picks the affiliate network for a campaign's postback macros.
- * Destination and offer URLs win over names, so a YesPlay offer is not hidden by the campaign title.
+ * Returns null when nothing matches, or when the destination, offers and names
+ * point at more than one network. The tracking page then leaves the choice manual.
  */
 export function inferNetworkId(input: {
   destination?: string | null;
   urls?: Array<string | null | undefined>;
   names?: Array<string | null | undefined>;
 }): string | null {
-  const fromDestination = matchRules(input.destination);
-  if (fromDestination) return fromDestination;
-  for (const url of input.urls ?? []) {
-    const match = matchRules(url);
-    if (match) return match;
-  }
-  for (const name of input.names ?? []) {
-    const match = matchRules(name);
-    if (match) return match;
-  }
-  return null;
+  const ids = new Set<string>();
+  const destination = matchRules(input.destination);
+  if (destination) ids.add(destination);
+  for (const id of collect(input.urls)) ids.add(id);
+  for (const id of collect(input.names)) ids.add(id);
+  if (ids.size !== 1) return null;
+  return [...ids][0] ?? null;
 }

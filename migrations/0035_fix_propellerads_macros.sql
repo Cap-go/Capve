@@ -22,6 +22,7 @@ WHERE template = 'propellerads'
     OR instr(tokens, '${COST}') > 0
   );
 
+-- bannerid is not always followed by a comma: drop it in the middle, at the end, or alone.
 UPDATE traffic_source_settings
 SET tokens = replace(
   tokens,
@@ -29,7 +30,21 @@ SET tokens = replace(
   ''
 )
 WHERE template = 'propellerads'
-  AND instr(tokens, '{"param":"bannerid","name":"Creative","slot":"sub3","macro":"${bannerid}"}') > 0;
+  AND instr(tokens, '{"param":"bannerid","name":"Creative","slot":"sub3","macro":"${bannerid}"},') > 0;
+
+UPDATE traffic_source_settings
+SET tokens = replace(
+  tokens,
+  ',{"param":"bannerid","name":"Creative","slot":"sub3","macro":"${bannerid}"}',
+  ''
+)
+WHERE template = 'propellerads'
+  AND instr(tokens, ',{"param":"bannerid","name":"Creative","slot":"sub3","macro":"${bannerid}"}') > 0;
+
+UPDATE traffic_source_settings
+SET tokens = '[]'
+WHERE template = 'propellerads'
+  AND tokens = '[{"param":"bannerid","name":"Creative","slot":"sub3","macro":"${bannerid}"}]';
 
 UPDATE traffic_source_settings
 SET tokens = replace(tokens, '"param":"geo","name":"Country"', '"param":"country","name":"Country"')

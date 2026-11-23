@@ -115,6 +115,8 @@ describe("Postback link builder", () => {
     const { tracking } = await trackingRes.json<{ tracking: ProgramTracking }>();
     
     expect(tracking.inferred_network).toBe("tonybet");
+    expect(tracking.postback_url).toContain("cnv_id={clickid}");
+    expect(tracking.postback_url).not.toContain("payout=");
   });
 
   it("does not infer network for other destinations", async () => {
@@ -138,5 +140,80 @@ describe("Postback link builder", () => {
     const { tracking } = await trackingRes.json<{ tracking: ProgramTracking }>();
     
     expect(tracking.inferred_network).toBeNull();
+    expect(tracking.postback_url).toContain("cnv_id={click_id}");
+    expect(tracking.postback_url).not.toContain("payout=");
+    expect(tracking.postback_url).not.toContain("cnv_status=");
+  });
+
+  it("does not infer a network from a disabled path", async () => {
+    const { authHeaders } = await registerTestUser("disabled-path@test.local");
+    const programRes = await SELF.fetch("http://localhost/api/programs", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ name: "Paused offer", destination_url: "https://merchant.example.com/paused" }),
+    });
+    const { program } = await programRes.json<{ program: Program }>();
+    const offerRes = await SELF.fetch("http://localhost/api/entities/offers", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({
+        name: "Paused YesPlay",
+        url: "https://goyesplay.com/paused?subid1={click_id}",
+        payout_cents: 0,
+      }),
+    });
+    const { offer } = await offerRes.json<{ offer: { id: string } }>();
+    const pathRes = await SELF.fetch(`http://localhost/api/programs/${program.id}/paths`, {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ name: "Paused", flow_type: "offer", offer_id: offer.id }),
+    });
+    expect(pathRes.status).toBe(201);
+    const { path } = await pathRes.json<{ path: { id: string } }>();
+    const off = await SELF.fetch(`http://localhost/api/programs/${program.id}/paths/${path.id}`, {
+      method: "PATCH",
+      headers: authHeaders,
+      body: JSON.stringify({ enabled: false }),
+    });
+    expect(off.status).toBe(200);
+    const trackingRes = await SELF.fetch(`http://localhost/api/programs/${program.id}/tracking`, {
+      headers: authHeaders,
+    });
+    const { tracking } = await trackingRes.json<{ tracking: ProgramTracking }>();
+    expect(tracking.inferred_network).toBeNull();
+    expect(tracking.postback_url).toContain("cnv_id={click_id}");
+  });
+
+  it("leaves the network unset when offers disagree", async () => {
+    const { authHeaders } = await registerTestUser("split-networks@test.local");
+    const programRes = await SELF.fetch("http://localhost/api/programs", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ name: "Split casino", destination_url: "https://merchant.example.com/split" }),
+    });
+    const { program } = await programRes.json<{ program: Program }>();
+    for (const offer of [
+      { name: "YesPlay offer", url: "https://goyesplay.com/a?subid1={click_id}" },
+      { name: "Tonybet offer", url: "https://tonybet.com/b?clickid={click_id}" },
+    ]) {
+      const offerRes = await SELF.fetch("http://localhost/api/entities/offers", {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify({ ...offer, payout_cents: 0 }),
+      });
+      const { offer: created } = await offerRes.json<{ offer: { id: string } }>();
+      const pathRes = await SELF.fetch(`http://localhost/api/programs/${program.id}/paths`, {
+        method: "POST",
+        headers: authHeaders,
+        body: JSON.stringify({ name: offer.name, flow_type: "offer", offer_id: created.id }),
+      });
+      expect(pathRes.status).toBe(201);
+    }
+    const trackingRes = await SELF.fetch(`http://localhost/api/programs/${program.id}/tracking`, {
+      headers: authHeaders,
+    });
+    const { tracking } = await trackingRes.json<{ tracking: ProgramTracking }>();
+    expect(tracking.inferred_network).toBeNull();
+    expect(tracking.postback_url).toContain("cnv_id={click_id}");
   });
 });

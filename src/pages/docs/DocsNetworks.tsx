@@ -283,7 +283,8 @@ export function DocsNetworks() {
               </td>
               <td>
                 <code>
-                  /click?cnv_id={n.click_macro}&amp;payout={n.payout_macro}
+                  /click?cnv_id={n.click_macro}
+                  {n.include_payout === false ? "" : <>&amp;payout={n.payout_macro}</>}
                 </code>
               </td>
             </tr>

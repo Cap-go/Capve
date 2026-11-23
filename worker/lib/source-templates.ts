@@ -176,6 +176,8 @@ export type NetworkTemplate = {
   click_macro: string;
   payout_macro: string;
   status_macro?: string;
+  /** false = ready-to-paste postbacks omit payout. YesPlay rejects `{payout}`. */
+  include_payout?: boolean;
   verified: boolean;
   notes?: string;
 };
@@ -247,6 +249,7 @@ export const NETWORK_TEMPLATES: NetworkTemplate[] = [
     offer_param: "subid1",
     click_macro: "${subid1}",
     payout_macro: "${commission}",
+    include_payout: false,
     verified: true,
     notes: "YesPlay rejects {payout} with 400. Use only cnv_id and event by default.",
   },
@@ -283,10 +286,6 @@ const PROPELLER_MACRO_FIX: Record<string, string> = {
  * `geo` as the country parameter. This rewrites only those link-template fields.
  */
 export function normalizePropellerTokens(tokens: SourceToken[]): SourceToken[] {
-  const propeller =
-    tokens.some((token) => token.macro === "${SUBID}" || token.macro === "${ZONEID}") &&
-    tokens.some((token) => token.param === "zoneid" || token.macro === "${ZONEID}" || token.macro === "${zoneid}");
-  if (!propeller) return tokens;
   const next: SourceToken[] = [];
   for (const token of tokens) {
     const macro = token.macro ? (PROPELLER_MACRO_FIX[token.macro] ?? token.macro) : token.macro;
@@ -307,8 +306,10 @@ export function findNetworkTemplate(id: string): NetworkTemplate | undefined {
 
 /** Incoming postback URLs (default + one per event) using the network's macros. */
 export function networkPostbackUrls(appUrl: string, template: NetworkTemplate) {
-  const base = `${appUrl.replace(/\/$/, "")}/click?cnv_id=${template.click_macro}&payout=${template.payout_macro}`;
-  const url = template.status_macro ? `${base}&cnv_status=${template.status_macro}` : base;
+  const parts = [`cnv_id=${template.click_macro}`];
+  if (template.include_payout !== false) parts.push(`payout=${template.payout_macro}`);
+  if (template.status_macro) parts.push(`cnv_status=${template.status_macro}`);
+  const url = `${appUrl.replace(/\/$/, "")}/click?${parts.join("&")}`;
   return {
     default: url,
     registration: `${url}&event=registration`,
