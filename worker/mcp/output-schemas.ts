@@ -467,7 +467,7 @@ const contracts: Record<string, Schema> = {
       postback_url: describe(nullableText, "Single all-events postback, or null when the preset uses per-event postbacks."),
       postbacks: array(object({
         event: describe(nullableText, "Conversion event that fires this postback, or null for every event."),
-        url: describe(text, "Outgoing postback URL. Replace YOUR_KEY before use."),
+        url: describe(text, "Outgoing postback URL with placeholders such as YOUR_KEY or YOUR_ID to replace before use."),
       }, ["event", "url"]), "Postbacks created with the source. One all-events URL, or one URL per event."),
       cost_api: describe(nullableText, "Cost API pre-selected for this preset, or null when none exists."),
       verified: describe(boolean, "Whether this preset is marked verified in the built-in catalog."),

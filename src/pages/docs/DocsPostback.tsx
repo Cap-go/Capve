@@ -167,10 +167,10 @@ export function DocsPostback() {
         {`https://your-source.com/postback?click={external_id}&payout={payout}&goal={event}`}
       </CodeBlock>
       <CodeBlock label="Adcash registration postback">
-        {`https://www.adcash.com/script/register_event.php?key=YOUR_REGISTRATION_KEY&cid={external_id}`}
+        {`https://www.adcash.com/script/register_event.php?key=YOUR_KEY&cid={external_id}`}
       </CodeBlock>
       <CodeBlock label="Adcash FTD postback">
-        {`https://www.adcash.com/script/register_event.php?key=YOUR_FTD_KEY&cid={external_id}`}
+        {`https://www.adcash.com/script/register_event.php?key=YOUR_KEY&cid={external_id}`}
       </CodeBlock>
       <p>
         The Adcash template creates both, one conversion key per event, and leaves payout off.
