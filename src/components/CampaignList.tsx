@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { formatMoney, formatPercent, type CampaignReportRow, type Program, type TrafficSource } from "../lib/api";
 import { campaignHref } from "../lib/campaign-route";
-import { PeriodSelector, rangeFor, storedCampaignPreset, type Preset, type PeriodRange } from "./PeriodSelector";
+import {
+  PeriodSelector,
+  rangeFor,
+  rememberCampaignPeriod,
+  storedCampaignCustom,
+  storedCampaignPreset,
+  type Preset,
+  type PeriodRange,
+} from "./PeriodSelector";
 
 const PAGE_SIZES = [25, 50, 100];
 
@@ -105,19 +113,15 @@ export function CampaignList({
   const [pageSize, setPageSize] = useState(25);
   const [page, setPage] = useState(0);
   const [preset, setPreset] = useState<Preset>(storedCampaignPreset);
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const [customFrom, setCustomFrom] = useState(() => storedCampaignCustom().from);
+  const [customTo, setCustomTo] = useState(() => storedCampaignCustom().to);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(loadColumnVisibility);
   const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
 
   useEffect(() => {
-    const range = rangeFor(preset, { from: customFrom, to: customTo });
-    onPeriodChange(range);
-    try {
-      localStorage.setItem("capve_campaigns_period", preset);
-    } catch {
-      // ignore
-    }
+    const custom = { from: customFrom, to: customTo };
+    onPeriodChange(rangeFor(preset, custom));
+    rememberCampaignPeriod(preset, custom);
   }, [preset, customFrom, customTo, onPeriodChange]);
 
   function handlePeriodChange(newPreset: Preset, newFrom: string, newTo: string) {

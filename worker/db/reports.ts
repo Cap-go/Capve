@@ -457,6 +457,7 @@ export function groupedConvertedQuery(
            WHERE cv.click_id IS NOT NULL
              AND ${approvedStatusSql("cv")}
              AND ${where.sql}${campaignSql}
+             AND cv.program_id = cf.program_id
              AND cf.program_id = ?${clickTime.sql}
            GROUP BY cv.click_id
          )

@@ -237,6 +237,7 @@ describe("campaign stats loading", () => {
       program.id,
     );
     expect(converted.sql).toContain("JOIN clicks cf ON cf.id = cv.click_id");
+    expect(converted.sql).toContain("cv.program_id = cf.program_id");
     expect(converted.sql).not.toContain("FROM clicks c");
     const convertedPlan = await env.DB.prepare(`EXPLAIN QUERY PLAN ${converted.sql}`)
       .bind(...converted.binds)

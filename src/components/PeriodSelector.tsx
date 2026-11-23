@@ -34,11 +34,14 @@ function isoLocal(ms: number): string {
 }
 
 const PRESET_VALUES = new Set<string>(PRESETS.map((preset) => preset.value));
+const PERIOD_KEY = "capve_campaigns_period";
+const FROM_KEY = "capve_campaigns_from";
+const TO_KEY = "capve_campaigns_to";
 
 /** Period last chosen on the campaigns list. Shared so the first stats request uses it. */
 export function storedCampaignPreset(): Preset {
   try {
-    const stored = localStorage.getItem("capve_campaigns_period");
+    const stored = localStorage.getItem(PERIOD_KEY);
     if (stored && PRESET_VALUES.has(stored)) return stored as Preset;
   } catch {
     // private mode
@@ -46,8 +49,29 @@ export function storedCampaignPreset(): Preset {
   return "all_time";
 }
 
+export function storedCampaignCustom(): { from: string; to: string } {
+  try {
+    return {
+      from: localStorage.getItem(FROM_KEY) ?? "",
+      to: localStorage.getItem(TO_KEY) ?? "",
+    };
+  } catch {
+    return { from: "", to: "" };
+  }
+}
+
 export function initialCampaignRange(now = new Date()): PeriodRange {
-  return rangeFor(storedCampaignPreset(), { from: "", to: "" }, now);
+  return rangeFor(storedCampaignPreset(), storedCampaignCustom(), now);
+}
+
+export function rememberCampaignPeriod(preset: Preset, custom: { from: string; to: string }) {
+  try {
+    localStorage.setItem(PERIOD_KEY, preset);
+    localStorage.setItem(FROM_KEY, custom.from);
+    localStorage.setItem(TO_KEY, custom.to);
+  } catch {
+    // private mode
+  }
 }
 
 export function rangeFor(preset: Preset, custom: { from: string; to: string }, now = new Date()): PeriodRange {
