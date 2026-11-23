@@ -30,6 +30,7 @@ import {
   findSourceTemplate,
   networkPostbackUrls,
   parseTokens,
+  propellerTokenConflict,
   tokenLabels,
   trackingUrlWithMacros,
 } from "../lib/source-templates";
@@ -137,6 +138,11 @@ sources.put("/:id/settings", async (c) => {
   if (body.tokens !== undefined) {
     const tokens = parseTokens(body.tokens);
     if (typeof tokens === "string") return c.json({ error: tokens }, 400);
+    const existing = await getSourceSettingsRow(c.env.DB, sourceId);
+    if (existing?.template === "propellerads") {
+      const conflict = propellerTokenConflict(tokens);
+      if (conflict) return c.json({ error: conflict }, 400);
+    }
     patch.tokens = tokens;
   }
   if (body.api_provider !== undefined) {

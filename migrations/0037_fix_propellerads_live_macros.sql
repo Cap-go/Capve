@@ -1,41 +1,54 @@
 -- Rewrite stored PropellerAds tracking macros to the tokens the live campaign UI inserts.
 -- Only traffic_source_settings.tokens on rows whose template is propellerads.
--- ${zoneid} / ${ZONEID} -> {zone_id}
--- ${campaignid} / ${CAMPAIGNID} -> {campaign_id}
--- ${geo} / ${GEO} -> {country}
--- ${cost} / ${COST} -> {cost}
--- Renames the template country parameter from geo to country when that macro is the country token.
+-- Legacy macros match in any letter case: ${zoneid}, ${campaignid}, ${geo}, ${cost}.
+-- A geo parameter is renamed to country when its macro is the country token, whatever the label is.
+-- If the row already has a country parameter, that legacy geo token is dropped instead of duplicated.
 -- ${SUBID} is unchanged. No other columns are written.
 
 UPDATE traffic_source_settings
-SET tokens = replace(replace(replace(replace(replace(replace(replace(replace(
-      tokens,
-      '${ZONEID}', '{zone_id}'),
-      '${zoneid}', '{zone_id}'),
-      '${CAMPAIGNID}', '{campaign_id}'),
-      '${campaignid}', '{campaign_id}'),
-      '${GEO}', '{country}'),
-      '${geo}', '{country}'),
-      '${COST}', '{cost}'),
-      '${cost}', '{cost}')
+SET tokens = (
+  SELECT json_group_array(
+    CASE
+      WHEN json_type(j.value, '$.macro') IS NULL THEN json(j.value)
+      ELSE json_set(
+        json(j.value),
+        '$.macro',
+        CASE lower(json_extract(j.value, '$.macro'))
+          WHEN '${zoneid}' THEN '{zone_id}'
+          WHEN '${campaignid}' THEN '{campaign_id}'
+          WHEN '${geo}' THEN '{country}'
+          WHEN '${cost}' THEN '{cost}'
+          ELSE json_extract(j.value, '$.macro')
+        END,
+        '$.param',
+        CASE
+          WHEN lower(json_extract(j.value, '$.param')) = 'geo'
+           AND lower(json_extract(j.value, '$.macro')) IN ('${geo}', '{country}')
+          THEN 'country'
+          ELSE json_extract(j.value, '$.param')
+        END
+      )
+    END
+  )
+  FROM json_each(traffic_source_settings.tokens) AS j
+  WHERE NOT (
+    lower(json_extract(j.value, '$.param')) = 'geo'
+    AND lower(json_extract(j.value, '$.macro')) IN ('${geo}', '{country}')
+    AND EXISTS (
+      SELECT 1
+      FROM json_each(traffic_source_settings.tokens) AS other
+      WHERE lower(json_extract(other.value, '$.param')) = 'country'
+    )
+  )
+)
 WHERE template = 'propellerads'
   AND (
-    instr(tokens, '${ZONEID}') > 0
-    OR instr(tokens, '${zoneid}') > 0
-    OR instr(tokens, '${CAMPAIGNID}') > 0
-    OR instr(tokens, '${campaignid}') > 0
-    OR instr(tokens, '${GEO}') > 0
-    OR instr(tokens, '${geo}') > 0
-    OR instr(tokens, '${COST}') > 0
-    OR instr(tokens, '${cost}') > 0
-  );
-
-UPDATE traffic_source_settings
-SET tokens = replace(tokens, '"param":"geo","name":"Country"', '"param":"country","name":"Country"')
-WHERE template = 'propellerads'
-  AND instr(tokens, '"param":"geo","name":"Country"') > 0
-  AND (
-    instr(tokens, '"macro":"{country}"') > 0
-    OR instr(tokens, '"macro":"${geo}"') > 0
-    OR instr(tokens, '"macro":"${GEO}"') > 0
+    instr(lower(tokens), '${zoneid}') > 0
+    OR instr(lower(tokens), '${campaignid}') > 0
+    OR instr(lower(tokens), '${geo}') > 0
+    OR instr(lower(tokens), '${cost}') > 0
+    OR (
+      instr(lower(tokens), '"param":"geo"') > 0
+      AND instr(lower(tokens), '"macro":"{country}"') > 0
+    )
   );

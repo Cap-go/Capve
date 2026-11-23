@@ -271,39 +271,76 @@ export const NETWORK_TEMPLATES: NetworkTemplate[] = [
   },
 ];
 
+/** Legacy macros, keyed by their lower-case form. Click id `${SUBID}` is not in this map. */
 const PROPELLER_MACRO_FIX: Record<string, string> = {
-  "${ZONEID}": "{zone_id}",
   "${zoneid}": "{zone_id}",
-  "${CAMPAIGNID}": "{campaign_id}",
   "${campaignid}": "{campaign_id}",
-  "${GEO}": "{country}",
   "${geo}": "{country}",
-  "${COST}": "{cost}",
   "${cost}": "{cost}",
-  "${BANNERID}": "${bannerid}",
+  "${bannerid}": "${bannerid}",
 };
 
-/** Country macros PropellerAds actually replaces, plus the old `${geo}` forms. */
-const PROPELLER_COUNTRY_MACROS = new Set(["${GEO}", "${geo}", "{country}"]);
+function canonicalPropellerMacro(macro: string | undefined): string | undefined {
+  if (!macro) return macro;
+  return PROPELLER_MACRO_FIX[macro.toLowerCase()] ?? macro;
+}
+
+function isPropellerCountryMacro(macro: string | undefined): boolean {
+  if (!macro) return false;
+  const lower = macro.toLowerCase();
+  return lower === "${geo}" || lower === "{country}";
+}
+
+type RewrittenPropellerToken = { token: SourceToken; renamedFromGeo: boolean };
+
+function rewritePropellerToken(token: SourceToken): RewrittenPropellerToken | null {
+  const macro = canonicalPropellerMacro(token.macro);
+  if (token.param.toLowerCase() === "bannerid" && macro?.toLowerCase() === "${bannerid}") return null;
+  const renamedFromGeo = token.param.toLowerCase() === "geo" && isPropellerCountryMacro(token.macro);
+  const param = renamedFromGeo ? "country" : token.param;
+  const next = param === token.param && macro === token.macro ? token : { ...token, param, macro };
+  return { token: next, renamedFromGeo };
+}
 
 /**
  * PropellerAds creatives must use
  * `zoneid={zone_id}&campaignid={campaign_id}&country={country}&cost={cost}&clickid=${SUBID}`.
- * Click ID is the only `$` macro (`${SUBID}`). Older presets stored `${zoneid}` / `${ZONEID}`,
- * `${campaignid}` / `${CAMPAIGNID}`, `${geo}` / `${GEO}` and `${cost}` / `${COST}`, which
- * PropellerAds leaves unreplaced. This rewrites only those macros, drops the old `bannerid`
- * token and renames the country parameter from `geo` to `country`. Other tokens stay as stored.
+ * Click ID is the only `$` macro (`${SUBID}`). Older presets stored `${zoneid}`, `${campaignid}`,
+ * `${geo}` and `${cost}` in any letter case, which PropellerAds leaves unreplaced. This rewrites
+ * only those macros, drops the old `bannerid` token and renames a `geo` country parameter to
+ * `country`. When that rename would duplicate an existing `country` param, the pre-existing
+ * country token is kept. Other tokens stay as stored.
  */
 export function normalizePropellerTokens(tokens: SourceToken[]): SourceToken[] {
-  const next: SourceToken[] = [];
+  const rewritten: RewrittenPropellerToken[] = [];
   for (const token of tokens) {
-    const macro = token.macro ? (PROPELLER_MACRO_FIX[token.macro] ?? token.macro) : token.macro;
-    if (token.param === "bannerid" && (macro === "${bannerid}" || token.macro === "${BANNERID}")) continue;
-    const param =
-      token.param === "geo" && token.macro && PROPELLER_COUNTRY_MACROS.has(token.macro) ? "country" : token.param;
-    next.push(param === token.param && macro === token.macro ? token : { ...token, param, macro });
+    const next = rewritePropellerToken(token);
+    if (next) rewritten.push(next);
   }
-  return next;
+  const chosen = new Map<string, RewrittenPropellerToken>();
+  const order: string[] = [];
+  for (const item of rewritten) {
+    const prev = chosen.get(item.token.param);
+    if (!prev) {
+      chosen.set(item.token.param, item);
+      order.push(item.token.param);
+      continue;
+    }
+    if (prev.renamedFromGeo && !item.renamedFromGeo) chosen.set(item.token.param, item);
+  }
+  return order.map((param) => chosen.get(param)!.token);
+}
+
+/** Set when a PropellerAds save would put two tokens on the same query param after rewriting. */
+export function propellerTokenConflict(tokens: SourceToken[]): string | null {
+  const params = new Set<string>();
+  for (const token of tokens) {
+    const next = rewritePropellerToken(token);
+    if (!next) continue;
+    if (params.has(next.token.param)) return `Duplicate token param: ${next.token.param}`;
+    params.add(next.token.param);
+  }
+  return null;
 }
 
 export function findSourceTemplate(id: string): SourceTemplate | undefined {
