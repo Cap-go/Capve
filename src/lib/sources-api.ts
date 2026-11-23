@@ -19,13 +19,17 @@ export type SourceToken = {
   kind?: "campaign" | "zone";
 };
 
+export type SourceTemplatePostback = { event: string | null; url: string };
+
 export type SourceTemplate = {
   id: string;
   name: string;
   cost_type: "cpc" | "cpm" | "cpa";
   tokens: SourceToken[];
   postback_url: string | null;
-  cost_api?: string;
+  /** Postbacks this preset creates. One all-events URL, or one URL per event. */
+  postbacks: SourceTemplatePostback[];
+  cost_api?: string | null;
   verified: boolean;
   notes?: string;
 };
@@ -81,7 +85,12 @@ export const sourcesApi = {
       cost_providers: Array<{ id: string; name: string }>;
     }>("/api/sources/templates"),
   createSourceFromTemplate: (template_id: string, name?: string) =>
-    request<{ traffic_source: TrafficSource; settings: SourceSettings; postback: Postback | null }>(
+    request<{
+      traffic_source: TrafficSource;
+      settings: SourceSettings;
+      postback: Postback | null;
+      postbacks: Postback[];
+    }>(
       "/api/sources/from-template",
       json("POST", { template_id, name }),
     ),

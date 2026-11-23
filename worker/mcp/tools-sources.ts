@@ -65,7 +65,7 @@ export const SOURCE_TOOLS: ToolDefinition[] = [
     name: "create_traffic_source_from_template",
     title: "Create traffic source from template",
     description:
-      "Create a traffic source with the template's cost model, named tokens and outgoing postback. Edit placeholders like YOUR_KEY afterwards with update_postback.",
+      "Create a traffic source with the template's cost model, named tokens, cost API when the preset has one, and outgoing postbacks. A preset may create one all-events postback or one postback per event. Edit placeholders like YOUR_KEY afterwards with update_postback.",
     inputSchema: schema(
       {
         template_id: str("Template id from list_source_templates (e.g. adcash)."),

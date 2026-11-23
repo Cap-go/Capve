@@ -5,6 +5,7 @@ import { syncSourceCost } from "../worker/cron/cost-sync";
 import { getSourceSettingsRow } from "../worker/db/sources";
 import { parseCostCents } from "../worker/lib/click-context";
 import {
+  ADCASH_POSTBACK_URL,
   applySourceTokens,
   normalizePropellerTokens,
   parseTokens,
@@ -35,10 +36,11 @@ async function api<T>(method: string, path: string, body?: unknown, status = 200
 }
 
 async function adcashCampaign() {
-  const { traffic_source, settings, postback } = await api<{
+  const { traffic_source, settings, postback, postbacks } = await api<{
     traffic_source: { id: string; cost_type: string };
     settings: { tokens: Array<{ param: string; slot: string; macro?: string }>; api_provider: string | null };
-    postback: { url: string } | null;
+    postback: { url: string; event: string | null } | null;
+    postbacks: Array<{ url: string; event: string | null }>;
   }>("POST", "/api/sources/from-template", { template_id: "adcash", name: "Adcash pops" }, 201);
   const { program } = await api<{ program: { id: string; campaign_key: string } }>(
     "POST",
@@ -50,7 +52,7 @@ async function adcashCampaign() {
     },
     201,
   );
-  return { source: traffic_source, settings, postback, program };
+  return { source: traffic_source, settings, postback, postbacks, program };
 }
 
 async function click(campaignKey: string, query: string) {
@@ -134,12 +136,52 @@ describe("traffic source templates, tokens and cost", () => {
   });
 
   it("creates a traffic source from a template with tokens and postback", async () => {
-    const { source, settings, postback } = await adcashCampaign();
+    const { source, settings, postback, postbacks } = await adcashCampaign();
     expect(source.cost_type).toBe("cpm");
-    expect(settings.api_provider).toBeNull();
+    expect(settings.api_provider).toBe("adcash");
     expect(settings.tokens.find((t) => t.slot === "cost")?.macro).toBe("[redirection_cost]");
     expect(settings.tokens.find((t) => t.param === "zoneid")?.slot).toBe("sub1");
-    expect(postback?.url).toContain("{external_id}");
+    expect(postback?.event).toBe("registration");
+    expect(postback?.url).toBe(ADCASH_POSTBACK_URL);
+    expect(postbacks.map((row) => row.event)).toEqual(["registration", "ftd"]);
+    expect(postbacks.every((row) => row.url === ADCASH_POSTBACK_URL && !row.url.includes("payout"))).toBe(true);
+  });
+
+  it("marks Adcash verified and keeps a single all-events postback for other presets", async () => {
+    const adcash = SOURCE_TEMPLATES.find((template) => template.id === "adcash")!;
+    expect(adcash.verified).toBe(true);
+    expect(adcash.cost_api).toBe("adcash");
+    expect(adcash.tokens.map((token) => `${token.param}=${token.macro}`)).toEqual([
+      "zoneid=[zone]",
+      "campaignid=[campaign]",
+      "country=[country]",
+      "cost=[redirection_cost]",
+      "clickid=[clickid]",
+    ]);
+    const listed = await api<{
+      traffic_sources: Array<{ id: string; verified: boolean; cost_api: string | null; postbacks: Array<{ event: string | null; url: string }> }>;
+    }>("GET", "/api/sources/templates");
+    const listedAdcash = listed.traffic_sources.find((template) => template.id === "adcash")!;
+    expect(listedAdcash.verified).toBe(true);
+    expect(listedAdcash.cost_api).toBe("adcash");
+    expect(listedAdcash.postbacks).toEqual([
+      { event: "registration", url: ADCASH_POSTBACK_URL },
+      { event: "ftd", url: ADCASH_POSTBACK_URL },
+    ]);
+    const propeller = await api<{
+      settings: { api_provider: string | null };
+      postback: { event: string | null; url: string } | null;
+      postbacks: Array<{ event: string | null; url: string }>;
+    }>("POST", "/api/sources/from-template", { template_id: "propellerads", name: "Propeller one" }, 201);
+    expect(propeller.settings.api_provider).toBeNull();
+    expect(propeller.postbacks).toHaveLength(1);
+    expect(propeller.postback?.event).toBeNull();
+    expect(propeller.postback?.url).toContain("visitor_id={external_id}");
+    expect(propeller.postback?.url).toContain("payout={payout}");
+    expect(propeller.postbacks[0]).toEqual(propeller.postback);
+    const rich = SOURCE_TEMPLATES.find((template) => template.id === "richads")!;
+    const listedRich = listed.traffic_sources.find((template) => template.id === "richads")!;
+    expect(listedRich.postbacks).toEqual([{ event: null, url: rich.postback_url }]);
   });
 
   it("builds ad link with traffic source macros for Adcash", async () => {

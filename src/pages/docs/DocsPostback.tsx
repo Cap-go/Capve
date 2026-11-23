@@ -166,15 +166,19 @@ export function DocsPostback() {
       <CodeBlock>
         {`https://your-source.com/postback?click={external_id}&payout={payout}&goal={event}`}
       </CodeBlock>
-      <CodeBlock label="Adcash pixel, saved on the traffic source">
-        {`https://www.pixelhere.com/et/event.php?advertiser=YOUR_ADVERTISER&cid={external_id}&id=YOUR_GOAL&value={payout}`}
+      <CodeBlock label="Adcash registration postback">
+        {`https://www.adcash.com/script/register_event.php?key=YOUR_REGISTRATION_KEY&cid={external_id}`}
+      </CodeBlock>
+      <CodeBlock label="Adcash FTD postback">
+        {`https://www.adcash.com/script/register_event.php?key=YOUR_FTD_KEY&cid={external_id}`}
       </CodeBlock>
       <p>
-        <code>cid={"{external_id}"}</code> is required on this pixel. Capve fills it with the click
-        id Adcash sent on the campaign link. Keep <code>advertiser</code> and <code>id</code> as
-        Adcash gave them, and add <code>value={"{payout}"}</code> for revenue.{" "}
-        <code>cid={"{click_id}"}</code> sends Capve's <code>clk_…</code> id, and Adcash does not
-        match it, so the conversion stays at zero there.
+        The Adcash template creates both, one conversion key per event, and leaves payout off.
+        Replace each <code>YOUR_KEY</code> with that event's key from Adcash → Conversion tracking.
+        Append <code>&amp;payout={"{payout}"}</code> only when sending revenue.{" "}
+        <code>cid={"{external_id}"}</code> is required. Capve fills it with the click id Adcash sent
+        on the campaign link. <code>cid={"{click_id}"}</code> sends Capve's <code>clk_…</code> id,
+        and Adcash does not match it, so the conversion stays at zero there.
       </p>
       <p>
         The warning about pasting <code>{"{click_id}"}</code> is only for the postback saved in

@@ -49,12 +49,16 @@ export function DocsTrafficSources() {
         <strong>Traffic sources → URL parameters</strong>.
       </p>
       <div className="docs-callout">
-        <strong>Adcash pixel</strong>
+        <strong>Adcash postbacks</strong>
         <p>
-          On the traffic source, the outgoing URL is <code>cid={"{external_id}"}</code>. That is
-          Adcash's click id, from <code>clickid=[clickid]</code> on the campaign link.{" "}
-          <code>cid={"{click_id}"}</code> sends Capve's <code>clk_…</code> id, and Adcash does not
-          match the conversion. <code>{"{click_id}"}</code> belongs on the offer URL.
+          The Adcash template creates a <code>registration</code> postback and an <code>ftd</code>{" "}
+          postback. Both use{" "}
+          <code>https://www.adcash.com/script/register_event.php?key=YOUR_KEY&amp;cid={"{external_id}"}</code>.
+          Replace <code>YOUR_KEY</code> on each with that event's conversion key from Adcash →
+          Conversion tracking. Payout is left off; append <code>&amp;payout={"{payout}"}</code> only
+          when sending revenue. <code>cid={"{external_id}"}</code> is Adcash's click id, from{" "}
+          <code>clickid=[clickid]</code> on the campaign link. <code>cid={"{click_id}"}</code> sends
+          Capve's <code>clk_…</code> id, and Adcash does not match the conversion.
         </p>
       </div>
 
@@ -121,7 +125,8 @@ export function DocsTrafficSources() {
         edits campaigns inside Adcash. Capve does not call it.
       </p>
       <p>
-        In <strong>Traffic sources → Spending API</strong>, set Cost API to Adcash and paste
+        Creating a source from the Adcash template pre-selects Cost API → Adcash. In{" "}
+        <strong>Traffic sources → Spending API</strong>, paste
         the Reporting API token. The key is encrypted with <code>AUTH_SECRET</code> and never
         returned; after rotating <code>AUTH_SECRET</code>, enter it again. An hourly cron pulls
         yesterday's and today's spend and writes it onto the clicks of every campaign using that

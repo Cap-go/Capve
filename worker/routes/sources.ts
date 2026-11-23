@@ -31,6 +31,8 @@ import {
   networkPostbackUrls,
   parseTokens,
   propellerTokenConflict,
+  publicSourceTemplate,
+  sourceTemplatePostbacks,
   tokenLabels,
   trackingUrlWithMacros,
 } from "../lib/source-templates";
@@ -46,7 +48,7 @@ sources.get("/templates", async (c) => {
   const session = await requireUser(c);
   if (!session) return c.json({ error: "Unauthorized" }, 401);
   return c.json({
-    traffic_sources: SOURCE_TEMPLATES,
+    traffic_sources: SOURCE_TEMPLATES.map(publicSourceTemplate),
     networks: NETWORK_TEMPLATES.map((t) => ({
       ...t,
       incoming_postback_urls: networkPostbackUrls(c.env.APP_URL, t),
@@ -78,15 +80,17 @@ sources.post("/from-template", async (c) => {
     tokens: template.tokens,
     api_provider: template.cost_api ?? null,
   });
-  const postback = template.postback_url
-    ? await createPostback(
-        c.env.DB,
-        session.account_id,
-        { kind: "traffic_source", id: source.id },
-        { event: null, url: template.postback_url },
-      )
-    : null;
-  return c.json({ traffic_source: source, settings, postback }, 201);
+  const postbacks = [];
+  for (const item of sourceTemplatePostbacks(template)) {
+    const created = await createPostback(
+      c.env.DB,
+      session.account_id,
+      { kind: "traffic_source", id: source.id },
+      item,
+    );
+    if (created) postbacks.push(created);
+  }
+  return c.json({ traffic_source: source, settings, postback: postbacks[0] ?? null, postbacks }, 201);
 });
 
 sources.post("/networks/from-template", async (c) => {

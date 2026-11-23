@@ -24,8 +24,8 @@ Capve now:
 
 ### 1. Configure the traffic source API
 
-1. Go to **Traffic Sources** → select your Adcash source
-2. Under **Cost API**, select **Adcash**
+1. Go to **Traffic Sources** → select your Adcash source. Creating it from the Adcash template pre-selects **Adcash**
+2. Under **Cost API**, confirm **Adcash** is selected
 3. Paste your Adcash API key (get it from your Adcash advertiser account)
 4. Save
 

@@ -19,19 +19,53 @@ export type SourceToken = {
   kind?: "campaign" | "zone";
 };
 
+/** One outgoing postback created with a traffic source. `event: null` fires for every conversion. */
+export type SourceTemplatePostback = {
+  event: string | null;
+  url: string;
+};
+
 export type SourceTemplate = {
   id: string;
   name: string;
   cost_type: "cpc" | "cpm" | "cpa";
   tokens: SourceToken[];
-  /** Outgoing postback (Capve macros: {external_id}, {payout}, {event}, ...). null = pixel/API only. */
+  /**
+   * Single all-events outgoing postback. Ignored when `postbacks` is set.
+   * null = no postback (pixel/API only), unless `postbacks` lists event URLs.
+   */
   postback_url: string | null;
+  /**
+   * Per-event outgoing postbacks. When set, these are created instead of `postback_url`.
+   * Adcash uses one conversion key per event and omits payout unless the advertiser adds it.
+   */
+  postbacks?: SourceTemplatePostback[];
   /** Cost API adapter that can pull spend for this source. */
   cost_api?: "adcash";
   /** false = macro names come from public docs we could not verify; edit after creating. */
   verified: boolean;
   notes?: string;
 };
+
+/** Adcash S2S pixel. Payout is omitted; advertisers append `&payout={payout}` only to send revenue. */
+export const ADCASH_POSTBACK_URL =
+  "https://www.adcash.com/script/register_event.php?key=YOUR_KEY&cid={external_id}";
+
+/** Postbacks to create for a template. Per-event entries win over the single `postback_url`. */
+export function sourceTemplatePostbacks(template: SourceTemplate): SourceTemplatePostback[] {
+  if (template.postbacks && template.postbacks.length > 0) return template.postbacks;
+  if (template.postback_url) return [{ event: null, url: template.postback_url }];
+  return [];
+}
+
+/** Template as returned by the API: every preset includes the postbacks that will be created. */
+export function publicSourceTemplate(template: SourceTemplate) {
+  return {
+    ...template,
+    cost_api: template.cost_api ?? null,
+    postbacks: sourceTemplatePostbacks(template),
+  };
+}
 
 /**
  * Built-in traffic source presets. Macro names follow each network's public docs; entries with
@@ -49,9 +83,15 @@ export const SOURCE_TEMPLATES: SourceTemplate[] = [
       { param: "cost", name: "Cost", slot: "cost", macro: "[redirection_cost]" },
       { param: "clickid", name: "Click ID", slot: "external_id", macro: "[clickid]" },
     ],
-    postback_url: "https://www.adcash.com/script/register_event.php?key=YOUR_KEY&cid={external_id}&payout={payout}",
-    verified: false,
-    notes: "Pop/push. Replace YOUR_KEY with the conversion key from Adcash → Conversion tracking.",
+    postback_url: null,
+    postbacks: [
+      { event: "registration", url: ADCASH_POSTBACK_URL },
+      { event: "ftd", url: ADCASH_POSTBACK_URL },
+    ],
+    cost_api: "adcash",
+    verified: true,
+    notes:
+      "Click URL macros are verified live. Replace YOUR_KEY on each postback with that event's conversion key from Adcash → Conversion tracking. Append &payout={payout} only when sending revenue.",
   },
   {
     id: "propellerads",
