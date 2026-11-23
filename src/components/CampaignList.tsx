@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { formatMoney, formatPercent, type CampaignReportRow, type Program, type TrafficSource } from "../lib/api";
 import { campaignHref } from "../lib/campaign-route";
-import { PeriodSelector, rangeFor, type Preset, type PeriodRange } from "./PeriodSelector";
+import { PeriodSelector, rangeFor, storedCampaignPreset, type Preset, type PeriodRange } from "./PeriodSelector";
 
 const PAGE_SIZES = [25, 50, 100];
 
@@ -83,38 +83,28 @@ export function CampaignList({
   sources,
   loading,
   reportsLoading,
-  reportsError,
   canWrite,
   creating,
   onToggleCreate,
   createForm,
   onPeriodChange,
-  onRetryReports,
 }: {
   programs: Program[];
   reports: CampaignReportRow[] | null;
   sources: TrafficSource[];
   loading: boolean;
   reportsLoading: boolean;
-  reportsError: string | null;
   canWrite: boolean;
   creating: boolean;
   onToggleCreate: () => void;
   createForm: ReactNode;
   onPeriodChange: (range: PeriodRange) => void;
-  onRetryReports: () => void;
 }) {
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("");
   const [pageSize, setPageSize] = useState(25);
   const [page, setPage] = useState(0);
-  const [preset, setPreset] = useState<Preset>(() => {
-    try {
-      return (localStorage.getItem("capve_campaigns_period") as Preset) || "all_time";
-    } catch {
-      return "all_time";
-    }
-  });
+  const [preset, setPreset] = useState<Preset>(storedCampaignPreset);
   const [customFrom, setCustomFrom] = useState("");
   const [customTo, setCustomTo] = useState("");
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(loadColumnVisibility);
@@ -264,17 +254,6 @@ export function CampaignList({
         </div>
       </div>
       {createForm}
-      {reportsError && (
-        <div
-          className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-md border border-red-300 bg-white px-4 py-3 text-sm text-red-700"
-          role="alert"
-        >
-          <p>Failed to load stats: {reportsError}</p>
-          <button className="btn btn-secondary" type="button" onClick={onRetryReports}>
-            Retry
-          </button>
-        </div>
-      )}
       <div className="table-wrap">
         <table className="table campaign-index-table">
           <thead>
@@ -327,28 +306,28 @@ export function CampaignList({
                   {visibleColumns.has("source") && <td>{source || "—"}</td>}
                   {visibleColumns.has("created") && <td className="mono">{formatCreated(program.created_at)}</td>}
                   {visibleColumns.has("clicks") && (
-                    <td className="num">{reportsLoading ? "…" : metrics ? metrics.clicks : "—"}</td>
+                    <td className="num">{metrics && !reportsLoading ? metrics.clicks : "…"}</td>
                   )}
                   {visibleColumns.has("registrations") && (
-                    <td className="num">{reportsLoading ? "…" : metrics ? registrations : "—"}</td>
+                    <td className="num">{metrics && !reportsLoading ? registrations : "…"}</td>
                   )}
                   {visibleColumns.has("ftd") && (
-                    <td className="num">{reportsLoading ? "…" : metrics ? ftd : "—"}</td>
+                    <td className="num">{metrics && !reportsLoading ? ftd : "…"}</td>
                   )}
                   {visibleColumns.has("conversions") && (
-                    <td className="num">{reportsLoading ? "…" : metrics ? metrics.leads : "—"}</td>
+                    <td className="num">{metrics && !reportsLoading ? metrics.leads : "…"}</td>
                   )}
                   {visibleColumns.has("revenue") && (
-                    <td className="num">{reportsLoading ? "…" : metrics ? formatMoney(metrics.revenue_cents, currency) : "—"}</td>
+                    <td className="num">{metrics && !reportsLoading ? formatMoney(metrics.revenue_cents, currency) : "…"}</td>
                   )}
                   {visibleColumns.has("cost") && (
-                    <td className="num">{reportsLoading ? "…" : metrics ? formatMoney(metrics.cost_cents, currency) : "—"}</td>
+                    <td className="num">{metrics && !reportsLoading ? formatMoney(metrics.cost_cents, currency) : "…"}</td>
                   )}
                   {visibleColumns.has("profit") && (
-                    <td className="num">{reportsLoading ? "…" : metrics ? formatMoney(metrics.profit_cents, currency) : "—"}</td>
+                    <td className="num">{metrics && !reportsLoading ? formatMoney(metrics.profit_cents, currency) : "…"}</td>
                   )}
                   {visibleColumns.has("roi") && (
-                    <td className="num">{reportsLoading ? "…" : metrics ? (metrics.roi == null ? "n/a" : formatPercent(metrics.roi)) : "—"}</td>
+                    <td className="num">{metrics && !reportsLoading ? (metrics.roi == null ? "n/a" : formatPercent(metrics.roi)) : "…"}</td>
                   )}
                 </tr>
               );

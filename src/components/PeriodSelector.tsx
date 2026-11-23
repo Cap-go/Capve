@@ -33,6 +33,23 @@ function isoLocal(ms: number): string {
   return `${date.getFullYear()}-${month}-${day}`;
 }
 
+const PRESET_VALUES = new Set<string>(PRESETS.map((preset) => preset.value));
+
+/** Period last chosen on the campaigns list. Shared so the first stats request uses it. */
+export function storedCampaignPreset(): Preset {
+  try {
+    const stored = localStorage.getItem("capve_campaigns_period");
+    if (stored && PRESET_VALUES.has(stored)) return stored as Preset;
+  } catch {
+    // private mode
+  }
+  return "all_time";
+}
+
+export function initialCampaignRange(now = new Date()): PeriodRange {
+  return rangeFor(storedCampaignPreset(), { from: "", to: "" }, now);
+}
+
 export function rangeFor(preset: Preset, custom: { from: string; to: string }, now = new Date()): PeriodRange {
   if (preset === "all_time") return {};
   

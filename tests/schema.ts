@@ -271,7 +271,7 @@ CREATE TABLE IF NOT EXISTS clicks (
 CREATE INDEX IF NOT EXISTS idx_clicks_affiliate ON clicks(affiliate_id);
 CREATE INDEX IF NOT EXISTS idx_clicks_program_created ON clicks(program_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_clicks_program_created_stats
-  ON clicks(program_id, created_at, is_bot, is_unique, cost_cents, cpa_cost_cents, lp_clicked_at, id);
+  ON clicks(program_id, created_at, is_bot, is_unique, cost_cents, lp_clicked_at);
 CREATE INDEX IF NOT EXISTS idx_clicks_program_visitor ON clicks(program_id, visitor_hash, created_at);
 CREATE INDEX IF NOT EXISTS idx_clicks_program_affiliate ON clicks(program_id, affiliate_id);
 

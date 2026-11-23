@@ -1,6 +1,6 @@
 import { env, SELF } from "cloudflare:test";
 import { beforeAll, describe, expect, it } from "vitest";
-import { groupedClickQuery } from "../worker/db/reports";
+import { groupedClickQuery, groupedConvertedQuery } from "../worker/db/reports";
 import { registerTestUser } from "./helpers";
 import { initSql } from "./schema";
 
@@ -109,6 +109,12 @@ describe("campaign stats loading", () => {
       )
       .run();
 
+    // CPA is stored on the click. Two approved postbacks on clk_nov_02 must add it once.
+    // The rejected click and the out-of-range click must not add theirs.
+    await env.DB.prepare(
+      "UPDATE clicks SET cpa_cost_cents = 40 WHERE id IN ('clk_nov_02', 'clk_nov_10', 'clk_out_before')",
+    ).run();
+
     const reportRes = await SELF.fetch(
       `http://localhost/api/reports/campaigns?from=${RANGE_FROM}&to=${RANGE_TO}`,
       { headers },
@@ -123,9 +129,10 @@ describe("campaign stats loading", () => {
     }>(reportRes);
     const row = campaigns.find((item) => item.id === program.id);
     expect(row).toBeTruthy();
-    // Oct 20 and Nov 25 clicks are outside Nov 1–23.
+    // Oct 20 and Nov 25 clicks are outside Nov 1–23. Three in-range clicks at 25 cents,
+    // plus 40 cents of CPA on the one converted in-range click.
     expect(row!.metrics.clicks).toBe(3);
-    expect(row!.metrics.cost_cents).toBe(75);
+    expect(row!.metrics.cost_cents).toBe(115);
     // Nov 2 click converted (registration + ftd are one lead). Oct 20 click is outside
     // the range, so its in-range postback is not a campaign-list lead. Rejected is ignored.
     expect(row!.metrics.leads).toBe(1);
@@ -211,14 +218,34 @@ describe("campaign stats loading", () => {
 
     const fromMs = Date.UTC(2026, 10, 1, 0, 0, 0);
     const toMs = Date.UTC(2026, 10, 23, 23, 59, 59, 999);
-    const scan = groupedClickQuery(owner!.user_id, "campaign", { from: fromMs, to: toMs });
-    expect(scan.sql).toContain("JOIN clicks cf ON cf.id = cv.click_id");
+    const scan = groupedClickQuery(owner!.user_id, "campaign", { from: fromMs, to: toMs }, program.id);
+    expect(scan.sql).not.toContain("conversions");
+    expect(scan.sql).not.toContain("cpa_cost");
+    expect(scan.sql).not.toMatch(/\bc\.id\b/);
     const plan = await env.DB.prepare(`EXPLAIN QUERY PLAN ${scan.sql}`).bind(...scan.binds).raw();
     const planText = JSON.stringify(plan);
     expect(planText).toContain("idx_clicks_program_created_stats");
+    expect(planText).toContain("COVERING");
     expect(planText).not.toContain("SCAN c");
     expect(planText).not.toContain("SCAN clicks");
     expect(planText.toLowerCase()).not.toContain("correlated");
+
+    const converted = groupedConvertedQuery(
+      owner!.user_id,
+      "campaign",
+      { from: fromMs, to: toMs },
+      program.id,
+    );
+    expect(converted.sql).toContain("JOIN clicks cf ON cf.id = cv.click_id");
+    expect(converted.sql).not.toContain("FROM clicks c");
+    const convertedPlan = await env.DB.prepare(`EXPLAIN QUERY PLAN ${converted.sql}`)
+      .bind(...converted.binds)
+      .raw();
+    const convertedPlanText = JSON.stringify(convertedPlan);
+    expect(convertedPlanText).not.toContain("SCAN cf");
+    expect(convertedPlanText).not.toContain("SCAN clicks");
+    expect(convertedPlanText).not.toContain("idx_clicks_program_created_stats");
+    expect(convertedPlanText.toLowerCase()).not.toContain("correlated");
 
     const started = Date.now();
     const reportRes = await SELF.fetch(

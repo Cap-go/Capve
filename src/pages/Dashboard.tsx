@@ -1,7 +1,7 @@
 import { GettingStartedPanel } from "../components/GettingStartedPanel";
 import type { BillingStatus } from "../../shared/billing";
 import { BillingPanel, ReportingLock } from "../components/BillingPanel";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { AppShell, type AppNavItem } from "../components/AppShell";
 import { AdminPanel } from "../components/AdminPanel";
@@ -53,6 +53,7 @@ import { appBaseUrl } from "../lib/constants";
 import { eventLabel, eventName, sortEvents } from "../lib/events";
 import { CampaignSourcePanel } from "../components/SourceTemplates";
 import { CampaignList } from "../components/CampaignList";
+import { initialCampaignRange, type PeriodRange } from "../components/PeriodSelector";
 import { CampaignPerformance } from "../components/CampaignPerformance";
 import {
   CAMPAIGN_SECTIONS,
@@ -179,9 +180,8 @@ function DashboardContent({ page }: { page: DashboardView }) {
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
   const [reportRows, setReportRows] = useState<CampaignReportRow[] | null>(null);
-  const [reportPeriod, setReportPeriod] = useState<{ from?: number | string; to?: number | string }>({});
+  const [reportPeriod, setReportPeriod] = useState<PeriodRange>(initialCampaignRange);
   const [reportsLoading, setReportsLoading] = useState(false);
-  const [reportsError, setReportsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user) return;
@@ -221,46 +221,48 @@ function DashboardContent({ page }: { page: DashboardView }) {
     }
   }, [inCampaign, sectionParam, campaignId, navigate]);
 
+  const onPeriodChange = useCallback((range: PeriodRange) => {
+    setReportPeriod((prev) => (prev.from === range.from && prev.to === range.to ? prev : range));
+  }, []);
+
   useEffect(() => {
     if (reportsLocked) {
       setReportRows(null);
       setReportsLoading(false);
-      setReportsError(null);
       return;
     }
     if (!user || inCampaign || page !== "campaigns") return;
-    
+
     let cancelled = false;
     setReportRows(null);
     setReportsLoading(true);
-    setReportsError(null);
-    
-    api
-      .campaignReports({ from: reportPeriod.from, to: reportPeriod.to })
-      .then(({ campaigns }) => {
-        if (!cancelled) {
+    const from = reportPeriod.from;
+    const to = reportPeriod.to;
+    // Keep the cells on "…" and try again. A failed response must not clear the
+    // table to an empty report, which would never recover into real numbers.
+    const waits = [400, 1000, 2000];
+
+    (async () => {
+      for (let attempt = 0; attempt <= waits.length; attempt++) {
+        if (cancelled) return;
+        try {
+          const { campaigns } = await api.campaignReports({ from, to });
+          if (cancelled) return;
           setReportRows(campaigns);
           setReportsLoading(false);
+          return;
+        } catch (err) {
+          console.error("Campaign reports failed:", err);
+          if (cancelled || attempt === waits.length) return;
+          await new Promise((resolve) => setTimeout(resolve, waits[attempt]));
         }
-      })
-      .catch((err) => {
-        console.error("Campaign reports failed:", err);
-        if (!cancelled) {
-          setReportRows([]);
-          setReportsLoading(false);
-          setReportsError(err instanceof Error ? err.message : "Failed to load stats");
-        }
-      });
-    
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
   }, [user, inCampaign, page, reportsLocked, reportPeriod]);
-
-  const retryReports = () => {
-    // Trigger a refetch by updating a dependency or directly re-running the effect
-    setReportPeriod((prev) => ({ ...prev }));
-  };
 
   useEffect(() => {
     if (!selectedId) {
@@ -499,12 +501,10 @@ function DashboardContent({ page }: { page: DashboardView }) {
           sources={sources}
           loading={!programsLoaded}
           reportsLoading={reportsLoading}
-          reportsError={reportsError}
           canWrite={canWrite}
           creating={creating}
           onToggleCreate={() => setCreating((open) => !open)}
-          onPeriodChange={setReportPeriod}
-          onRetryReports={retryReports}
+          onPeriodChange={onPeriodChange}
           createForm={
             canWrite && programsLoaded && (creating || programs.length === 0) ? (
               <form id="new-campaign" className="campaign-create space-y-3" onSubmit={createProgram}>
