@@ -38,7 +38,6 @@ import {
   otherCurrencies,
   type Affiliate,
   type CampaignReportRow,
-  type CampaignSourceLink,
   type ClickLogRow,
   type ConversionLogRow,
   type Group,
@@ -49,6 +48,7 @@ import {
   type ProgramTracking,
   type TrafficSource,
 } from "../lib/api";
+import { sourcesApi, type SourceLink } from "../lib/sources-api";
 import { useAuth } from "../lib/auth";
 import { appBaseUrl } from "../lib/constants";
 import { eventLabel, eventName, sortEvents } from "../lib/events";
@@ -583,7 +583,7 @@ function OverviewPanel({
   onDelete: () => void;
 }) {
   const [affiliates, setAffiliates] = useState<Affiliate[] | null>(null);
-  const [sourceLink, setSourceLink] = useState<CampaignSourceLink | null>(null);
+  const [sourceLink, setSourceLink] = useState<SourceLink | null>(null);
   useEffect(() => {
     if (section !== "tracking") return;
     let cancelled = false;
@@ -592,7 +592,7 @@ function OverviewPanel({
     api.affiliates(selectedId)
       .then(({ affiliates: items }) => { if (!cancelled) setAffiliates(items); })
       .catch((error) => { if (!cancelled) onError(error instanceof Error ? error.message : "Could not load affiliates"); });
-    api.campaignSourceLink(selectedId)
+    sourcesApi.sourceLink(selectedId)
       .then((link) => { if (!cancelled) setSourceLink(link); })
       .catch(() => { if (!cancelled) setSourceLink(null); });
     return () => { cancelled = true; };
@@ -924,7 +924,7 @@ function OverviewPanel({
                     <CodeBlock>{sourceLink.tracking_url}</CodeBlock>
                   </>
                 )}
-                {sourceLink && !sourceLink.tracking_url && sourceLink.traffic_source_id && (
+                {sourceLink && sourceLink.traffic_source_id && !sourceLink.tokens.some((token) => token.macro) && (
                   <p className="text-sm text-[var(--velo-muted)]">
                     The traffic source has no macros configured. Use the campaign click URL above.
                   </p>

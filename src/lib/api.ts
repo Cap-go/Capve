@@ -215,22 +215,6 @@ export type ProgramTracking = {
   tracking_domain?: { id: string; hostname: string } | null;
 };
 
-export type SourceToken = {
-  param: string;
-  name: string;
-  slot: string;
-  macro?: string;
-  kind?: "campaign" | "zone";
-};
-
-export type CampaignSourceLink = {
-  traffic_source_id: string | null;
-  campaign_url: string | null;
-  tracking_url: string | null;
-  tokens: SourceToken[];
-  labels: Record<string, string>;
-};
-
 export type RotationMode = "normal" | "smart" | "fix_on" | "top_to_bottom";
 export type FlowType = "direct" | "lander" | "lander_offer" | "offer";
 
@@ -544,8 +528,6 @@ export const api = {
     request<{ ok: boolean }>(`/api/programs/${programId}`, { method: "DELETE" }),
   tracking: (programId: string) =>
     request<{ tracking: ProgramTracking }>(`/api/programs/${programId}/tracking`),
-  campaignSourceLink: (programId: string) =>
-    request<CampaignSourceLink>(`/api/campaigns/${programId}/source-link`),
   clicks: (programId: string, page: LogPage = {}) =>
     request<{ clicks: ClickLogRow[] }>(`/api/programs/${programId}/clicks${logQuery(page)}`),
   conversions: (programId: string, page: LogPage = {}) =>
