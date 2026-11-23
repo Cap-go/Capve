@@ -322,7 +322,9 @@ const PROPELLER_MACRO_FIX: Record<string, string> = {
 
 function canonicalPropellerMacro(macro: string | undefined): string | undefined {
   if (!macro) return macro;
-  return PROPELLER_MACRO_FIX[macro.toLowerCase()] ?? macro;
+  const key = macro.toLowerCase();
+  // Own-property check: "constructor" and "toString" are inherited and are not macros.
+  return Object.prototype.hasOwnProperty.call(PROPELLER_MACRO_FIX, key) ? PROPELLER_MACRO_FIX[key] : macro;
 }
 
 function isPropellerCountryMacro(macro: string | undefined): boolean {

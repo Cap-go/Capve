@@ -280,6 +280,12 @@ describe("traffic source templates, tokens and cost", () => {
     expect(normalizePropellerTokens(collision)).toEqual([
       { param: "country", name: "Country", slot: "sub9", macro: "{country}" },
     ]);
+
+    const inherited: SourceToken[] = [
+      { param: "clickid", name: "Click ID", slot: "external_id", macro: "constructor" },
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "toString" },
+    ];
+    expect(normalizePropellerTokens(inherited)).toEqual(inherited);
   });
 
   it("builds ad link with traffic source macros for PropellerAds", async () => {
