@@ -221,12 +221,20 @@ function DashboardContent({ page }: { page: DashboardView }) {
     }
   }, [inCampaign, sectionParam, campaignId, navigate]);
 
-  const fetchReports = () => {
-    if (reportsLocked || !user || inCampaign || page !== "campaigns") return;
+  useEffect(() => {
+    if (reportsLocked) {
+      setReportRows(null);
+      setReportsLoading(false);
+      setReportsError(null);
+      return;
+    }
+    if (!user || inCampaign || page !== "campaigns") return;
+    
     let cancelled = false;
     setReportRows(null);
     setReportsLoading(true);
     setReportsError(null);
+    
     api
       .campaignReports({ from: reportPeriod.from, to: reportPeriod.to })
       .then(({ campaigns }) => {
@@ -243,20 +251,16 @@ function DashboardContent({ page }: { page: DashboardView }) {
           setReportsError(err instanceof Error ? err.message : "Failed to load stats");
         }
       });
+    
     return () => {
       cancelled = true;
     };
-  };
-
-  useEffect(() => {
-    if (reportsLocked) {
-      setReportRows(null);
-      setReportsLoading(false);
-      setReportsError(null);
-      return;
-    }
-    return fetchReports();
   }, [user, inCampaign, page, reportsLocked, reportPeriod]);
+
+  const retryReports = () => {
+    // Trigger a refetch by updating a dependency or directly re-running the effect
+    setReportPeriod((prev) => ({ ...prev }));
+  };
 
   useEffect(() => {
     if (!selectedId) {
@@ -500,7 +504,7 @@ function DashboardContent({ page }: { page: DashboardView }) {
           creating={creating}
           onToggleCreate={() => setCreating((open) => !open)}
           onPeriodChange={setReportPeriod}
-          onRetryReports={fetchReports}
+          onRetryReports={retryReports}
           createForm={
             canWrite && programsLoaded && (creating || programs.length === 0) ? (
               <form id="new-campaign" className="campaign-create space-y-3" onSubmit={createProgram}>

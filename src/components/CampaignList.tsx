@@ -265,7 +265,7 @@ export function CampaignList({
       </div>
       {createForm}
       {reportsError && (
-        <div className="error-banner">
+        <div className="error-box" role="alert">
           <p>Failed to load stats: {reportsError}</p>
           <button className="btn btn-secondary" type="button" onClick={onRetryReports}>
             Retry
