@@ -81,9 +81,9 @@ describe("campaign stats loading", () => {
       });
     }
 
-    // Create some conversions
+    // Create some conversions (they're created at "now" because that's when the postback arrives)
+    // Conversion-date bucketing: conversions are counted on the day the postback arrived, not click time
     for (let i = 0; i < 10; i++) {
-      const convTime = now - i * 24 * 60 * 60 * 1000;
       await SELF.fetch("http://localhost/api/v1/convert", {
         method: "POST",
         headers: {
