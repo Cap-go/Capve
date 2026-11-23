@@ -26,19 +26,22 @@ function collect(values: Array<string | null | undefined> | undefined): Set<stri
 
 /**
  * Picks the affiliate network for a campaign's postback macros.
- * Returns null when nothing matches, or when the destination, offers and names
- * point at more than one network. The tracking page then leaves the choice manual.
+ * Destination and offer URLs win. A campaign or network name is used only when
+ * no URL matches. Conflicting URLs, or conflicting names with no URL, stay unset
+ * so the tracking page leaves the choice manual.
  */
 export function inferNetworkId(input: {
   destination?: string | null;
   urls?: Array<string | null | undefined>;
   names?: Array<string | null | undefined>;
 }): string | null {
-  const ids = new Set<string>();
+  const urls = new Set<string>();
   const destination = matchRules(input.destination);
-  if (destination) ids.add(destination);
-  for (const id of collect(input.urls)) ids.add(id);
-  for (const id of collect(input.names)) ids.add(id);
-  if (ids.size !== 1) return null;
-  return [...ids][0] ?? null;
+  if (destination) urls.add(destination);
+  for (const id of collect(input.urls)) urls.add(id);
+  if (urls.size > 1) return null;
+  if (urls.size === 1) return [...urls][0] ?? null;
+  const names = collect(input.names);
+  if (names.size !== 1) return null;
+  return [...names][0] ?? null;
 }

@@ -216,4 +216,63 @@ describe("Postback link builder", () => {
     expect(tracking.inferred_network).toBeNull();
     expect(tracking.postback_url).toContain("cnv_id={click_id}");
   });
+
+  it("ignores an offer that only sits on a disabled routing rule", async () => {
+    const { authHeaders } = await registerTestUser("disabled-rule@test.local");
+    const programRes = await SELF.fetch("http://localhost/api/programs", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ name: "Paused rule", destination_url: "https://merchant.example.com/rule" }),
+    });
+    const { program } = await programRes.json<{ program: Program }>();
+    const ruleRes = await SELF.fetch(`http://localhost/api/programs/${program.id}/rules`, {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ name: "Paused", enabled: false, conditions: [] }),
+    });
+    expect(ruleRes.status).toBe(201);
+    const { rule } = await ruleRes.json<{ rule: { id: string } }>();
+    const offerRes = await SELF.fetch("http://localhost/api/entities/offers", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({
+        name: "Hidden YesPlay",
+        url: "https://goyesplay.com/hidden?subid1={click_id}",
+        payout_cents: 0,
+      }),
+    });
+    const { offer } = await offerRes.json<{ offer: { id: string } }>();
+    const pathRes = await SELF.fetch(`http://localhost/api/programs/${program.id}/paths`, {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({ name: "Hidden", flow_type: "offer", offer_id: offer.id, rule_id: rule.id }),
+    });
+    expect(pathRes.status).toBe(201);
+    const trackingRes = await SELF.fetch(`http://localhost/api/programs/${program.id}/tracking`, {
+      headers: authHeaders,
+    });
+    const { tracking } = await trackingRes.json<{ tracking: ProgramTracking }>();
+    expect(tracking.inferred_network).toBeNull();
+    expect(tracking.postback_url).toContain("cnv_id={click_id}");
+  });
+
+  it("lets a destination URL override a conflicting campaign name", async () => {
+    const { authHeaders } = await registerTestUser("name-vs-url@test.local");
+    const programRes = await SELF.fetch("http://localhost/api/programs", {
+      method: "POST",
+      headers: authHeaders,
+      body: JSON.stringify({
+        name: "YesPlay",
+        destination_url: "https://tonybet.com/offer?clickid={click_id}",
+      }),
+    });
+    expect(programRes.status).toBe(201);
+    const { program } = await programRes.json<{ program: Program }>();
+    const trackingRes = await SELF.fetch(`http://localhost/api/programs/${program.id}/tracking`, {
+      headers: authHeaders,
+    });
+    const { tracking } = await trackingRes.json<{ tracking: ProgramTracking }>();
+    expect(tracking.inferred_network).toBe("tonybet");
+    expect(tracking.postback_url).toContain("cnv_id={clickid}");
+  });
 });

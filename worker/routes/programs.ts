@@ -268,19 +268,23 @@ programs.get("/:id/tracking", async (c) => {
      JOIN path_offers po ON po.path_id = pth.id
      JOIN offers o ON o.id = po.offer_id
      LEFT JOIN affiliate_networks n ON n.id = o.network_id
-     WHERE r.program_id = ? AND pth.enabled = 1
+     LEFT JOIN routing_rules rr ON rr.id = pth.rule_id
+     WHERE r.program_id = ? AND pth.enabled = 1 AND (pth.rule_id IS NULL OR rr.enabled = 1)
      UNION ALL
      SELECT o.url, NULL, n.name
      FROM rotations r
      JOIN paths pth ON pth.rotation_id = r.id
      JOIN offers o ON o.id = pth.offer_id
      LEFT JOIN affiliate_networks n ON n.id = o.network_id
-     WHERE r.program_id = ? AND pth.enabled = 1
+     LEFT JOIN routing_rules rr ON rr.id = pth.rule_id
+     WHERE r.program_id = ? AND pth.enabled = 1 AND (pth.rule_id IS NULL OR rr.enabled = 1)
      UNION ALL
      SELECT NULL, pth.direct_url, NULL
      FROM rotations r
      JOIN paths pth ON pth.rotation_id = r.id
-     WHERE r.program_id = ? AND pth.enabled = 1 AND pth.direct_url IS NOT NULL`,
+     LEFT JOIN routing_rules rr ON rr.id = pth.rule_id
+     WHERE r.program_id = ? AND pth.enabled = 1 AND (pth.rule_id IS NULL OR rr.enabled = 1)
+       AND pth.direct_url IS NOT NULL`,
   )
     .bind(program.id, program.id, program.id)
     .all<{ offer_url: string | null; direct_url: string | null; network_name: string | null }>();
