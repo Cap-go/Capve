@@ -217,9 +217,11 @@ export const COST_PROVIDERS: Record<string, CostProvider> = {
   cost_type: "cpm",
   cost_api: "propellerads",
   tokens: [
-    { param: "zoneid", name: "Zone", slot: "sub1", macro: "{zoneid}", kind: "zone" },
+    { param: "zoneid", name: "Zone", slot: "sub1", macro: "{zone_id}", kind: "zone" },
     { param: "campaignid", name: "Campaign", slot: "sub2", macro: "{campaign_id}", kind: "campaign" },
-    // ...
+    { param: "country", name: "Country", slot: "sub4", macro: "{country}" },
+    { param: "cost", name: "Cost", slot: "cost", macro: "{cost}" },
+    { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
   ],
 }
 ```

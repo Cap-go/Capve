@@ -58,10 +58,10 @@ export const SOURCE_TEMPLATES: SourceTemplate[] = [
     name: "PropellerAds",
     cost_type: "cpm",
     tokens: [
-      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${zoneid}", kind: "zone" },
-      { param: "campaignid", name: "Campaign", slot: "sub2", macro: "${campaignid}", kind: "campaign" },
-      { param: "country", name: "Country", slot: "sub4", macro: "${geo}" },
-      { param: "cost", name: "Cost", slot: "cost", macro: "${cost}" },
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "{zone_id}", kind: "zone" },
+      { param: "campaignid", name: "Campaign", slot: "sub2", macro: "{campaign_id}", kind: "campaign" },
+      { param: "country", name: "Country", slot: "sub4", macro: "{country}" },
+      { param: "cost", name: "Cost", slot: "cost", macro: "{cost}" },
       { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
     ],
     postback_url:
@@ -272,25 +272,35 @@ export const NETWORK_TEMPLATES: NetworkTemplate[] = [
 ];
 
 const PROPELLER_MACRO_FIX: Record<string, string> = {
-  "${ZONEID}": "${zoneid}",
-  "${CAMPAIGNID}": "${campaignid}",
+  "${ZONEID}": "{zone_id}",
+  "${zoneid}": "{zone_id}",
+  "${CAMPAIGNID}": "{campaign_id}",
+  "${campaignid}": "{campaign_id}",
+  "${GEO}": "{country}",
+  "${geo}": "{country}",
+  "${COST}": "{cost}",
+  "${cost}": "{cost}",
   "${BANNERID}": "${bannerid}",
-  "${GEO}": "${geo}",
-  "${COST}": "${cost}",
 };
+
+/** Country macros PropellerAds actually replaces, plus the old `${geo}` forms. */
+const PROPELLER_COUNTRY_MACROS = new Set(["${GEO}", "${geo}", "{country}"]);
 
 /**
  * PropellerAds creatives must use
- * `zoneid=${zoneid}&campaignid=${campaignid}&country=${geo}&cost=${cost}&clickid=${SUBID}`.
- * Sources created before that correction stored uppercase macros, a `bannerid` token and
- * `geo` as the country parameter. This rewrites only those link-template fields.
+ * `zoneid={zone_id}&campaignid={campaign_id}&country={country}&cost={cost}&clickid=${SUBID}`.
+ * Click ID is the only `$` macro (`${SUBID}`). Older presets stored `${zoneid}` / `${ZONEID}`,
+ * `${campaignid}` / `${CAMPAIGNID}`, `${geo}` / `${GEO}` and `${cost}` / `${COST}`, which
+ * PropellerAds leaves unreplaced. This rewrites only those macros, drops the old `bannerid`
+ * token and renames the country parameter from `geo` to `country`. Other tokens stay as stored.
  */
 export function normalizePropellerTokens(tokens: SourceToken[]): SourceToken[] {
   const next: SourceToken[] = [];
   for (const token of tokens) {
     const macro = token.macro ? (PROPELLER_MACRO_FIX[token.macro] ?? token.macro) : token.macro;
     if (token.param === "bannerid" && (macro === "${bannerid}" || token.macro === "${BANNERID}")) continue;
-    const param = token.param === "geo" && macro === "${geo}" ? "country" : token.param;
+    const param =
+      token.param === "geo" && token.macro && PROPELLER_COUNTRY_MACROS.has(token.macro) ? "country" : token.param;
     next.push(param === token.param && macro === token.macro ? token : { ...token, param, macro });
   }
   return next;

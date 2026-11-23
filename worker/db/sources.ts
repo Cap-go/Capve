@@ -76,11 +76,18 @@ export async function upsertSourceSettings(
   },
 ): Promise<SourceSettings> {
   const current = await getSourceSettingsRow(db, sourceId);
+  const template = patch.template !== undefined ? patch.template : (current?.template ?? null);
+  const tokens =
+    patch.tokens === undefined
+      ? null
+      : template === "propellerads"
+        ? normalizePropellerTokens(patch.tokens)
+        : patch.tokens;
   const next: SourceSettingsRow = {
     traffic_source_id: sourceId,
     user_id: userId,
-    template: patch.template !== undefined ? patch.template : (current?.template ?? null),
-    tokens: patch.tokens !== undefined ? JSON.stringify(patch.tokens) : (current?.tokens ?? "[]"),
+    template,
+    tokens: tokens !== null ? JSON.stringify(tokens) : (current?.tokens ?? "[]"),
     api_provider:
       patch.api_provider !== undefined ? patch.api_provider : (current?.api_provider ?? null),
     api_key_sealed:
