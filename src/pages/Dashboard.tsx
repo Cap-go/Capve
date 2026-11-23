@@ -887,11 +887,11 @@ function OverviewPanel({
               canWrite={canWrite}
               onChanged={onTrackingChanged}
             />
+            <h3 className="text-sm font-semibold">Postback URL for affiliate network</h3>
             <p className="text-sm text-[var(--velo-muted)]">
-              Incoming postback URL (configure in affiliate network). <span className="mono">payout</span> and{" "}
-              <span className="mono">cnv_status</span> are optional; without{" "}
-              <span className="mono">cnv_status</span> a conversion is recorded as{" "}
-              <span className="mono">lead</span>.
+              Configure this URL in your affiliate network (e.g. YesPlay, Affilka) to receive conversions.{" "}
+              <span className="mono">payout</span> and <span className="mono">cnv_status</span> are optional; without{" "}
+              <span className="mono">cnv_status</span> a conversion is recorded as <span className="mono">lead</span>.
             </p>
             <CodeBlock>{tracking.postback_url}</CodeBlock>
             {canWrite ? <PostbackKeyControls onChange={onTrackingChanged} /> : null}
@@ -912,6 +912,7 @@ function OverviewPanel({
             <CodeBlock label="FTD postback">{`${tracking.postback_url}&event=ftd`}</CodeBlock>
             {tracking.campaign_url && (
               <>
+                <h3 className="mt-4 text-sm font-semibold">Ad creative link for traffic source</h3>
                 <p className="text-sm text-[var(--velo-muted)]">
                   Campaign click URL (clicks are counted under "Campaign traffic"):
                 </p>
@@ -919,14 +920,14 @@ function OverviewPanel({
                 {sourceLink?.tracking_url && sourceLink.tracking_url !== tracking.campaign_url && (
                   <>
                     <p className="text-sm text-[var(--velo-muted)]">
-                      Ad link for {trafficSourceName || "traffic source"} (paste this into the ad network):
+                      <strong>Paste this into {trafficSourceName || "your traffic source"}</strong> (e.g. Adcash, PropellerAds creative):
                     </p>
                     <CodeBlock>{sourceLink.tracking_url}</CodeBlock>
                   </>
                 )}
                 {sourceLink && sourceLink.traffic_source_id && !sourceLink.tokens.some((token) => token.macro) && (
                   <p className="text-sm text-[var(--velo-muted)]">
-                    The traffic source has no macros configured. Use the campaign click URL above.
+                    The traffic source has no macros configured. Use the campaign click URL above in your creative.
                   </p>
                 )}
               </>
