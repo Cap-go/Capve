@@ -19,19 +19,53 @@ export type SourceToken = {
   kind?: "campaign" | "zone";
 };
 
+/** One outgoing postback created with a traffic source. `event: null` fires for every conversion. */
+export type SourceTemplatePostback = {
+  event: string | null;
+  url: string;
+};
+
 export type SourceTemplate = {
   id: string;
   name: string;
   cost_type: "cpc" | "cpm" | "cpa";
   tokens: SourceToken[];
-  /** Outgoing postback (Capve macros: {external_id}, {payout}, {event}, ...). null = pixel/API only. */
+  /**
+   * Single all-events outgoing postback. Ignored when `postbacks` is set.
+   * null = no postback (pixel/API only), unless `postbacks` lists event URLs.
+   */
   postback_url: string | null;
+  /**
+   * Per-event outgoing postbacks. When set, these are created instead of `postback_url`.
+   * Adcash uses one conversion key per event and omits payout unless the advertiser adds it.
+   */
+  postbacks?: SourceTemplatePostback[];
   /** Cost API adapter that can pull spend for this source. */
   cost_api?: "adcash";
   /** false = macro names come from public docs we could not verify; edit after creating. */
   verified: boolean;
   notes?: string;
 };
+
+/** Adcash S2S pixel. Payout is omitted; advertisers append `&payout={payout}` only to send revenue. */
+export const ADCASH_POSTBACK_URL =
+  "https://www.adcash.com/script/register_event.php?key=YOUR_KEY&cid={external_id}";
+
+/** Postbacks to create for a template. Per-event entries win over the single `postback_url`. */
+export function sourceTemplatePostbacks(template: SourceTemplate): SourceTemplatePostback[] {
+  if (template.postbacks && template.postbacks.length > 0) return template.postbacks;
+  if (template.postback_url) return [{ event: null, url: template.postback_url }];
+  return [];
+}
+
+/** Template as returned by the API: every preset includes the postbacks that will be created. */
+export function publicSourceTemplate(template: SourceTemplate) {
+  return {
+    ...template,
+    cost_api: template.cost_api ?? null,
+    postbacks: sourceTemplatePostbacks(template),
+  };
+}
 
 /**
  * Built-in traffic source presets. Macro names follow each network's public docs; entries with
@@ -49,19 +83,25 @@ export const SOURCE_TEMPLATES: SourceTemplate[] = [
       { param: "cost", name: "Cost", slot: "cost", macro: "[redirection_cost]" },
       { param: "clickid", name: "Click ID", slot: "external_id", macro: "[clickid]" },
     ],
-    postback_url: "https://www.adcash.com/script/register_event.php?key=YOUR_KEY&cid={external_id}&payout={payout}",
-    verified: false,
-    notes: "Pop/push. Replace YOUR_KEY with the conversion key from Adcash → Conversion tracking.",
+    postback_url: null,
+    postbacks: [
+      { event: "registration", url: ADCASH_POSTBACK_URL },
+      { event: "ftd", url: ADCASH_POSTBACK_URL },
+    ],
+    cost_api: "adcash",
+    verified: true,
+    notes:
+      "Click URL macros are verified live. Replace YOUR_KEY on each postback with that event's conversion key from Adcash → Conversion tracking. Append &payout={payout} only when sending revenue.",
   },
   {
     id: "propellerads",
     name: "PropellerAds",
     cost_type: "cpm",
     tokens: [
-      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${zoneid}", kind: "zone" },
-      { param: "campaignid", name: "Campaign", slot: "sub2", macro: "${campaignid}", kind: "campaign" },
-      { param: "country", name: "Country", slot: "sub4", macro: "${geo}" },
-      { param: "cost", name: "Cost", slot: "cost", macro: "${cost}" },
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "{zone_id}", kind: "zone" },
+      { param: "campaignid", name: "Campaign", slot: "sub2", macro: "{campaign_id}", kind: "campaign" },
+      { param: "country", name: "Country", slot: "sub4", macro: "{country}" },
+      { param: "cost", name: "Cost", slot: "cost", macro: "{cost}" },
       { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
     ],
     postback_url:
@@ -271,29 +311,80 @@ export const NETWORK_TEMPLATES: NetworkTemplate[] = [
   },
 ];
 
+/** Legacy macros, keyed by their lower-case form. Click id `${SUBID}` is not in this map. */
 const PROPELLER_MACRO_FIX: Record<string, string> = {
-  "${ZONEID}": "${zoneid}",
-  "${CAMPAIGNID}": "${campaignid}",
-  "${BANNERID}": "${bannerid}",
-  "${GEO}": "${geo}",
-  "${COST}": "${cost}",
+  "${zoneid}": "{zone_id}",
+  "${campaignid}": "{campaign_id}",
+  "${geo}": "{country}",
+  "${cost}": "{cost}",
+  "${bannerid}": "${bannerid}",
 };
+
+function canonicalPropellerMacro(macro: string | undefined): string | undefined {
+  if (!macro) return macro;
+  const key = macro.toLowerCase();
+  // Own-property check: "constructor" and "toString" are inherited and are not macros.
+  return Object.prototype.hasOwnProperty.call(PROPELLER_MACRO_FIX, key) ? PROPELLER_MACRO_FIX[key] : macro;
+}
+
+function isPropellerCountryMacro(macro: string | undefined): boolean {
+  if (!macro) return false;
+  const lower = macro.toLowerCase();
+  return lower === "${geo}" || lower === "{country}";
+}
+
+type RewrittenPropellerToken = { token: SourceToken; renamedFromGeo: boolean };
+
+function rewritePropellerToken(token: SourceToken): RewrittenPropellerToken | null {
+  const macro = canonicalPropellerMacro(token.macro);
+  if (token.param.toLowerCase() === "bannerid" && macro?.toLowerCase() === "${bannerid}") return null;
+  const renamedFromGeo = token.param.toLowerCase() === "geo" && isPropellerCountryMacro(token.macro);
+  const param = renamedFromGeo ? "country" : token.param;
+  const next = param === token.param && macro === token.macro ? token : { ...token, param, macro };
+  return { token: next, renamedFromGeo };
+}
 
 /**
  * PropellerAds creatives must use
- * `zoneid=${zoneid}&campaignid=${campaignid}&country=${geo}&cost=${cost}&clickid=${SUBID}`.
- * Sources created before that correction stored uppercase macros, a `bannerid` token and
- * `geo` as the country parameter. This rewrites only those link-template fields.
+ * `zoneid={zone_id}&campaignid={campaign_id}&country={country}&cost={cost}&clickid=${SUBID}`.
+ * Click ID is the only `$` macro (`${SUBID}`). Older presets stored `${zoneid}`, `${campaignid}`,
+ * `${geo}` and `${cost}` in any letter case, which PropellerAds leaves unreplaced. This rewrites
+ * only those macros, drops the old `bannerid` token and renames a `geo` country parameter to
+ * `country`. When that rename would duplicate an existing `country` param, the pre-existing
+ * country token is kept. Other tokens stay as stored.
  */
 export function normalizePropellerTokens(tokens: SourceToken[]): SourceToken[] {
-  const next: SourceToken[] = [];
+  const rewritten: RewrittenPropellerToken[] = [];
   for (const token of tokens) {
-    const macro = token.macro ? (PROPELLER_MACRO_FIX[token.macro] ?? token.macro) : token.macro;
-    if (token.param === "bannerid" && (macro === "${bannerid}" || token.macro === "${BANNERID}")) continue;
-    const param = token.param === "geo" && macro === "${geo}" ? "country" : token.param;
-    next.push(param === token.param && macro === token.macro ? token : { ...token, param, macro });
+    const next = rewritePropellerToken(token);
+    if (next) rewritten.push(next);
   }
-  return next;
+  const chosen = new Map<string, RewrittenPropellerToken>();
+  const order: string[] = [];
+  for (const item of rewritten) {
+    const key = item.token.param.toLowerCase();
+    const prev = chosen.get(key);
+    if (!prev) {
+      chosen.set(key, item);
+      order.push(key);
+      continue;
+    }
+    if (prev.renamedFromGeo && !item.renamedFromGeo) chosen.set(key, item);
+  }
+  return order.map((param) => chosen.get(param)!.token);
+}
+
+/** Set when a PropellerAds save would put two tokens on the same query param after rewriting. */
+export function propellerTokenConflict(tokens: SourceToken[]): string | null {
+  const params = new Set<string>();
+  for (const token of tokens) {
+    const next = rewritePropellerToken(token);
+    if (!next) continue;
+    const key = next.token.param.toLowerCase();
+    if (params.has(key)) return `Duplicate token param: ${key}`;
+    params.add(key);
+  }
+  return null;
 }
 
 export function findSourceTemplate(id: string): SourceTemplate | undefined {

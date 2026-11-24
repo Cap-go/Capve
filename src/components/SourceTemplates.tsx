@@ -19,9 +19,15 @@ function message(err: unknown) {
   return err instanceof Error ? err.message : "Request failed";
 }
 
+function postbackLabel(event: string | null) {
+  if (!event) return "Postback";
+  return `${event} postback`;
+}
+
 /** "Create from template" for traffic sources (Adcash, PropellerAds, ...). */
 export function SourceTemplatePicker({ onCreated }: { onCreated: () => void }) {
   const [templates, setTemplates] = useState<SourceTemplate[]>([]);
+  const [costProviders, setCostProviders] = useState<Array<{ id: string; name: string }>>([]);
   const [templateId, setTemplateId] = useState("");
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -31,11 +37,24 @@ export function SourceTemplatePicker({ onCreated }: { onCreated: () => void }) {
   useEffect(() => {
     sourcesApi
       .templates()
-      .then((data) => setTemplates(data.traffic_sources))
+      .then((data) => {
+        setTemplates(data.traffic_sources);
+        setCostProviders(data.cost_providers);
+      })
       .catch((err) => setError(message(err)));
   }, []);
 
   const template = templates.find((t) => t.id === templateId);
+  const costApiName = template?.cost_api
+    ? costProviders.find((provider) => provider.id === template.cost_api)?.name ?? template.cost_api
+    : null;
+  const previewPostbacks = template
+    ? template.postbacks?.length
+      ? template.postbacks
+      : template.postback_url
+        ? [{ event: null, url: template.postback_url }]
+        : []
+    : [];
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
@@ -43,12 +62,14 @@ export function SourceTemplatePicker({ onCreated }: { onCreated: () => void }) {
     setBusy(true);
     setError("");
     try {
-      const { traffic_source, postback } = await sourcesApi.createSourceFromTemplate(
+      const { traffic_source, postback, postbacks } = await sourcesApi.createSourceFromTemplate(
         template.id,
         name.trim() || undefined,
       );
       setCreated(
-        `${traffic_source.name} created${postback ? " with its postback (replace placeholders like YOUR_KEY)" : ""}.`,
+        postbacks.length > 1
+          ? `${traffic_source.name} created with ${postbacks.length} postbacks. Replace YOUR_KEY on each event with that event's conversion key.`
+          : `${traffic_source.name} created${postback ? " with its postback (replace placeholders like YOUR_KEY)" : ""}.`,
       );
       setName("");
       onCreated();
@@ -79,17 +100,22 @@ export function SourceTemplatePicker({ onCreated }: { onCreated: () => void }) {
         {template && (
           <div className="space-y-2 text-sm">
             <p className="text-[var(--velo-muted)]">
-              {template.cost_type.toUpperCase()} · tokens:{" "}
+              {template.cost_type.toUpperCase()}
+              {costApiName ? ` · Cost API: ${costApiName}` : ""}
+              {" · tokens: "}
               <span className="mono">
                 {template.tokens.map((t) => `${t.param}→${t.slot} (${t.name})`).join(", ")}
               </span>
             </p>
-            {template.postback_url && <CodeBlock>{template.postback_url}</CodeBlock>}
+            {previewPostbacks.map((postback) => (
+              <CodeBlock key={postback.event ?? "all"} label={postbackLabel(postback.event)}>
+                {postback.url}
+              </CodeBlock>
+            ))}
             {template.notes && <p className="text-[var(--velo-muted)]">{template.notes}</p>}
             <p className="text-[var(--velo-muted)]">
-              Add <span className="mono">&amp;key=…</span> from the campaign&apos;s Tracking &amp; postback card.{" "}
-              <a className="underline" href="/docs/networks" target="_blank" rel="noreferrer">
-                How to test the round trip
+              <a className="underline" href="/docs/postback" target="_blank" rel="noreferrer">
+                Outgoing postback docs
               </a>
             </p>
             {!template.verified && (

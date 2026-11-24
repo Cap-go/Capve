@@ -464,7 +464,12 @@ const contracts: Record<string, Schema> = {
       id: describe(text, "Preset id accepted by create_traffic_source_from_template."), name: describe(text, "Traffic-source preset name."),
       cost_type: describe(text, "Charging model supplied by this traffic-source preset."),
       tokens: array(token, "Preset query parameters, source macros and click-slot mappings."),
-      postback_url: describe(nullableText, "Outgoing postback template, or null when none is supplied."),
+      postback_url: describe(nullableText, "Single all-events postback, or null when the preset uses per-event postbacks."),
+      postbacks: array(object({
+        event: describe(nullableText, "Conversion event that fires this postback, or null for every event."),
+        url: describe(text, "Outgoing postback URL with placeholders such as YOUR_KEY or YOUR_ID to replace before use."),
+      }, ["event", "url"]), "Postbacks created with the source. One all-events URL, or one URL per event."),
+      cost_api: describe(nullableText, "Cost API pre-selected for this preset, or null when none exists."),
       verified: describe(boolean, "Whether this preset is marked verified in the built-in catalog."),
     }), "Built-in traffic-source presets."),
     networks: array(object({
@@ -474,7 +479,12 @@ const contracts: Record<string, Schema> = {
     }), "Built-in affiliate-network presets."),
     cost_providers: array(object({ id: describe(text, "Provider id accepted by update_traffic_source_settings."), name: describe(text, "Cost API provider display name.") }), "Supported cost-sync integrations."),
   }),
-  create_traffic_source_from_template: object({ traffic_source: source, settings: sourceSettings, postback: nullable(postback) }),
+  create_traffic_source_from_template: object({
+    traffic_source: source,
+    settings: sourceSettings,
+    postback: nullable(postback),
+    postbacks: array(postback, "Every outgoing postback created from the preset."),
+  }),
   create_network_from_template: object({
     network: describe(entity, "Created affiliate-network record."), template: describe(text, "Preset id used to create the network."),
     incoming_postback_urls: describe(postbackUrls, "Network-specific incoming conversion URL templates."),

@@ -24,8 +24,8 @@ Capve now:
 
 ### 1. Configure the traffic source API
 
-1. Go to **Traffic Sources** → select your Adcash source
-2. Under **Cost API**, select **Adcash**
+1. Go to **Traffic Sources** → select your Adcash source. Creating it from the Adcash template pre-selects **Adcash**
+2. Under **Cost API**, confirm **Adcash** is selected
 3. Paste your Adcash API key (get it from your Adcash advertiser account)
 4. Save
 
@@ -217,9 +217,11 @@ export const COST_PROVIDERS: Record<string, CostProvider> = {
   cost_type: "cpm",
   cost_api: "propellerads",
   tokens: [
-    { param: "zoneid", name: "Zone", slot: "sub1", macro: "{zoneid}", kind: "zone" },
+    { param: "zoneid", name: "Zone", slot: "sub1", macro: "{zone_id}", kind: "zone" },
     { param: "campaignid", name: "Campaign", slot: "sub2", macro: "{campaign_id}", kind: "campaign" },
-    // ...
+    { param: "country", name: "Country", slot: "sub4", macro: "{country}" },
+    { param: "cost", name: "Cost", slot: "cost", macro: "{cost}" },
+    { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
   ],
 }
 ```

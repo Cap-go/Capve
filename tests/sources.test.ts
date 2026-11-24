@@ -4,10 +4,20 @@ import { adcashProvider } from "../worker/cron/cost-providers";
 import { syncSourceCost } from "../worker/cron/cost-sync";
 import { getSourceSettingsRow } from "../worker/db/sources";
 import { parseCostCents } from "../worker/lib/click-context";
-import { applySourceTokens, parseTokens, SOURCE_TEMPLATES } from "../worker/lib/source-templates";
+import {
+  ADCASH_POSTBACK_URL,
+  applySourceTokens,
+  normalizePropellerTokens,
+  parseTokens,
+  propellerTokenConflict,
+  SOURCE_TEMPLATES,
+  trackingUrlWithMacros,
+  type SourceToken,
+} from "../worker/lib/source-templates";
 import { registerTestUser } from "./helpers";
 import { initSql } from "./schema";
 import propellerMigration from "../migrations/0035_fix_propellerads_macros.sql?raw";
+import propellerLiveMigration from "../migrations/0037_fix_propellerads_live_macros.sql?raw";
 
 const MERCHANT = "https://merchant.example.com/casino";
 const UA =
@@ -27,10 +37,11 @@ async function api<T>(method: string, path: string, body?: unknown, status = 200
 }
 
 async function adcashCampaign() {
-  const { traffic_source, settings, postback } = await api<{
+  const { traffic_source, settings, postback, postbacks } = await api<{
     traffic_source: { id: string; cost_type: string };
     settings: { tokens: Array<{ param: string; slot: string; macro?: string }>; api_provider: string | null };
-    postback: { url: string } | null;
+    postback: { url: string; event: string | null } | null;
+    postbacks: Array<{ url: string; event: string | null }>;
   }>("POST", "/api/sources/from-template", { template_id: "adcash", name: "Adcash pops" }, 201);
   const { program } = await api<{ program: { id: string; campaign_key: string } }>(
     "POST",
@@ -42,7 +53,7 @@ async function adcashCampaign() {
     },
     201,
   );
-  return { source: traffic_source, settings, postback, program };
+  return { source: traffic_source, settings, postback, postbacks, program };
 }
 
 async function click(campaignKey: string, query: string) {
@@ -61,6 +72,35 @@ function clickRow(clickId: string) {
 }
 
 const today = () => new Date().toISOString().slice(0, 10);
+
+const PROPELLER_QUERY =
+  "zoneid={zone_id}&campaignid={campaign_id}&country={country}&cost={cost}&clickid=${SUBID}";
+
+function propellerPairs(tokens: Array<{ param: string; macro?: string }>) {
+  return tokens.map((token) => `${token.param}=${token.macro}`);
+}
+
+async function runSql(sql: string) {
+  for (const statement of sql.split(";").map((part) => part.trim()).filter(Boolean)) {
+    await env.DB.prepare(statement).run();
+  }
+}
+
+async function settingsRow(sourceId: string) {
+  return env.DB.prepare("SELECT * FROM traffic_source_settings WHERE traffic_source_id = ?")
+    .bind(sourceId)
+    .first<{
+      traffic_source_id: string;
+      user_id: string;
+      template: string | null;
+      tokens: string;
+      api_provider: string | null;
+      api_key_sealed: string | null;
+      last_sync_at: number | null;
+      last_sync_error: string | null;
+      updated_at: number;
+    }>();
+}
 
 describe("traffic source templates, tokens and cost", () => {
   beforeAll(async () => {
@@ -97,12 +137,52 @@ describe("traffic source templates, tokens and cost", () => {
   });
 
   it("creates a traffic source from a template with tokens and postback", async () => {
-    const { source, settings, postback } = await adcashCampaign();
+    const { source, settings, postback, postbacks } = await adcashCampaign();
     expect(source.cost_type).toBe("cpm");
-    expect(settings.api_provider).toBeNull();
+    expect(settings.api_provider).toBe("adcash");
     expect(settings.tokens.find((t) => t.slot === "cost")?.macro).toBe("[redirection_cost]");
     expect(settings.tokens.find((t) => t.param === "zoneid")?.slot).toBe("sub1");
-    expect(postback?.url).toContain("{external_id}");
+    expect(postback?.event).toBe("registration");
+    expect(postback?.url).toBe(ADCASH_POSTBACK_URL);
+    expect(postbacks.map((row) => row.event)).toEqual(["registration", "ftd"]);
+    expect(postbacks.every((row) => row.url === ADCASH_POSTBACK_URL && !row.url.includes("payout"))).toBe(true);
+  });
+
+  it("marks Adcash verified and keeps a single all-events postback for other presets", async () => {
+    const adcash = SOURCE_TEMPLATES.find((template) => template.id === "adcash")!;
+    expect(adcash.verified).toBe(true);
+    expect(adcash.cost_api).toBe("adcash");
+    expect(adcash.tokens.map((token) => `${token.param}=${token.macro}`)).toEqual([
+      "zoneid=[zone]",
+      "campaignid=[campaign]",
+      "country=[country]",
+      "cost=[redirection_cost]",
+      "clickid=[clickid]",
+    ]);
+    const listed = await api<{
+      traffic_sources: Array<{ id: string; verified: boolean; cost_api: string | null; postbacks: Array<{ event: string | null; url: string }> }>;
+    }>("GET", "/api/sources/templates");
+    const listedAdcash = listed.traffic_sources.find((template) => template.id === "adcash")!;
+    expect(listedAdcash.verified).toBe(true);
+    expect(listedAdcash.cost_api).toBe("adcash");
+    expect(listedAdcash.postbacks).toEqual([
+      { event: "registration", url: ADCASH_POSTBACK_URL },
+      { event: "ftd", url: ADCASH_POSTBACK_URL },
+    ]);
+    const propeller = await api<{
+      settings: { api_provider: string | null };
+      postback: { event: string | null; url: string } | null;
+      postbacks: Array<{ event: string | null; url: string }>;
+    }>("POST", "/api/sources/from-template", { template_id: "propellerads", name: "Propeller one" }, 201);
+    expect(propeller.settings.api_provider).toBeNull();
+    expect(propeller.postbacks).toHaveLength(1);
+    expect(propeller.postback?.event).toBeNull();
+    expect(propeller.postback?.url).toContain("visitor_id={external_id}");
+    expect(propeller.postback?.url).toContain("payout={payout}");
+    expect(propeller.postbacks[0]).toEqual(propeller.postback);
+    const rich = SOURCE_TEMPLATES.find((template) => template.id === "richads")!;
+    const listedRich = listed.traffic_sources.find((template) => template.id === "richads")!;
+    expect(listedRich.postbacks).toEqual([{ event: null, url: rich.postback_url }]);
   });
 
   it("builds ad link with traffic source macros for Adcash", async () => {
@@ -122,6 +202,102 @@ describe("traffic source templates, tokens and cost", () => {
     expect(data.tokens.length).toBeGreaterThan(0);
   });
 
+  it("PropellerAds template defaults are the live campaign macros", () => {
+    const template = SOURCE_TEMPLATES.find((item) => item.id === "propellerads");
+    expect(template).toBeTruthy();
+    expect(propellerPairs(template!.tokens)).toEqual([
+      "zoneid={zone_id}",
+      "campaignid={campaign_id}",
+      "country={country}",
+      "cost={cost}",
+      "clickid=${SUBID}",
+    ]);
+    expect(trackingUrlWithMacros("https://capve.app/c/key", template!.tokens)).toBe(
+      `https://capve.app/c/key?${PROPELLER_QUERY}`,
+    );
+  });
+
+  it("normalizes broken PropellerAds tokens and leaves custom ones", () => {
+    const uppercase: SourceToken[] = [
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${ZONEID}", kind: "zone" },
+      { param: "campaignid", name: "Campaign", slot: "sub2", macro: "${CAMPAIGNID}", kind: "campaign" },
+      { param: "bannerid", name: "Creative", slot: "sub3", macro: "${BANNERID}" },
+      { param: "geo", name: "Country", slot: "sub4", macro: "${GEO}" },
+      { param: "cost", name: "Cost", slot: "cost", macro: "${COST}" },
+      { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
+      { param: "os", name: "OS", slot: "sub5", macro: "{os}" },
+    ];
+    expect(propellerPairs(normalizePropellerTokens(uppercase))).toEqual([
+      "zoneid={zone_id}",
+      "campaignid={campaign_id}",
+      "country={country}",
+      "cost={cost}",
+      "clickid=${SUBID}",
+      "os={os}",
+    ]);
+
+    const lowercase: SourceToken[] = [
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${zoneid}", kind: "zone" },
+      { param: "campaignid", name: "Campaign", slot: "sub2", macro: "${campaignid}", kind: "campaign" },
+      { param: "geo", name: "Country", slot: "sub4", macro: "${geo}" },
+      { param: "cost", name: "Cost", slot: "cost", macro: "${cost}" },
+      { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
+    ];
+    expect(propellerPairs(normalizePropellerTokens(lowercase))).toEqual([
+      "zoneid={zone_id}",
+      "campaignid={campaign_id}",
+      "country={country}",
+      "cost={cost}",
+      "clickid=${SUBID}",
+    ]);
+
+    const already: SourceToken[] = [
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "{zone_id}", kind: "zone" },
+      { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
+      { param: "note", name: "Note", slot: "sub6", macro: "${custom}" },
+    ];
+    expect(normalizePropellerTokens(already)).toEqual(already);
+
+    const mixedCase: SourceToken[] = [
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${ZoneId}", kind: "zone" },
+      { param: "campaignid", name: "Campaign", slot: "sub2", macro: "${CampaignId}", kind: "campaign" },
+      { param: "GEO", name: "Geo code", slot: "sub4", macro: "${Geo}" },
+      { param: "cost", name: "Cost", slot: "cost", macro: "${Cost}" },
+      { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
+    ];
+    expect(propellerPairs(normalizePropellerTokens(mixedCase))).toEqual([
+      "zoneid={zone_id}",
+      "campaignid={campaign_id}",
+      "country={country}",
+      "cost={cost}",
+      "clickid=${SUBID}",
+    ]);
+    expect(normalizePropellerTokens(mixedCase).find((token) => token.param === "country")?.name).toBe("Geo code");
+
+    const collision: SourceToken[] = [
+      { param: "geo", name: "Geo code", slot: "sub4", macro: "${geo}" },
+      { param: "country", name: "Country", slot: "sub9", macro: "{country}" },
+    ];
+    expect(normalizePropellerTokens(collision)).toEqual([
+      { param: "country", name: "Country", slot: "sub9", macro: "{country}" },
+    ]);
+
+    const mixedCountry: SourceToken[] = [
+      { param: "GEO", name: "Geo code", slot: "sub4", macro: "${Geo}" },
+      { param: "Country", name: "Country", slot: "sub9", macro: "{country}" },
+    ];
+    expect(normalizePropellerTokens(mixedCountry)).toEqual([
+      { param: "Country", name: "Country", slot: "sub9", macro: "{country}" },
+    ]);
+    expect(propellerTokenConflict(mixedCountry)).toBe("Duplicate token param: country");
+
+    const inherited: SourceToken[] = [
+      { param: "clickid", name: "Click ID", slot: "external_id", macro: "constructor" },
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "toString" },
+    ];
+    expect(normalizePropellerTokens(inherited)).toEqual(inherited);
+  });
+
   it("builds ad link with traffic source macros for PropellerAds", async () => {
     const { traffic_source } = await api<{
       traffic_source: { id: string };
@@ -138,19 +314,27 @@ describe("traffic source templates, tokens and cost", () => {
     );
     const data = await api<{
       tracking_url: string | null;
+      tokens: Array<{ param: string; macro?: string }>;
     }>("GET", `/api/campaigns/${program.id}/source-link`);
-    expect(data.tracking_url?.split("?")[1]).toBe(
-      "zoneid=${zoneid}&campaignid=${campaignid}&country=${geo}&cost=${cost}&clickid=${SUBID}",
-    );
+    expect(data.tracking_url?.split("?")[1]).toBe(PROPELLER_QUERY);
+    expect(propellerPairs(data.tokens)).toEqual([
+      "zoneid={zone_id}",
+      "campaignid={campaign_id}",
+      "country={country}",
+      "cost={cost}",
+      "clickid=${SUBID}",
+    ]);
   });
 
-  it("corrects stored uppercase PropellerAds tokens to the creative link", async () => {
+  it("rewrites a stored broken PropellerAds link before and after the migration", async () => {
     const { traffic_source } = await api<{ traffic_source: { id: string } }>(
       "POST",
       "/api/sources/from-template",
       { template_id: "propellerads", name: "PropellerAds legacy" },
       201,
     );
+    await api("PUT", `/api/sources/${traffic_source.id}/settings`, { api_provider: null, api_key: "keep-me" });
+    const beforeSave = (await settingsRow(traffic_source.id))!;
     const legacy = JSON.stringify([
       { param: "zoneid", name: "Zone", slot: "sub1", macro: "${ZONEID}", kind: "zone" },
       { param: "campaignid", name: "Campaign", slot: "sub2", macro: "${CAMPAIGNID}", kind: "campaign" },
@@ -158,10 +342,45 @@ describe("traffic source templates, tokens and cost", () => {
       { param: "geo", name: "Country", slot: "sub4", macro: "${GEO}" },
       { param: "cost", name: "Cost", slot: "cost", macro: "${COST}" },
       { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
+      { param: "os", name: "OS", slot: "sub5", macro: "{os}" },
     ]);
-    await env.DB.prepare("UPDATE traffic_source_settings SET tokens = ? WHERE traffic_source_id = ?")
-      .bind(legacy, traffic_source.id)
+    await env.DB.prepare(
+      "UPDATE traffic_source_settings SET tokens = ?, updated_at = ? WHERE traffic_source_id = ?",
+    )
+      .bind(legacy, beforeSave.updated_at, traffic_source.id)
       .run();
+
+    const { traffic_source: lowerSource } = await api<{ traffic_source: { id: string } }>(
+      "POST",
+      "/api/sources/from-template",
+      { template_id: "propellerads", name: "PropellerAds lower" },
+      201,
+    );
+    const lower = JSON.stringify([
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${zoneid}", kind: "zone" },
+      { param: "campaignid", name: "Campaign", slot: "sub2", macro: "${campaignid}", kind: "campaign" },
+      { param: "country", name: "Country", slot: "sub4", macro: "${geo}" },
+      { param: "cost", name: "Cost", slot: "cost", macro: "${cost}" },
+      { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
+    ]);
+    const lowerBefore = (await settingsRow(lowerSource.id))!;
+    await env.DB.prepare("UPDATE traffic_source_settings SET tokens = ? WHERE traffic_source_id = ?")
+      .bind(lower, lowerSource.id)
+      .run();
+
+    const { program } = await api<{ program: { id: string } }>(
+      "POST",
+      "/api/programs",
+      {
+        name: `Legacy Propeller ${crypto.randomUUID().slice(0, 6)}`,
+        destination_url: MERCHANT,
+        traffic_source_id: traffic_source.id,
+      },
+      201,
+    );
+    const data = await api<{ tracking_url: string | null }>("GET", `/api/campaigns/${program.id}/source-link`);
+    expect(data.tracking_url?.split("?")[1]).toBe(`${PROPELLER_QUERY}&os={os}`);
+
     const { traffic_source: bannerLast } = await api<{ traffic_source: { id: string } }>(
       "POST",
       "/api/sources/from-template",
@@ -176,51 +395,239 @@ describe("traffic source templates, tokens and cost", () => {
     await env.DB.prepare("UPDATE traffic_source_settings SET tokens = ? WHERE traffic_source_id = ?")
       .bind(bannerLastTokens, bannerLast.id)
       .run();
-    const { program } = await api<{ program: { id: string } }>(
+
+    const { traffic_source: labeled } = await api<{ traffic_source: { id: string } }>(
       "POST",
-      "/api/programs",
-      {
-        name: `Legacy Propeller ${crypto.randomUUID().slice(0, 6)}`,
-        destination_url: MERCHANT,
-        traffic_source_id: traffic_source.id,
-      },
+      "/api/sources/from-template",
+      { template_id: "propellerads", name: "PropellerAds labeled" },
       201,
     );
-    const data = await api<{ tracking_url: string | null }>("GET", `/api/campaigns/${program.id}/source-link`);
-    expect(data.tracking_url?.split("?")[1]).toBe(
-      "zoneid=${zoneid}&campaignid=${campaignid}&country=${geo}&cost=${cost}&clickid=${SUBID}",
-    );
-
-    const adcashBefore = await env.DB.prepare(
-      "SELECT tokens FROM traffic_source_settings WHERE template = 'adcash' LIMIT 1",
-    ).first<{ tokens: string }>();
-    for (const statement of propellerMigration.split(";").map((part) => part.trim()).filter(Boolean)) {
-      await env.DB.prepare(statement).run();
-    }
-    const stored = await env.DB.prepare(
-      "SELECT tokens FROM traffic_source_settings WHERE traffic_source_id = ?",
+    const labeledTokens = JSON.stringify([
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${ZoneId}", kind: "zone" },
+      { param: "campaignid", name: "Camp", slot: "sub2", macro: "${CampaignId}", kind: "campaign" },
+      { param: "geo", name: "Geo code", slot: "sub4", macro: "${Geo}" },
+      { param: "cost", name: "Spend", slot: "cost", macro: "${Cost}" },
+      { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
+    ]);
+    const labeledBefore = (await settingsRow(labeled.id))!;
+    await env.DB.prepare(
+      "UPDATE traffic_source_settings SET tokens = ?, updated_at = ? WHERE traffic_source_id = ?",
     )
-      .bind(traffic_source.id)
-      .first<{ tokens: string }>();
-    const tokens = JSON.parse(stored!.tokens) as Array<{ param: string; macro?: string }>;
-    expect(tokens.map((token) => `${token.param}=${token.macro}`)).toEqual([
-      "zoneid=${zoneid}",
-      "campaignid=${campaignid}",
-      "country=${geo}",
-      "cost=${cost}",
+      .bind(labeledTokens, labeledBefore.updated_at, labeled.id)
+      .run();
+
+    const { traffic_source: both } = await api<{ traffic_source: { id: string } }>(
+      "POST",
+      "/api/sources/from-template",
+      { template_id: "propellerads", name: "PropellerAds both countries" },
+      201,
+    );
+    const bothTokens = JSON.stringify([
+      { param: "geo", name: "Geo code", slot: "sub4", macro: "${geo}" },
+      { param: "country", name: "Country", slot: "sub9", macro: "{country}" },
+      { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
+    ]);
+    await env.DB.prepare("UPDATE traffic_source_settings SET tokens = ? WHERE traffic_source_id = ?")
+      .bind(bothTokens, both.id)
+      .run();
+
+    const { traffic_source: customBanner } = await api<{ traffic_source: { id: string } }>(
+      "POST",
+      "/api/sources/from-template",
+      { template_id: "propellerads", name: "PropellerAds custom banner" },
+      201,
+    );
+    const customBannerTokens = JSON.stringify([
+      { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
+      { param: "BannerId", name: "Banner code", slot: "sub8", macro: "${BannerId}" },
+    ]);
+    const customBannerBefore = (await settingsRow(customBanner.id))!;
+    await env.DB.prepare(
+      "UPDATE traffic_source_settings SET tokens = ?, updated_at = ? WHERE traffic_source_id = ?",
+    )
+      .bind(customBannerTokens, customBannerBefore.updated_at, customBanner.id)
+      .run();
+
+    const { traffic_source: spacedCountry } = await api<{ traffic_source: { id: string } }>(
+      "POST",
+      "/api/sources/from-template",
+      { template_id: "propellerads", name: "PropellerAds spaced country" },
+      201,
+    );
+    const spacedCountryTokens = `[
+      { "param": "GEO", "name": "Geo code", "slot": "sub4", "macro": "\${Geo}" },
+      { "param": "Country", "name": "Country", "slot": "sub9", "macro": "{country}" }
+    ]`;
+    await env.DB.prepare("UPDATE traffic_source_settings SET tokens = ? WHERE traffic_source_id = ?")
+      .bind(spacedCountryTokens, spacedCountry.id)
+      .run();
+
+    const { traffic_source: noMacro } = await api<{ traffic_source: { id: string } }>(
+      "POST",
+      "/api/sources/from-template",
+      { template_id: "propellerads", name: "PropellerAds no macro" },
+      201,
+    );
+    const noMacroTokens = JSON.stringify([
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${zoneid}", kind: "zone" },
+      { param: "os", name: "OS", slot: "sub5" },
+    ]);
+    await env.DB.prepare("UPDATE traffic_source_settings SET tokens = ? WHERE traffic_source_id = ?")
+      .bind(noMacroTokens, noMacro.id)
+      .run();
+
+    const { source: adcash } = await adcashCampaign();
+    const adcashTokens = JSON.stringify([
+      { param: "zoneid", name: "Zone", slot: "sub1", macro: "${ZONEID}", kind: "zone" },
+      { param: "geo", name: "Geo", slot: "sub4", macro: "${GEO}" },
+      { param: "cost", name: "Cost", slot: "cost", macro: "${COST}" },
+      { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
+    ]);
+    await env.DB.prepare(
+      "UPDATE traffic_source_settings SET tokens = ?, updated_at = ? WHERE traffic_source_id = ?",
+    )
+      .bind(adcashTokens, 111, adcash.id)
+      .run();
+
+    await runSql(propellerMigration);
+    await runSql(propellerLiveMigration);
+
+    const stored = (await settingsRow(traffic_source.id))!;
+    expect(propellerPairs(JSON.parse(stored.tokens))).toEqual([
+      "zoneid={zone_id}",
+      "campaignid={campaign_id}",
+      "country={country}",
+      "cost={cost}",
+      "clickid=${SUBID}",
+      "os={os}",
+    ]);
+    expect(stored.user_id).toBe(beforeSave.user_id);
+    expect(stored.template).toBe("propellerads");
+    expect(stored.api_provider).toBe(beforeSave.api_provider);
+    expect(stored.api_key_sealed).toBe(beforeSave.api_key_sealed);
+    expect(stored.last_sync_at).toBe(beforeSave.last_sync_at);
+    expect(stored.last_sync_error).toBe(beforeSave.last_sync_error);
+    expect(stored.updated_at).toBe(beforeSave.updated_at);
+    expect(stored.api_key_sealed).toMatch(/^v1\./);
+
+    const lowerStored = (await settingsRow(lowerSource.id))!;
+    expect(propellerPairs(JSON.parse(lowerStored.tokens))).toEqual([
+      "zoneid={zone_id}",
+      "campaignid={campaign_id}",
+      "country={country}",
+      "cost={cost}",
       "clickid=${SUBID}",
     ]);
-    const adcashAfter = await env.DB.prepare(
-      "SELECT tokens FROM traffic_source_settings WHERE template = 'adcash' LIMIT 1",
-    ).first<{ tokens: string }>();
-    expect(adcashAfter?.tokens).toBe(adcashBefore?.tokens);
-    const cleanedLast = await env.DB.prepare(
-      "SELECT tokens FROM traffic_source_settings WHERE traffic_source_id = ?",
-    )
-      .bind(bannerLast.id)
-      .first<{ tokens: string }>();
-    const lastTokens = JSON.parse(cleanedLast!.tokens) as Array<{ param: string }>;
-    expect(lastTokens.map((token) => token.param)).toEqual(["zoneid", "campaignid"]);
+    expect(lowerStored.updated_at).toBe(lowerBefore.updated_at);
+    expect(lowerStored.user_id).toBe(lowerBefore.user_id);
+
+    const labeledStored = (await settingsRow(labeled.id))!;
+    const labeledParsed = JSON.parse(labeledStored.tokens) as Array<{ param: string; name: string; macro?: string }>;
+    expect(propellerPairs(labeledParsed)).toEqual([
+      "zoneid={zone_id}",
+      "campaignid={campaign_id}",
+      "country={country}",
+      "cost={cost}",
+      "clickid=${SUBID}",
+    ]);
+    expect(labeledParsed.find((token) => token.param === "country")).toMatchObject({ name: "Geo code" });
+    expect(labeledStored.updated_at).toBe(labeledBefore.updated_at);
+
+    const bothStored = JSON.parse((await settingsRow(both.id))!.tokens) as Array<{
+      param: string;
+      name: string;
+      slot: string;
+    }>;
+    expect(bothStored.map((token) => token.param)).toEqual(["country", "clickid"]);
+    expect(bothStored[0]).toMatchObject({ name: "Country", slot: "sub9" });
+
+    const adcashAfter = (await settingsRow(adcash.id))!;
+    expect(adcashAfter.tokens).toBe(adcashTokens);
+    expect(adcashAfter.updated_at).toBe(111);
+
+    const customBannerStored = (await settingsRow(customBanner.id))!;
+    expect(JSON.parse(customBannerStored.tokens).map((token: { param: string }) => token.param)).toEqual([
+      "clickid",
+    ]);
+    expect(customBannerStored.updated_at).toBe(customBannerBefore.updated_at);
+
+    const spacedStored = JSON.parse((await settingsRow(spacedCountry.id))!.tokens) as Array<{
+      param: string;
+      name: string;
+      slot: string;
+    }>;
+    expect(spacedStored).toEqual([
+      { param: "Country", name: "Country", slot: "sub9", macro: "{country}" },
+    ]);
+
+    const noMacroStored = JSON.parse((await settingsRow(noMacro.id))!.tokens) as Array<{
+      param: string;
+      name: string;
+      macro?: string;
+    }>;
+    expect(noMacroStored.map((token) => token.param)).toEqual(["zoneid", "os"]);
+    expect(noMacroStored[0]?.macro).toBe("{zone_id}");
+    expect(noMacroStored[1]?.macro).toBeUndefined();
+
+    const cleanedLast = (await settingsRow(bannerLast.id))!;
+    expect(JSON.parse(cleanedLast.tokens).map((token: { param: string }) => token.param)).toEqual([
+      "zoneid",
+      "campaignid",
+    ]);
+    expect(propellerPairs(JSON.parse(cleanedLast.tokens))).toEqual([
+      "zoneid={zone_id}",
+      "campaignid={campaign_id}",
+    ]);
+
+    const once = stored.tokens;
+    await runSql(propellerLiveMigration);
+    expect((await settingsRow(traffic_source.id))!.tokens).toBe(once);
+    expect((await settingsRow(traffic_source.id))!.updated_at).toBe(beforeSave.updated_at);
+  });
+
+  it("persists corrected PropellerAds macros when settings are saved", async () => {
+    const { traffic_source } = await api<{ traffic_source: { id: string } }>(
+      "POST",
+      "/api/sources/from-template",
+      { template_id: "propellerads", name: "PropellerAds save" },
+      201,
+    );
+    await api("PUT", `/api/sources/${traffic_source.id}/settings`, {
+      tokens: [
+        { param: "zoneid", name: "Zone", slot: "sub1", macro: "${zoneid}", kind: "zone" },
+        { param: "campaignid", name: "Campaign", slot: "sub2", macro: "${campaignid}", kind: "campaign" },
+        { param: "geo", name: "Country", slot: "sub4", macro: "${geo}" },
+        { param: "cost", name: "Cost", slot: "cost", macro: "${cost}" },
+        { param: "clickid", name: "Click ID", slot: "external_id", macro: "${SUBID}" },
+        { param: "os", name: "OS", slot: "sub5", macro: "{os}" },
+      ],
+    });
+    const stored = (await settingsRow(traffic_source.id))!;
+    expect(propellerPairs(JSON.parse(stored.tokens))).toEqual([
+      "zoneid={zone_id}",
+      "campaignid={campaign_id}",
+      "country={country}",
+      "cost={cost}",
+      "clickid=${SUBID}",
+      "os={os}",
+    ]);
+
+    const beforeConflict = (await settingsRow(traffic_source.id))!;
+    const conflict = await api<{ error: string }>(
+      "PUT",
+      `/api/sources/${traffic_source.id}/settings`,
+      {
+        tokens: [
+          { param: "geo", name: "Geo code", slot: "sub4", macro: "${Geo}" },
+          { param: "country", name: "Country", slot: "sub9", macro: "{country}" },
+        ],
+      },
+      400,
+    );
+    expect(conflict.error).toBe("Duplicate token param: country");
+    const afterConflict = (await settingsRow(traffic_source.id))!;
+    expect(afterConflict.tokens).toBe(beforeConflict.tokens);
+    expect(afterConflict.updated_at).toBe(beforeConflict.updated_at);
   });
 
   it("does not rewrite a non-PropellerAds source that uses the same macros", async () => {
