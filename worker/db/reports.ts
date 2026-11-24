@@ -346,8 +346,162 @@ function combinedDimensionSql(dims: DimensionSql[]): DimensionSql {
   };
 }
 
-/** Approved conversion exists for click `c` (conversions follow their click's time). */
-const CLICK_CONVERTED = `EXISTS(SELECT 1 FROM conversions cv WHERE cv.click_id = c.id AND ${approvedStatusSql("cv")})`;
+/** Seven days. One D1 statement never scans more click-time than this. */
+const CLICK_CHUNK_MS = 7 * 24 * 60 * 60 * 1000;
+const REPORT_QUERY_CONCURRENCY = 4;
+
+function chunkWindows(from: number, to: number): Array<{ from: number; to: number }> {
+  if (to < from) return [];
+  const windows: Array<{ from: number; to: number }> = [];
+  let cursor = from;
+  while (cursor <= to) {
+    const end = Math.min(cursor + CLICK_CHUNK_MS - 1, to);
+    windows.push({ from: cursor, to: end });
+    if (end === to) break;
+    cursor = end + 1;
+  }
+  return windows;
+}
+
+async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await fn(items[index]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
+
+function reportDimension(by: GroupDimension, options: GroupedReportOptions) {
+  const dims = [by, ...(options.then_by ?? [])].map((d) =>
+    dimensionSql(d, options.tz_offset_minutes),
+  );
+  return dims.length === 1 ? dims[0] : combinedDimensionSql(dims);
+}
+
+/** Rewrite click/program aliases (`c.` / `p.`) without touching a longer alias such as `pc.`. */
+function aliasClickProgram(sql: string, click: string, program: string): string {
+  return sql.replace(/\bc\./g, `${click}.`).replace(/\bp\./g, `${program}.`);
+}
+
+/**
+ * Click totals for one campaign and one time window. No join to conversions: the
+ * aggregate reads only columns in `idx_clicks_program_created_stats`, so D1 can
+ * answer it with a covering index range instead of the wide clicks row.
+ * Exported so tests explain this SQL, not a copy.
+ */
+export function groupedClickQuery(
+  userId: string,
+  by: GroupDimension,
+  options: GroupedReportOptions,
+  programId: string,
+): { sql: string; binds: Array<string | number> } {
+  const dim = reportDimension(by, options);
+  const where = programWhere(userId, options, "p", Boolean(options.campaign_id));
+  const campaignSql = options.campaign_id ? " AND p.id = ?" : "";
+  const campaignBinds = options.campaign_id ? [options.campaign_id] : [];
+  const clickTime = clickTimeClause(options, "c");
+  const label = dim.label ?? "NULL";
+
+  const sql = `SELECT ${dim.click} AS k, MAX(${label}) AS label,
+          COUNT(*) AS clicks,
+          COALESCE(SUM(c.is_unique), 0) AS unique_clicks,
+          COALESCE(SUM(c.is_bot), 0) AS bot_clicks,
+          SUM(CASE WHEN c.lp_clicked_at IS NOT NULL AND c.is_bot = 0 THEN 1 ELSE 0 END) AS lp_clicks,
+          COALESCE(SUM(CASE WHEN c.is_bot = 0 THEN c.cost_cents END), 0) AS cost
+         FROM clicks c
+         JOIN programs p ON p.id = c.program_id
+         ${dim.clickJoin ?? ""}
+         WHERE ${where.sql}${campaignSql} AND c.program_id = ?${clickTime.sql}
+         GROUP BY k`;
+
+  return {
+    sql,
+    binds: [...where.binds, ...campaignBinds, programId, ...clickTime.binds],
+  };
+}
+
+/**
+ * Converted-click count and CPA cost for one campaign. Driven from conversions
+ * (small) and the click primary key, so a month of clicks is never probed once
+ * per row. A click counts when any non-rejected conversion points at it, whatever
+ * day the postback arrived. CPA is applied once per click, not once per event.
+ */
+export function groupedConvertedQuery(
+  userId: string,
+  by: GroupDimension,
+  options: GroupedReportOptions,
+  programId: string,
+): { sql: string; binds: Array<string | number> } {
+  const dim = reportDimension(by, options);
+  const where = programWhere(userId, options, "pc", Boolean(options.campaign_id));
+  const campaignSql = options.campaign_id ? " AND pc.id = ?" : "";
+  const campaignBinds = options.campaign_id ? [options.campaign_id] : [];
+  const clickTime = clickTimeClause(options, "cf");
+  const key = aliasClickProgram(dim.click, "cf", "pc");
+  const label = aliasClickProgram(dim.label ?? "NULL", "cf", "pc");
+  const join = dim.clickJoin ? aliasClickProgram(dim.clickJoin, "cf", "pc") : "";
+
+  const sql = `SELECT k, MAX(label) AS label, COUNT(*) AS converted_clicks, COALESCE(SUM(cpa_cost), 0) AS cpa_cost
+         FROM (
+           SELECT ${key} AS k, MAX(${label}) AS label,
+             MAX(CASE WHEN cf.is_bot = 0 THEN COALESCE(cf.cpa_cost_cents, 0) ELSE 0 END) AS cpa_cost
+           FROM conversions cv
+           JOIN clicks cf ON cf.id = cv.click_id
+           JOIN programs pc ON pc.id = cf.program_id
+           ${join}
+           WHERE cv.click_id IS NOT NULL
+             AND ${approvedStatusSql("cv")}
+             AND ${where.sql}${campaignSql}
+             AND cv.program_id = cf.program_id
+             AND cf.program_id = ?${clickTime.sql}
+           GROUP BY cv.click_id
+         )
+         GROUP BY k`;
+
+  return {
+    sql,
+    binds: [...where.binds, ...campaignBinds, programId, ...clickTime.binds],
+  };
+}
+
+async function reportProgramIds(
+  db: D1Database,
+  userId: string,
+  options: GroupedReportOptions,
+): Promise<string[]> {
+  const where = programWhere(userId, options, "p", Boolean(options.campaign_id));
+  const campaignSql = options.campaign_id ? " AND p.id = ?" : "";
+  const campaignBinds = options.campaign_id ? [options.campaign_id] : [];
+  const { results } = await db
+    .prepare(`SELECT p.id AS id FROM programs p WHERE ${where.sql}${campaignSql}`)
+    .bind(...where.binds, ...campaignBinds)
+    .all<{ id: string }>();
+  return (results ?? []).map((row) => row.id);
+}
+
+/** Click-time window for one campaign. All-time uses that campaign's own min/max. */
+async function programClickBounds(
+  db: D1Database,
+  programId: string,
+  options: GroupedReportOptions,
+): Promise<{ from: number; to: number } | null> {
+  if (options.from != null && options.to != null) {
+    return options.to < options.from ? null : { from: options.from, to: options.to };
+  }
+  const row = await db
+    .prepare("SELECT MIN(created_at) AS lo, MAX(created_at) AS hi FROM clicks WHERE program_id = ?")
+    .bind(programId)
+    .first<{ lo: number | null; hi: number | null }>();
+  if (row?.lo == null || row.hi == null) return null;
+  const from = options.from ?? row.lo;
+  const to = options.to ?? row.hi;
+  return to < from ? null : { from, to };
+}
 
 /**
  * Report grouped by one dimension using two GROUP BY queries (clicks, conversions).
@@ -371,40 +525,51 @@ export async function getGroupedReport(
   const where = programWhere(userId, options, "p", Boolean(options.campaign_id));
   const campaignSql = options.campaign_id ? " AND p.id = ?" : "";
   const campaignBinds = options.campaign_id ? [options.campaign_id] : [];
-  const clickTime = clickTimeClause(options, "c");
   // Conversions are filtered by their own timestamp (when the postback was received).
   const convTime = conversionTimeClause(options, "cv");
   const label = dim.label ?? "NULL";
+  const programIds = await reportProgramIds(db, userId, options);
+  const bounds = await mapPool(programIds, REPORT_QUERY_CONCURRENCY, async (programId) => ({
+    programId,
+    bounds: await programClickBounds(db, programId, options),
+  }));
+  const windows = bounds.flatMap((item) =>
+    item.bounds
+      ? chunkWindows(item.bounds.from, item.bounds.to).map((window) => ({
+          programId: item.programId,
+          from: window.from,
+          to: window.to,
+        }))
+      : [],
+  );
 
-  const [clickRows, convRows] = await Promise.all([
-    db
-      .prepare(
-        `SELECT ${dim.click} AS k, MAX(${label}) AS label,
-          COUNT(*) AS clicks,
-          COALESCE(SUM(c.is_unique), 0) AS unique_clicks,
-          COALESCE(SUM(c.is_bot), 0) AS bot_clicks,
-          SUM(CASE WHEN c.lp_clicked_at IS NOT NULL AND c.is_bot = 0 THEN 1 ELSE 0 END) AS lp_clicks,
-          SUM(CASE WHEN ${CLICK_CONVERTED} THEN 1 ELSE 0 END) AS converted_clicks,
-          COALESCE(SUM(CASE WHEN c.is_bot = 0 THEN c.cost_cents END), 0)
-            + COALESCE(SUM(CASE WHEN c.is_bot = 0 AND c.cpa_cost_cents IS NOT NULL AND ${CLICK_CONVERTED}
-                THEN c.cpa_cost_cents ELSE 0 END), 0) AS cost
-         FROM clicks c
-         JOIN programs p ON p.id = c.program_id
-         ${dim.clickJoin ?? ""}
-         WHERE ${where.sql}${campaignSql}${clickTime.sql}
-         GROUP BY k`,
-      )
-      .bind(...where.binds, ...campaignBinds, ...clickTime.binds)
-      .all<{
+  const [clickParts, convertedParts, convRows] = await Promise.all([
+    mapPool(windows, REPORT_QUERY_CONCURRENCY, (window) => {
+      const scan = groupedClickQuery(
+        userId,
+        by,
+        { ...options, from: window.from, to: window.to },
+        window.programId,
+      );
+      return db.prepare(scan.sql).bind(...scan.binds).all<{
         k: string | null;
         label: string | null;
         clicks: number;
         unique_clicks: number;
         bot_clicks: number;
         lp_clicks: number;
-        converted_clicks: number;
         cost: number;
-      }>(),
+      }>();
+    }),
+    mapPool(programIds, REPORT_QUERY_CONCURRENCY, (programId) => {
+      const scan = groupedConvertedQuery(userId, by, options, programId);
+      return db.prepare(scan.sql).bind(...scan.binds).all<{
+        k: string | null;
+        label: string | null;
+        converted_clicks: number;
+        cpa_cost: number;
+      }>();
+    }),
     db
       .prepare(
         `SELECT ${dim.conv} AS k, cv.event AS ev, UPPER(cv.currency) AS cur, MAX(${label}) AS label,
@@ -472,18 +637,24 @@ export async function getGroupedReport(
 
   const isTimeDimension = TIME_DIMENSIONS.has(by);
   
-  for (const row of clickRows.results ?? []) {
-    const acc = get(row.k, row.label);
-    acc.clicks += row.clicks;
-    acc.unique_clicks += row.unique_clicks;
-    acc.bot_clicks += row.bot_clicks;
-    acc.lp_clicks += row.lp_clicks;
-    // For time dimensions, leads are bucketed by conversion date (from convRows).
-    // For other dimensions, accumulate converted clicks from the click's dimension.
-    if (!isTimeDimension) {
-      acc.leads += row.converted_clicks;
+  for (const part of clickParts) {
+    for (const row of part.results ?? []) {
+      const acc = get(row.k, row.label);
+      acc.clicks += row.clicks;
+      acc.unique_clicks += row.unique_clicks;
+      acc.bot_clicks += row.bot_clicks;
+      acc.lp_clicks += row.lp_clicks;
+      acc.cost += row.cost;
     }
-    acc.cost += row.cost;
+  }
+  for (const part of convertedParts) {
+    for (const row of part.results ?? []) {
+      const acc = get(row.k, row.label);
+      // Time buckets count leads from the postback day (convRows). Other dimensions
+      // count each in-range click once, however many approved postbacks it has.
+      if (!isTimeDimension) acc.leads += row.converted_clicks;
+      acc.cost += row.cpa_cost;
+    }
   }
   const currencyCounts = new Map<string, number>();
   for (const row of convRows.results ?? []) {

@@ -1,7 +1,7 @@
 import { GettingStartedPanel } from "../components/GettingStartedPanel";
 import type { BillingStatus } from "../../shared/billing";
 import { BillingPanel, ReportingLock } from "../components/BillingPanel";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useCallback, useEffect, useRef, useState } from "react";
 import { Link, Navigate, useNavigate, useParams } from "react-router-dom";
 import { AppShell, type AppNavItem } from "../components/AppShell";
 import { AdminPanel } from "../components/AdminPanel";
@@ -55,6 +55,7 @@ import { appBaseUrl } from "../lib/constants";
 import { eventLabel, eventName, sortEvents } from "../lib/events";
 import { CampaignSourcePanel } from "../components/SourceTemplates";
 import { CampaignList } from "../components/CampaignList";
+import { initialCampaignRange, type PeriodRange } from "../components/PeriodSelector";
 import { CampaignPerformance } from "../components/CampaignPerformance";
 import {
   CAMPAIGN_SECTIONS,
@@ -191,7 +192,8 @@ function DashboardContent({ page }: { page: DashboardView }) {
   const [busy, setBusy] = useState(false);
   const [creating, setCreating] = useState(false);
   const [reportRows, setReportRows] = useState<CampaignReportRow[] | null>(null);
-  const [reportPeriod, setReportPeriod] = useState<{ from?: number | string; to?: number | string }>({});
+  const [reportPeriod, setReportPeriod] = useState<PeriodRange>(initialCampaignRange);
+  const [reportsLoading, setReportsLoading] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -231,25 +233,48 @@ function DashboardContent({ page }: { page: DashboardView }) {
     }
   }, [inCampaign, sectionParam, campaignId, navigate]);
 
+  const onPeriodChange = useCallback((range: PeriodRange) => {
+    setReportPeriod((prev) => (prev.from === range.from && prev.to === range.to ? prev : range));
+  }, []);
+
   useEffect(() => {
     if (reportsLocked) {
       setReportRows(null);
+      setReportsLoading(false);
       return;
     }
     if (!user || inCampaign || page !== "campaigns") return;
+
     let cancelled = false;
-    api
-      .campaignReports({ from: reportPeriod.from, to: reportPeriod.to })
-      .then(({ campaigns }) => {
-        if (!cancelled) setReportRows(campaigns);
-      })
-      .catch(() => {
-        if (!cancelled) setReportRows([]);
-      });
+    setReportRows(null);
+    setReportsLoading(true);
+    const from = reportPeriod.from;
+    const to = reportPeriod.to;
+    // Keep the cells on "…" and try again. A failed response must not clear the
+    // table to an empty report, which would never recover into real numbers.
+    const waits = [400, 1000, 2000];
+
+    (async () => {
+      for (let attempt = 0; attempt <= waits.length; attempt++) {
+        if (cancelled) return;
+        try {
+          const { campaigns } = await api.campaignReports({ from, to });
+          if (cancelled) return;
+          setReportRows(campaigns);
+          setReportsLoading(false);
+          return;
+        } catch (err) {
+          console.error("Campaign reports failed:", err);
+          if (cancelled || attempt === waits.length) return;
+          await new Promise((resolve) => setTimeout(resolve, waits[attempt]));
+        }
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
-  }, [user, inCampaign, page, programs, reportsLocked, reportPeriod]);
+  }, [user, inCampaign, page, reportsLocked, reportPeriod]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -487,10 +512,11 @@ function DashboardContent({ page }: { page: DashboardView }) {
           reports={reportsLocked ? null : reportRows}
           sources={sources}
           loading={!programsLoaded}
+          reportsLoading={reportsLoading}
           canWrite={canWrite}
           creating={creating}
           onToggleCreate={() => setCreating((open) => !open)}
-          onPeriodChange={setReportPeriod}
+          onPeriodChange={onPeriodChange}
           createForm={
             canWrite && programsLoaded && (creating || programs.length === 0) ? (
               <form id="new-campaign" className="campaign-create space-y-3" onSubmit={createProgram}>

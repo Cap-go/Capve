@@ -2,7 +2,15 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "react-router-dom";
 import { formatMoney, formatPercent, type CampaignReportRow, type Program, type TrafficSource } from "../lib/api";
 import { campaignHref } from "../lib/campaign-route";
-import { PeriodSelector, rangeFor, type Preset, type PeriodRange } from "./PeriodSelector";
+import {
+  PeriodSelector,
+  rangeFor,
+  rememberCampaignPeriod,
+  storedCampaignCustom,
+  storedCampaignPreset,
+  type Preset,
+  type PeriodRange,
+} from "./PeriodSelector";
 
 const PAGE_SIZES = [25, 50, 100];
 
@@ -82,6 +90,7 @@ export function CampaignList({
   reports,
   sources,
   loading,
+  reportsLoading,
   canWrite,
   creating,
   onToggleCreate,
@@ -92,6 +101,7 @@ export function CampaignList({
   reports: CampaignReportRow[] | null;
   sources: TrafficSource[];
   loading: boolean;
+  reportsLoading: boolean;
   canWrite: boolean;
   creating: boolean;
   onToggleCreate: () => void;
@@ -102,26 +112,16 @@ export function CampaignList({
   const [status, setStatus] = useState("");
   const [pageSize, setPageSize] = useState(25);
   const [page, setPage] = useState(0);
-  const [preset, setPreset] = useState<Preset>(() => {
-    try {
-      return (localStorage.getItem("capve_campaigns_period") as Preset) || "all_time";
-    } catch {
-      return "all_time";
-    }
-  });
-  const [customFrom, setCustomFrom] = useState("");
-  const [customTo, setCustomTo] = useState("");
+  const [preset, setPreset] = useState<Preset>(storedCampaignPreset);
+  const [customFrom, setCustomFrom] = useState(() => storedCampaignCustom().from);
+  const [customTo, setCustomTo] = useState(() => storedCampaignCustom().to);
   const [visibleColumns, setVisibleColumns] = useState<Set<ColumnKey>>(loadColumnVisibility);
   const [columnsMenuOpen, setColumnsMenuOpen] = useState(false);
 
   useEffect(() => {
-    const range = rangeFor(preset, { from: customFrom, to: customTo });
-    onPeriodChange(range);
-    try {
-      localStorage.setItem("capve_campaigns_period", preset);
-    } catch {
-      // ignore
-    }
+    const custom = { from: customFrom, to: customTo };
+    onPeriodChange(rangeFor(preset, custom));
+    rememberCampaignPeriod(preset, custom);
   }, [preset, customFrom, customTo, onPeriodChange]);
 
   function handlePeriodChange(newPreset: Preset, newFrom: string, newTo: string) {
@@ -309,21 +309,29 @@ export function CampaignList({
                   {visibleColumns.has("id") && <td className="mono">{program.id}</td>}
                   {visibleColumns.has("source") && <td>{source || "—"}</td>}
                   {visibleColumns.has("created") && <td className="mono">{formatCreated(program.created_at)}</td>}
-                  {visibleColumns.has("clicks") && <td className="num">{metrics ? metrics.clicks : "…"}</td>}
-                  {visibleColumns.has("registrations") && <td className="num">{metrics ? registrations : "…"}</td>}
-                  {visibleColumns.has("ftd") && <td className="num">{metrics ? ftd : "…"}</td>}
-                  {visibleColumns.has("conversions") && <td className="num">{metrics ? metrics.leads : "…"}</td>}
+                  {visibleColumns.has("clicks") && (
+                    <td className="num">{metrics && !reportsLoading ? metrics.clicks : "…"}</td>
+                  )}
+                  {visibleColumns.has("registrations") && (
+                    <td className="num">{metrics && !reportsLoading ? registrations : "…"}</td>
+                  )}
+                  {visibleColumns.has("ftd") && (
+                    <td className="num">{metrics && !reportsLoading ? ftd : "…"}</td>
+                  )}
+                  {visibleColumns.has("conversions") && (
+                    <td className="num">{metrics && !reportsLoading ? metrics.leads : "…"}</td>
+                  )}
                   {visibleColumns.has("revenue") && (
-                    <td className="num">{metrics ? formatMoney(metrics.revenue_cents, currency) : "…"}</td>
+                    <td className="num">{metrics && !reportsLoading ? formatMoney(metrics.revenue_cents, currency) : "…"}</td>
                   )}
                   {visibleColumns.has("cost") && (
-                    <td className="num">{metrics ? formatMoney(metrics.cost_cents, currency) : "…"}</td>
+                    <td className="num">{metrics && !reportsLoading ? formatMoney(metrics.cost_cents, currency) : "…"}</td>
                   )}
                   {visibleColumns.has("profit") && (
-                    <td className="num">{metrics ? formatMoney(metrics.profit_cents, currency) : "…"}</td>
+                    <td className="num">{metrics && !reportsLoading ? formatMoney(metrics.profit_cents, currency) : "…"}</td>
                   )}
                   {visibleColumns.has("roi") && (
-                    <td className="num">{metrics ? (metrics.roi == null ? "n/a" : formatPercent(metrics.roi)) : "…"}</td>
+                    <td className="num">{metrics && !reportsLoading ? (metrics.roi == null ? "n/a" : formatPercent(metrics.roi)) : "…"}</td>
                   )}
                 </tr>
               );
