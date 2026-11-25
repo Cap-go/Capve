@@ -7,7 +7,7 @@ export function CodeBlock({ children, label }: { children: string; label?: strin
       <pre className="mono docs-code overflow-x-auto whitespace-pre-wrap break-all rounded-md border border-[var(--velo-border)] bg-[var(--velo-bg)] p-4 pr-16 text-xs leading-relaxed">
         {children}
       </pre>
-      <CopyButton className="absolute right-2 top-2" text={children} />
+      <CopyButton className="absolute right-2 top-2" text={children} label={label} />
     </div>
   );
   if (!label) return block;

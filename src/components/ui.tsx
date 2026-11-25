@@ -88,7 +88,7 @@ export function SelectField({
   );
 }
 
-export function CopyButton({ text, className = "" }: { text: string; className?: string }) {
+export function CopyButton({ text, className = "", label }: { text: string; className?: string; label?: string }) {
   const [copied, setCopied] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout>>(undefined);
   useEffect(() => () => clearTimeout(timer.current), []);
@@ -106,6 +106,8 @@ export function CopyButton({ text, className = "" }: { text: string; className?:
         }
       }}
       type="button"
+      aria-label={label ? `${copied ? "Copied" : "Copy"} ${label}` : undefined}
+      aria-live="polite"
     >
       {copied ? "Copied" : "Copy"}
     </button>
