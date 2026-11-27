@@ -33,7 +33,7 @@ export async function billingEmails(env: Env, now = Date.now()) {
       const subscribed = status.subscriptionStatus === "active";
       const trialKey = String(row.trial_ends_at);
       const events: Array<{ type: string; cycle: string }> = [];
-      if (!subscribed && (!row.stripe_subscription_id || row.subscription_status === "trialing")) {
+      if (!status.unlimited && !subscribed && (!row.stripe_subscription_id || row.subscription_status === "trialing")) {
         const midpoint = row.trial_started_at + (row.trial_ends_at - row.trial_started_at) / 2;
         if (now < midpoint) events.push({ type: "capve_trial_started", cycle: trialKey });
         else if (now < row.trial_ends_at - 3 * 86400_000) events.push({ type: "capve_trial_midway", cycle: trialKey });

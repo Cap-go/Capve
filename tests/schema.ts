@@ -107,7 +107,8 @@ CREATE TABLE account_billing (
   subscription_status TEXT,
   subscription_ends_at INTEGER,
   stripe_event_created INTEGER NOT NULL DEFAULT 0,
-  reconciliation_revision INTEGER NOT NULL DEFAULT 0
+  reconciliation_revision INTEGER NOT NULL DEFAULT 0,
+  unlimited INTEGER NOT NULL DEFAULT 0 CHECK (unlimited IN (0, 1))
 );
 CREATE TABLE billing_usage (
   account_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
