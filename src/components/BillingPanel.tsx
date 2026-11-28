@@ -36,9 +36,11 @@ export function BillingPanel({ billing, owner }: { billing: BillingStatus | null
   if (!billing.enabled) return <p>Billing is disabled on this installation. Reports are available.</p>;
   return <div className="space-y-5">
     <div className="card p-5">
-      <h2 className="text-xl font-semibold">Your {billing.plan} plan</h2>
-      <p className="mt-3">{billing.clicks.toLocaleString()} / {billing.clickLimit.toLocaleString()} clicks in {billing.period}, UTC.</p>
-      <p className="mt-2">Trial ends {new Date(billing.trialEndsAt).toLocaleDateString()}.</p>
+      <h2 className="text-xl font-semibold">{billing.unlimited ? "Your unlimited plan" : `Your ${billing.plan} plan`}</h2>
+      {billing.unlimited ? <p className="mt-3">{billing.clicks.toLocaleString()} clicks in {billing.period}, UTC. No click limit.</p> : <>
+        <p className="mt-3">{billing.clicks.toLocaleString()} / {billing.clickLimit.toLocaleString()} clicks in {billing.period}, UTC.</p>
+        <p className="mt-2">Trial ends {new Date(billing.trialEndsAt).toLocaleDateString()}.</p>
+      </>}
       <p className="mt-2">Subscription: {billing.subscriptionStatus ?? "not subscribed"}.</p>
       {billing.reportsAllowed ? <p className="mt-2">Reports are available.</p> : <ReportingLock showLink={false} />}
       <p className="mt-3 text-sm text-[var(--velo-muted)]">Stripe confirms subscription changes by webhook. This screen refreshes automatically.</p>

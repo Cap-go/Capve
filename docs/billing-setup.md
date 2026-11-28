@@ -124,7 +124,9 @@ Medialab's confirmed account is `usr_f26ae7acc0337df4`, owned by `team.mediapath
 
 Migration `0025_medialab_trial.sql` sets its trial start to the migration time and its end to three calendar years later. Both ID and email must match. It does not change other accounts or the plan's click allowance. The migration runs once through the normal deployment workflow. No production D1 account has been modified by this setup.
 
-After deployment, verify the stored trial end for this account before enabling billing. Review whether Medialab needs Pro's allowance before enabling enforcement.
+After deployment, verify the stored trial end for this account before enabling billing.
+
+Medialab is the beta customer and must be **unlimited**. Migration `0034_unlimited_accounts.sql` adds `account_billing.unlimited` and sets it to 1 for this account (ID and email must both match). Unlimited accounts never lock reports for the click allowance or trial expiry, and receive no trial or traffic-limit emails. `/app/billing` shows "Your unlimited plan". On November 27, 2026 Medialab hit 1,096,895 clicks against Starter's 1,000,000 because only the trial had been extended; its stored plan was switched to `pro` as an immediate stopgap before this migration. To comp another account, add a reviewed migration that sets `unlimited = 1` for its exact ID and email.
 
 For any later, explicitly authorized extension, `scripts/extend-trial.mjs` accepts an exact reviewed account ID. It defaults to local D1; `--remote` explicitly targets production. It exits nonzero if the account does not exist. Running it again grants a fresh three years, so it is not part of routine deployment.
 

@@ -12,6 +12,7 @@ export type BillingRow = {
   stripe_subscription_id: string | null;
   subscription_status: string | null;
   subscription_ends_at: number | null;
+  unlimited: number;
 };
 
 export async function billingRow(env: Env, accountId: string): Promise<BillingRow> {
@@ -35,11 +36,12 @@ export async function billingStatus(env: Env, accountId: string, now = Date.now(
   const enabled = env.BILLING_ENABLED === "true";
   const subscribed = ["active", "trialing"].includes(row.subscription_status ?? "") &&
     row.subscription_ends_at !== null && row.subscription_ends_at > now;
-  const reason = !enabled ? null : clicks > plan.clicks ? "traffic_limit" :
+  const unlimited = row.unlimited === 1;
+  const reason = !enabled || unlimited ? null : clicks > plan.clicks ? "traffic_limit" :
     !subscribed && row.trial_ends_at <= now ? "trial_expired" : null;
   return {
     enabled, plan: isPlanId(row.plan) ? row.plan : "starter", trialEndsAt: row.trial_ends_at,
-    subscriptionStatus: row.subscription_status, clicks, clickLimit: plan.clicks, period,
+    subscriptionStatus: row.subscription_status, unlimited, clicks, clickLimit: plan.clicks, period,
     reportsAllowed: reason === null, reason,
     checkoutReady: !!(env.STRIPE_SECRET_KEY && env.STRIPE_PRICE_STARTER && env.STRIPE_PRICE_PRO),
     hasCustomer: !!row.stripe_customer_id,

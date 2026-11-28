@@ -11,6 +11,8 @@ export type BillingStatus = {
   plan: PlanId;
   trialEndsAt: number;
   subscriptionStatus: string | null;
+  /** Comped account: no click allowance or trial expiry applies. */
+  unlimited: boolean;
   clicks: number;
   clickLimit: number;
   period: string;

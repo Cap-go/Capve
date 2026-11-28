@@ -11,6 +11,7 @@ import { initSql } from "./schema";
 import { registerTestUser } from "./helpers";
 import migration from "../migrations/0024_billing.sql?raw";
 import medialabMigration from "../migrations/0025_medialab_trial.sql?raw";
+import unlimitedMigration from "../migrations/0034_unlimited_accounts.sql?raw";
 import resetRolloutTrials from "../scripts/reset-rollout-trials.sql?raw";
 
 const billingEnv: Env = { ...env, APP_URL: "http://localhost:5173", BILLING_ENABLED: "true" };
@@ -80,6 +81,28 @@ describe("hosted billing", () => {
     expect((await billingStatus(billingEnv, accountId)).reportsAllowed).toBe(true);
     const nextMonth = new Date(); nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1, 1);
     expect((await billingStatus(billingEnv, accountId, nextMonth.getTime())).clicks).toBe(0);
+  });
+
+  it("never locks reports or sends trial emails for an unlimited account", async () => {
+    const now = Date.now();
+    const month = new Date(now).toISOString().slice(0, 7);
+    await env.DB.prepare("UPDATE account_billing SET unlimited = 1, plan = 'starter', subscription_status = NULL, trial_ends_at = ? WHERE account_id = ?")
+      .bind(now - 86400_000, accountId).run();
+    await env.DB.prepare("INSERT INTO billing_usage (account_id, period, clicks) VALUES (?, ?, 500000000) ON CONFLICT (account_id, period) DO UPDATE SET clicks = excluded.clicks")
+      .bind(accountId, month).run();
+    const status = await billingStatus(billingEnv, accountId, now);
+    expect(status).toMatchObject({ unlimited: true, reportsAllowed: true, reason: null, clicks: 500_000_000 });
+    expect((await call(`/api/programs/${programId}/stats`)).status).toBe(200);
+    await env.DB.prepare("DELETE FROM billing_email_events WHERE account_id = ?").bind(accountId).run();
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async () => Response.json({ results: 1 }));
+    await billingEmails({ ...billingEnv, BENTO_SITE_UUID: "test-site", BENTO_PUBLISHABLE_KEY: "test-public", BENTO_SECRET_KEY: "test-secret" }, now);
+    const sent = fetch.mock.calls.map(([, init]) => String((init as RequestInit | undefined)?.body ?? "")).join("\n");
+    expect(sent).not.toContain("capve_trial_");
+    expect(sent).not.toContain("capve_traffic_limit_reached");
+    await env.DB.prepare("UPDATE account_billing SET unlimited = 0, trial_ends_at = ? WHERE account_id = ?").bind(now + 14 * 86400_000, accountId).run();
+    await env.DB.prepare("DELETE FROM billing_usage WHERE account_id = ?").bind(accountId).run();
+    await env.DB.prepare("DELETE FROM billing_email_events WHERE account_id = ?").bind(accountId).run();
+    await env.DB.prepare("UPDATE billing_email_progress SET cursor = '', lease_token = NULL, lease_until = 0 WHERE id = 1").run().catch(() => undefined);
   });
 
   it("honors a three-year DB trial and schedules its midpoint from the actual dates", async () => {
@@ -353,6 +376,15 @@ describe("hosted billing", () => {
     const expected = new Date(updated.trial_started_at); expected.setUTCFullYear(expected.getUTCFullYear() + 3);
     expect(updated.trial_ends_at).toBe(expected.getTime());
     expect((await billingRow(billingEnv, accountId)).trial_ends_at).toBe(unaffected.trial_ends_at);
+    const grant = unlimitedMigration.slice(unlimitedMigration.indexOf("UPDATE account_billing"));
+    await env.DB.prepare("UPDATE users SET email = 'other@example.com' WHERE id = ?").bind(id).run();
+    await env.DB.prepare(grant).run();
+    expect((await billingRow(billingEnv, id)).unlimited).toBe(0);
+    await env.DB.prepare("UPDATE users SET email = 'team.mediapath@gmail.com' WHERE id = ?").bind(id).run();
+    await env.DB.prepare(grant).run();
+    expect((await billingRow(billingEnv, id)).unlimited).toBe(1);
+    expect((await billingRow(billingEnv, accountId)).unlimited).toBe(0);
+    expect((await billingStatus(billingEnv, id)).unlimited).toBe(true);
   });
 
   it("corrects delayed rollout trials without resetting new accounts, subscribers or courtesy overrides", async () => {
